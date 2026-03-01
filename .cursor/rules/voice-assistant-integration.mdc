@@ -1,0 +1,15 @@
+---
+description: Keep Voice Assistant integration file list updated when changing chat/FAQ/LLM files
+globs: backend/faq_data.py,backend/faq_engine.py,backend/language.py,backend/llm.py,backend/app_api.py,backend/requirements.txt,src/components/ChatWidget.jsx,src/components/ChatWidget.module.css,src/app/api/chat/route.ts
+alwaysApply: false
+---
+
+# Voice Assistant integration files
+
+When you **add, remove, or rename** any file that is part of the Voice Assistant / chat integration (FAQ, language, LLM, or ChatWidget), you must:
+
+1. **Update `VOICE_ASSISTANT_INTEGRATION_FILES.md`** in the project root:
+   - Add or remove the file from the appropriate section (Copied / Related) and from the checklist.
+   - Add a line to the **Changelog** table with the date and a short description of the change.
+
+The list in that file is the single source of truth for "what to push to main" for this integration. Keeping it in sync avoids missing files when pushing.
