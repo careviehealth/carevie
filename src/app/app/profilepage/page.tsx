@@ -180,6 +180,14 @@ export default function ProfilePageUI() {
   }
 
   const [familyMedicalHistory, setFamilyMedicalHistory] = useState<FamilyMedicalHistory[]>([]);
+  type CurrentMedicalSection = "medications" | "conditions" | "allergies" | "treatments";
+  type PastMedicalSection = "diagnoses" | "surgeries" | "childhood" | "longTerm";
+  type MedicalDrawerState =
+    | { domain: "current"; section: CurrentMedicalSection }
+    | { domain: "past"; section: PastMedicalSection };
+  const [activeCurrentSection, setActiveCurrentSection] = useState<CurrentMedicalSection>("medications");
+  const [activePastSection, setActivePastSection] = useState<PastMedicalSection>("diagnoses");
+  const [medicalDrawerState, setMedicalDrawerState] = useState<MedicalDrawerState | null>(null);
 
   const currentYear = new Date().getFullYear();
   const monthOptions = [
@@ -223,6 +231,8 @@ export default function ProfilePageUI() {
 
   const getFrequencyTimesPerDay = (frequencyValue: string) =>
     medicationFrequencyOptions.find((option) => option.value === frequencyValue)?.times ?? 1;
+  const compactPreviewCount = 6;
+  const detailedPreviewCount = 3;
 
   const cloneMedicationList = (items: Medication[]) =>
     items.map((medication) => ({
@@ -799,6 +809,266 @@ useEffect(() => {
     fetchFamilyHealthData();
   }, [cacheOwnerId, profileId, userId]);
 
+  const currentSectionLabels: Record<CurrentMedicalSection, string> = {
+    medications: "Medications",
+    conditions: "Conditions",
+    allergies: "Allergies",
+    treatments: "Treatments",
+  };
+  const pastSectionLabels: Record<PastMedicalSection, string> = {
+    diagnoses: "Diagnoses",
+    surgeries: "Surgeries",
+    childhood: "Childhood",
+    longTerm: "Long-term",
+  };
+  const currentSectionCounts: Record<CurrentMedicalSection, number> = {
+    medications: currentMedications.length,
+    conditions: conditions.length,
+    allergies: allergy.length,
+    treatments: treatment.length,
+  };
+  const pastSectionCounts: Record<PastMedicalSection, number> = {
+    diagnoses: previousDiagnosedCondition.length,
+    surgeries: pastSurgeries.length,
+    childhood: childhoodIllness.length,
+    longTerm: longTermTreatments.length,
+  };
+  const currentSectionTabs: Array<{ key: CurrentMedicalSection; label: string; count: number }> = [
+    { key: "medications", label: currentSectionLabels.medications, count: currentSectionCounts.medications },
+    { key: "conditions", label: currentSectionLabels.conditions, count: currentSectionCounts.conditions },
+    { key: "allergies", label: currentSectionLabels.allergies, count: currentSectionCounts.allergies },
+    { key: "treatments", label: currentSectionLabels.treatments, count: currentSectionCounts.treatments },
+  ];
+  const pastSectionTabs: Array<{ key: PastMedicalSection; label: string; count: number }> = [
+    { key: "diagnoses", label: pastSectionLabels.diagnoses, count: pastSectionCounts.diagnoses },
+    { key: "surgeries", label: pastSectionLabels.surgeries, count: pastSectionCounts.surgeries },
+    { key: "childhood", label: pastSectionLabels.childhood, count: pastSectionCounts.childhood },
+    { key: "longTerm", label: pastSectionLabels.longTerm, count: pastSectionCounts.longTerm },
+  ];
+
+  const renderChipPreview = (
+    items: string[],
+    emptyMessage: string,
+    keyPrefix: string,
+    itemLabel: string
+  ) => {
+    if (items.length === 0) {
+      return <p className="text-sm text-gray-400">{emptyMessage}</p>;
+    }
+    const preview = items.slice(0, compactPreviewCount);
+    return (
+      <>
+        <div className="flex flex-wrap gap-2">
+          {preview.map((item, index) => (
+            <span
+              key={`${keyPrefix}-${item}-${index}`}
+              className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium border border-red-100"
+            >
+              {item}
+            </span>
+          ))}
+        </div>
+        {items.length > compactPreviewCount ? (
+          <p className="mt-2 text-xs text-gray-500">
+            +{items.length - compactPreviewCount} more {itemLabel} in full details
+          </p>
+        ) : null}
+      </>
+    );
+  };
+
+  const renderChipFullList = (items: string[], emptyMessage: string, keyPrefix: string) => {
+    if (items.length === 0) {
+      return <p className="text-sm text-gray-400">{emptyMessage}</p>;
+    }
+    return (
+      <div className="flex flex-wrap gap-2">
+        {items.map((item, index) => (
+          <span
+            key={`${keyPrefix}-${item}-${index}`}
+            className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium border border-red-100"
+          >
+            {item}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
+  const renderMedicationCards = (items: Medication[]) => {
+    if (items.length === 0) {
+      return <p className="text-sm text-gray-400">No current medications added</p>;
+    }
+    return (
+      <div className="space-y-2">
+        {items.map((current, index) => (
+          <div
+            key={`${current.id || current.name || "medication"}-${index}`}
+            className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+                <Pill className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="font-bold text-gray-700">{current.name || "Medication"}</p>
+                <p className="text-xs text-gray-500">Dosage: {current.dosage || "Not specified"}</p>
+                <p className="text-xs text-gray-500">
+                  Frequency: {current.frequency ? getFrequencyLabel(current.frequency) : "Not specified"}
+                </p>
+                {current.purpose ? (
+                  <p className="text-xs text-gray-500">Purpose: {current.purpose}</p>
+                ) : null}
+              </div>
+            </div>
+            <span className="text-sm font-medium text-gray-500 bg-white px-2 py-1 rounded-md shadow-sm border border-gray-100">
+              {current.frequency ? getFrequencyLabel(current.frequency) : "As directed"}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderSurgeryCards = (items: PastSurgery[]) => {
+    if (items.length === 0) {
+      return <p className="text-sm text-gray-400">No past surgeries added</p>;
+    }
+    return (
+      <div className="space-y-2">
+        {items.map((surgery, index) => (
+          <div
+            key={`${surgery.name}-${surgery.month}-${surgery.year}-${index}`}
+            className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100"
+          >
+            <div>
+              <p className="font-bold text-gray-700">{surgery.name || "Surgery"}</p>
+              <p className="text-xs text-gray-500">Date: {formatMonthYear(surgery.month, surgery.year)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderCurrentSectionPreview = () => {
+    switch (activeCurrentSection) {
+      case "medications":
+        return (
+          <>
+            {renderMedicationCards(currentMedications.slice(0, detailedPreviewCount))}
+            {currentMedications.length > detailedPreviewCount ? (
+              <p className="mt-2 text-xs text-gray-500">
+                +{currentMedications.length - detailedPreviewCount} more medications in full details
+              </p>
+            ) : null}
+          </>
+        );
+      case "conditions":
+        return renderChipPreview(conditions, "No conditions added", "conditions", "conditions");
+      case "allergies":
+        return renderChipPreview(allergy, "No allergies added", "allergies", "allergies");
+      case "treatments":
+        return renderChipPreview(treatment, "No ongoing treatments", "treatments", "treatments");
+      default:
+        return null;
+    }
+  };
+
+  const renderPastSectionPreview = () => {
+    switch (activePastSection) {
+      case "diagnoses":
+        return renderChipPreview(
+          previousDiagnosedCondition,
+          "No previous conditions added",
+          "past-diagnoses",
+          "diagnoses"
+        );
+      case "surgeries":
+        return (
+          <>
+            {renderSurgeryCards(pastSurgeries.slice(0, detailedPreviewCount))}
+            {pastSurgeries.length > detailedPreviewCount ? (
+              <p className="mt-2 text-xs text-gray-500">
+                +{pastSurgeries.length - detailedPreviewCount} more surgeries in full details
+              </p>
+            ) : null}
+          </>
+        );
+      case "childhood":
+        return renderChipPreview(
+          childhoodIllness,
+          "No childhood illnesses added",
+          "past-childhood",
+          "childhood illnesses"
+        );
+      case "longTerm":
+        return renderChipPreview(
+          longTermTreatments,
+          "No long-term treatments added",
+          "past-long-term",
+          "long-term treatments"
+        );
+      default:
+        return null;
+    }
+  };
+
+  const renderMedicalDrawerContent = () => {
+    if (!medicalDrawerState) return null;
+    if (medicalDrawerState.domain === "current") {
+      switch (medicalDrawerState.section) {
+        case "medications":
+          return renderMedicationCards(currentMedications);
+        case "conditions":
+          return renderChipFullList(conditions, "No conditions added", "drawer-conditions");
+        case "allergies":
+          return renderChipFullList(allergy, "No allergies added", "drawer-allergies");
+        case "treatments":
+          return renderChipFullList(treatment, "No ongoing treatments", "drawer-treatments");
+        default:
+          return null;
+      }
+    }
+    switch (medicalDrawerState.section) {
+      case "diagnoses":
+        return renderChipFullList(
+          previousDiagnosedCondition,
+          "No previous conditions added",
+          "drawer-past-diagnoses"
+        );
+      case "surgeries":
+        return renderSurgeryCards(pastSurgeries);
+      case "childhood":
+        return renderChipFullList(
+          childhoodIllness,
+          "No childhood illnesses added",
+          "drawer-past-childhood"
+        );
+      case "longTerm":
+        return renderChipFullList(
+          longTermTreatments,
+          "No long-term treatments added",
+          "drawer-past-long-term"
+        );
+      default:
+        return null;
+    }
+  };
+
+  const currentSectionTotal = currentSectionCounts[activeCurrentSection];
+  const pastSectionTotal = pastSectionCounts[activePastSection];
+  const drawerTitle = medicalDrawerState
+    ? medicalDrawerState.domain === "current"
+      ? currentSectionLabels[medicalDrawerState.section]
+      : pastSectionLabels[medicalDrawerState.section]
+    : "";
+  const drawerTotal = medicalDrawerState
+    ? medicalDrawerState.domain === "current"
+      ? currentSectionCounts[medicalDrawerState.section]
+      : pastSectionCounts[medicalDrawerState.section]
+    : 0;
+
   return (
     <div className="min-h-screen pb-10 font-sans relative bg-[#F5F5DC]">
 
@@ -908,253 +1178,185 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* Right: Historical Visits */}
+          {/* Right: Family Medical History */}
           <div className="bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20 flex flex-col h-full">
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-800">Historical Visits</h3>
-
-              <button className="text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-md transition">
-                View All
+              <h3 className="font-bold text-gray-800">Family Medical History</h3>
+              <button
+                onClick={() => setIsFamilyHistoryModalOpen(true)}
+                className="p-2 bg-white/90 backdrop-blur text-gray-500 hover:text-[#FF8000] hover:bg-orange-50 rounded-full border border-gray-200 shadow-sm transition"
+              >
+                <Edit2 className="w-4 h-4" />
               </button>
             </div>
 
-            {/* EMPTY STATE */}
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-sm text-gray-400 italic">
-                No historical visits
-              </p>
-            </div>
+            {familyMedicalHistory.length > 0 ? (
+              <div className="space-y-2">
+                {familyMedicalHistory.map((history, index) => (
+                  <div
+                    key={`${history.relation}-${history.disease}-${index}`}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100"
+                  >
+                    <div>
+                      <p className="font-bold text-gray-700">{history.relation || "Relation not set"}</p>
+                      <p className="text-xs text-gray-500">Disease: {history.disease || "Not specified"}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-sm text-gray-400 italic">No family medical history added</p>
+              </div>
+            )}
           </div>
 
         </div>
 
         {/* Medical Information Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 items-start">
           {/* Current Medical Status */}
-          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20">
-            <div className="flex items-center gap-2 mb-6 pb-4 border-b border-gray-100">
+          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20 self-start">
+            <div className="flex items-center gap-2 mb-5 pb-4 border-b border-gray-100">
               <h3 className="font-bold text-gray-800">Current Medical Status</h3>
-              <button 
+              <button
                 onClick={() => setIsCurrentMedicalModalOpen(true)}
                 className="p-2 bg-white/90 backdrop-blur text-gray-500 hover:text-[#FF8000] hover:bg-orange-50 rounded-full border border-gray-200 shadow-sm transition"
               >
                 <Edit2 className="w-4 h-4" />
               </button>
             </div>
-            
-            <div className="space-y-6">
-              {/* Current Diagnosed Conditions */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-3 block">Current Diagnosed Conditions</label>
-                <div className="flex flex-wrap gap-2">
-                  {conditions.length > 0 ? (
-                    conditions.map((condition, index) => (
-                      <span
-                        key={index}
-                        className='px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium border border-red-100'
-                      >
-                        {condition}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-gray-400 text-sm">No conditions added</span>
-                  )}
-                </div>
-              </div>
 
-              {/* Allergies */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-3 block">Allergies</label>
-                <div className="flex flex-wrap gap-2">
-                    {allergy.length > 0 ? (
-                      allergy.map((allergy, index) => (
-                        <span
-                          key={index}
-                          className='px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium border border-red-100'
-                        >
-                          {allergy}
-                        </span>
-                      ))
-                    ) : (
-                      <span className='text-gray-400 text-sm'>No Allergies Added</span>
-                    )}
-                </div>
-              </div>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {currentSectionTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveCurrentSection(tab.key)}
+                  className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition ${
+                    activeCurrentSection === tab.key
+                      ? "bg-[#8B4513] text-white border-[#8B4513]"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-[#8B4513]/40 hover:text-[#8B4513]"
+                  }`}
+                >
+                  {tab.label} ({tab.count})
+                </button>
+              ))}
+            </div>
 
-              {/* Ongoing Treatments */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-3 block">Ongoing Treatments</label>
-                  <div className="flex flex-wrap gap-2">
-                    {treatment.length > 0 ? (
-                      treatment.map((treatment, index) => (
-                        <span
-                          key={index}
-                          className='px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium border border-red-100'
-                        >
-                          {treatment}
-                        </span>
-                      ))
-                    ) : (
-                      <span className='text-gray-400 text-sm'>No Treatments Currently</span>
-                    )}  
-                  </div>  
-                <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-3 block">Current Medication</label>                  
-                {currentMedications.map((current, index) => (
-                  <div 
-                    key={index}
-                    className='flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100'
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
-                        <Pill className="w-4 h-4" />
-                      </div>
+            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 min-h-[190px]">
+              {renderCurrentSectionPreview()}
+            </div>
 
-                      <div>
-                        <p className="font-bold text-gray-700">{current.name}</p>
-                        <p className="text-xs text-gray-500">Dosage: {current.dosage || "Not specified"}</p>
-                        <p className="text-xs text-gray-500">
-                          Frequency: {current.frequency ? getFrequencyLabel(current.frequency) : "Not specified"}
-                        </p>
-                        {current.purpose ? (
-                          <p className="text-xs text-gray-500">Purpose: {current.purpose}</p>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <span className='text-sm font-medium text-gray-500 bg-white px-2 py-1 rounded-md shadow-sm border border-gray-100'>
-                      {current.frequency ? getFrequencyLabel(current.frequency) : "As directed"}
-                    </span>
-                  </div>
-                ))}
-              </div>
+            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between gap-3">
+              <p className="text-xs text-gray-500">
+                {currentSectionTotal} {currentSectionLabels[activeCurrentSection].toLowerCase()} recorded
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  setMedicalDrawerState({
+                    domain: "current",
+                    section: activeCurrentSection,
+                  })
+                }
+                disabled={currentSectionTotal === 0}
+                className="text-xs font-semibold text-[#8B4513] hover:text-[#A0522D] transition disabled:text-gray-300 disabled:cursor-not-allowed"
+              >
+                View full details
+              </button>
             </div>
           </div>
 
           {/* Past Medical History */}
-          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20">
-            <div className="flex items-center gap-2 mb-6 pb-4 border-b border-gray-100">
+          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20 self-start">
+            <div className="flex items-center gap-2 mb-5 pb-4 border-b border-gray-100">
               <h3 className="font-bold text-gray-800">Past Medical History</h3>
-              <button 
+              <button
                 onClick={() => setIsPastMedicalModalOpen(true)}
                 className="p-2 bg-white/90 backdrop-blur text-gray-500 hover:text-[#FF8000] hover:bg-orange-50 rounded-full border border-gray-200 shadow-sm transition"
               >
                 <Edit2 className="w-4 h-4" />
               </button>
             </div>
-            
-            <div className="space-y-6">
-              {/* Previous Diagnosed Conditions */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-3 block">Previous Diagnosed Conditions</label>
-                <div className="flex flex-wrap gap-2">
-                  {previousDiagnosedCondition.length > 0 ? (
-                    previousDiagnosedCondition.map((previousDiagnosedCondition, index) => (
-                      <span
-                        key={index}
-                        className='px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium border border-red-100'
-                      >
-                        {previousDiagnosedCondition}
-                      </span>
-                    ))
-                  ) : (
-                    <span className='text-gray-400 text-sm'>No Previous Conditions Added</span>
-                  )}
-                </div>
-              </div>
 
-              {/* Past Surgeries */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-3 block">Past Surgeries</label>
-                <div className="space-y-2">
-                  {pastSurgeries.map((pastSurgeries, index) => (
-                    <div 
-                      key={index}
-                      className='flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100'
-                    >
-                      <div className="flex items-center gap-3">
-                        {/* <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-teal-600">
-                        </div> */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {pastSectionTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActivePastSection(tab.key)}
+                  className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition ${
+                    activePastSection === tab.key
+                      ? "bg-[#8B4513] text-white border-[#8B4513]"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-[#8B4513]/40 hover:text-[#8B4513]"
+                  }`}
+                >
+                  {tab.label} ({tab.count})
+                </button>
+              ))}
+            </div>
 
-                        <div>
-                          <p className="font-bold text-gray-700">{pastSurgeries.name}</p>
-                          <p className="text-xs text-gray-500">Date: {formatMonthYear(pastSurgeries.month, pastSurgeries.year)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 min-h-[190px]">
+              {renderPastSectionPreview()}
+            </div>
 
-              {/* Childhood Illness */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-3 block">Childhood Illness</label>
-                <div className="flex flex-wrap gap-2">
-                  {childhoodIllness.length > 0 ? (
-                    childhoodIllness.map((childhoodIllness, index) => (
-                      <span
-                        key={index}
-                        className='px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium border border-red-100'
-                      >
-                        {childhoodIllness}
-                      </span>
-                    ))
-                  ) : (
-                    <span className='text-gray-400 text-sm'>No ChildHoodIllnesses Added</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Long Term Treatments */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-3 block">Long Term Treatments</label>
-                  {longTermTreatments.length > 0 ? (
-                    longTermTreatments.map((longTermTreatments, index) => (
-                      <span
-                        key={index}
-                        className='px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium border border-red-100'
-                      >
-                        {longTermTreatments}
-                      </span>
-                    ))
-                  ) : (
-                    <span className='text-gray-400 text-sm'>No Long Term Treatments Added</span>
-                  )}
-              </div>
+            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between gap-3">
+              <p className="text-xs text-gray-500">
+                {pastSectionTotal} {pastSectionLabels[activePastSection].toLowerCase()} recorded
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  setMedicalDrawerState({
+                    domain: "past",
+                    section: activePastSection,
+                  })
+                }
+                disabled={pastSectionTotal === 0}
+                className="text-xs font-semibold text-[#8B4513] hover:text-[#A0522D] transition disabled:text-gray-300 disabled:cursor-not-allowed"
+              >
+                View full details
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Family Medical History */}
-        <div className="bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20 mb-6">
-          <div className="flex items-center gap-2 mb-6 pb-4 border-b border-gray-100">
-            <h3 className="font-bold text-gray-800">Family Medical History</h3>
-            <button 
-              onClick={() => setIsFamilyHistoryModalOpen(true)}
-              className="p-2 bg-white/90 backdrop-blur text-gray-500 hover:text-[#FF8000] hover:bg-orange-50 rounded-full border border-gray-200 shadow-sm transition"
-            >
-              <Edit2 className="w-4 h-4" />
-            </button>
-          </div>
-          
-          <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-green-300 transition">
-            <div className="space-y-2">
-              {familyMedicalHistory.map((familyMedicalHistory, index) => (
-                <div 
-                  key={index}
-                  className='flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100'
-                >
-                  <div className="flex items-center gap-3">
-                    {/* <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-teal-600">
-                    </div> */}
-                      <p className="font-bold text-gray-700">{familyMedicalHistory.relation}</p>
-                      <p className="text-xs text-gray-500">Disease: {familyMedicalHistory.disease}</p>
-                  </div>
+        {/* Medical Details Drawer */}
+        {medicalDrawerState && (
+          <div className="fixed inset-0 z-[60]">
+            <button
+              type="button"
+              onClick={() => setMedicalDrawerState(null)}
+              className="absolute inset-0 bg-black/40"
+              aria-label="Close medical details drawer"
+            />
+            <aside className="absolute inset-y-0 right-0 w-full max-w-2xl bg-white border-l border-gray-200 shadow-2xl flex flex-col">
+              <div className="p-5 border-b border-gray-200 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider font-semibold text-gray-500">
+                    {medicalDrawerState.domain === "current" ? "Current Medical Status" : "Past Medical History"}
+                  </p>
+                  <h3 className="text-xl font-bold text-gray-800">{drawerTitle}</h3>
+                  <p className="text-sm text-gray-500">
+                    {drawerTotal} {drawerTotal === 1 ? "record" : "records"}
+                  </p>
                 </div>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setMedicalDrawerState(null)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                {renderMedicalDrawerContent()}
+              </div>
+            </aside>
           </div>
-        </div>   
+        )}
+
         {/* Personal Info Modal */}
         {isPersonalInfoModalOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1493,17 +1695,15 @@ useEffect(() => {
                             placeholder="e.g., Diabetes, Asthma"
                             className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
                           />
-                          {index > 0 && (
-                            <button
-                              type="button"
-                              className="text-red-500"
-                              onClick={() =>
-                                setConditions(conditions.filter((_, i) => i !== index))
-                              }
-                            >
-                              <X className="w-5 h-5" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            className="text-red-500"
+                            onClick={() =>
+                              setConditions(conditions.filter((_, i) => i !== index))
+                            }
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
                         </div>
                       ))}
                       <button
@@ -1523,17 +1723,15 @@ useEffect(() => {
                           key={index}
                           className="p-4 border-2 border-[#309898]/30 rounded-lg bg-gray-50 space-y-3 relative"
                         >
-                          {index > 0 && (
-                            <button
-                              type="button"
-                              className="absolute top-2 right-2 text-red-500"
-                              onClick={() =>
-                                setCurrentMedications(currentMedications.filter((_, i) => i !== index))
-                              }
-                            >
-                              <X className="w-5 h-5" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            className="absolute top-2 right-2 text-red-500"
+                            onClick={() =>
+                              setCurrentMedications(currentMedications.filter((_, i) => i !== index))
+                            }
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                               <label className="block text-[#309898] mb-2">Name</label>
@@ -1705,17 +1903,15 @@ useEffect(() => {
                             placeholder="e.g., Peanuts, Penicillin"
                             className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
                           />
-                          {index > 0 && (
-                            <button
-                              type="button"
-                              className="text-red-500"
-                              onClick={() =>
-                                setAllergy(allergy.filter((_, i) => i !== index))
-                              }
-                            >
-                              <X className="w-5 h-5" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            className="text-red-500"
+                            onClick={() =>
+                              setAllergy(allergy.filter((_, i) => i !== index))
+                            }
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
                         </div>
                       ))}
                       <button
@@ -1742,17 +1938,15 @@ useEffect(() => {
                             placeholder="e.g., Physiotherapy, Dialysis"
                             className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
                           />
-                          {index > 0 && (
-                            <button
-                              type="button"
-                              className="text-red-500"
-                              onClick={() =>
-                                setTreatment(treatment.filter((_, i) => i !== index))
-                              }
-                            >
-                              <X className="w-5 h-5" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            className="text-red-500"
+                            onClick={() =>
+                              setTreatment(treatment.filter((_, i) => i !== index))
+                            }
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
                         </div>
                       ))}
                       <button
@@ -1846,17 +2040,15 @@ useEffect(() => {
                             placeholder="e.g., Thyroid, Jaundice"
                             className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
                           />
-                          {index > 0 && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setPreviousDiagnosedCondition(previousDiagnosedCondition.filter((_, i) => i !== index))
-                              }
-                              className="text-[#FF8000]"
-                            >
-                              <X className="w-5 h-5" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviousDiagnosedCondition(previousDiagnosedCondition.filter((_, i) => i !== index))
+                            }
+                            className="text-[#FF8000]"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
                         </div>
                       ))}
                       <button
@@ -1873,15 +2065,13 @@ useEffect(() => {
                       <h3 className="text-[#FF8000] mb-4">Past Surgeries</h3>
                       {pastSurgeries.map((surg, index) => (
                         <div key={index} className="p-4 border rounded-lg bg-gray-50 space-y-3 relative text-gray-800">
-                          {index > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setPastSurgeries(pastSurgeries.filter((_, i) => i !== index))}
-                              className="absolute top-2 right-2 text-red-500"
-                            >
-                              <X className="w-5 h-5" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => setPastSurgeries(pastSurgeries.filter((_, i) => i !== index))}
+                            className="absolute top-2 right-2 text-red-500"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
                           <input
                             value={surg.name}
                             onChange={(e) => {
@@ -1952,17 +2142,15 @@ useEffect(() => {
                             placeholder="e.g., Chickenpox"
                             className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
                           />
-                          {index > 0 && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setChildhoodIllness(childhoodIllness.filter((_, i) => i !== index))
-                              }
-                              className="text-[#FF8000]"
-                            >
-                              <X className="w-5 h-5" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setChildhoodIllness(childhoodIllness.filter((_, i) => i !== index))
+                            }
+                            className="text-[#FF8000]"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
                         </div>
                       ))}
                       <button
@@ -1989,17 +2177,15 @@ useEffect(() => {
                             placeholder="e.g., Physical Therapy"
                             className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
                           />
-                          {index > 0 && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setLongTermTreatments(longTermTreatments.filter((_, i) => i !== index))
-                              }
-                              className="text-[#FF8000]"
-                            >
-                              <X className="w-5 h-5" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setLongTermTreatments(longTermTreatments.filter((_, i) => i !== index))
+                            }
+                            className="text-[#FF8000]"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
                         </div>
                       ))}
                       <button
@@ -2102,19 +2288,17 @@ useEffect(() => {
                           <option>Sister</option>
                           <option>Grandparents</option>
                         </select>
-                        {index > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFamilyMedicalHistory(
-                                familyMedicalHistory.filter((_, i) => i !== index)
-                              );
-                            }}
-                            className="text-red-500"
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFamilyMedicalHistory(
+                              familyMedicalHistory.filter((_, i) => i !== index)
+                            );
+                          }}
+                          className="text-red-500"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
                       </div>
                     ))}
                     <button

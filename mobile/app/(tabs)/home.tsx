@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -83,6 +83,10 @@ export default function HomeScreen() {
   const [summaryError, setSummaryError] = useState('');
   const [summaryReportCount, setSummaryReportCount] = useState(0);
   const [isSharingSummary, setIsSharingSummary] = useState(false);
+  const [hasUnreadSummary, setHasUnreadSummary] = useState(false);
+  const isSummaryModalOpenRef = useRef(isSummaryModalOpen);
+
+  isSummaryModalOpenRef.current = isSummaryModalOpen;
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 60_000);
@@ -622,6 +626,17 @@ export default function HomeScreen() {
 
   const isSummaryLoading = isProcessingSummary || isGeneratingSummary;
 
+  useEffect(() => {
+    setHasUnreadSummary(false);
+  }, [profileId]);
+
+  useEffect(() => {
+    if (!isSummaryModalOpen || isSummaryLoading || summaryError || !summaryText.trim()) {
+      return;
+    }
+    setHasUnreadSummary(false);
+  }, [isSummaryLoading, isSummaryModalOpen, summaryError, summaryText]);
+
   const processMedicalFiles = async () => {
     if (!profileId) {
       throw new Error('Please select a profile first.');
@@ -670,6 +685,9 @@ export default function HomeScreen() {
 
     setSummaryText(data.summary || '');
     setSummaryReportCount(data.report_count || 0);
+    if (!isSummaryModalOpenRef.current) {
+      setHasUnreadSummary(true);
+    }
   };
 
   const loadSummary = async () => {
@@ -762,6 +780,11 @@ export default function HomeScreen() {
             >
               <MaterialCommunityIcons name="file-document-outline" size={18} color="#1b2b2f" />
               <Text style={styles.primaryButtonText}>Get Summary</Text>
+              {hasUnreadSummary && (
+                <View style={styles.summaryReadyBadge}>
+                  <MaterialCommunityIcons name="alert-circle" size={12} color="#7a4b00" />
+                </View>
+              )}
             </Pressable>
             <Pressable
               style={({ pressed }) => [
@@ -882,6 +905,9 @@ export default function HomeScreen() {
                     {isProcessingSummary
                       ? 'Processing your reports...'
                       : 'Generating AI-powered summary...'}
+                  </Text>
+                  <Text style={styles.summaryHintText}>
+                    {"This may take about a minute. We'll notify you when your summary is ready. Feel free to come back when it's ready."}
                   </Text>
                 </View>
               )}
@@ -1013,6 +1039,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
+  summaryReadyBadge: {
+    minWidth: 18,
+    minHeight: 18,
+    borderRadius: 999,
+    backgroundColor: '#fde68a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   secondaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1086,6 +1120,13 @@ const styles = StyleSheet.create({
     color: '#4f666b',
     fontSize: 14,
     textAlign: 'center',
+  },
+  summaryHintText: {
+    color: '#5f7479',
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 320,
   },
   summaryErrorText: {
     color: '#a61f2f',

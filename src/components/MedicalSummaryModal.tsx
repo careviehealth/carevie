@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Loader2, FileText, AlertCircle } from 'lucide-react';
 
 interface SummaryResponse {
@@ -16,6 +16,8 @@ interface MedicalSummaryModalProps {
   onClose: () => void;
   folderType?: string;
   userId?: string;
+  onSummaryReady?: () => void;
+  onSummaryViewed?: () => void;
 }
 
 const PUBLIC_BACKEND_BASE_URL = (
@@ -43,7 +45,9 @@ export function MedicalSummaryModal({
   isOpen, 
   onClose, 
   folderType = 'reports',
-  userId: propUserId
+  userId: propUserId,
+  onSummaryReady,
+  onSummaryViewed
 }: MedicalSummaryModalProps) {
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -53,6 +57,10 @@ export function MedicalSummaryModal({
   const [reportCount, setReportCount] = useState<number>(0);
   const [hasProcessed, setHasProcessed] = useState(false);
   const [userId, setUserId] = useState<string>('');
+  const hasMarkedSummaryViewedRef = useRef(false);
+  const isOpenRef = useRef(isOpen);
+
+  isOpenRef.current = isOpen;
 
   if (process.env.NODE_ENV !== 'production') {
     console.log('🎭 Modal render - isOpen:', isOpen);
@@ -98,8 +106,20 @@ export function MedicalSummaryModal({
       setHasProcessed(false);
       setError('');
       setSummary('');
+      hasMarkedSummaryViewedRef.current = false;
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !summary || isProcessing || isGenerating) {
+      return;
+    }
+    if (hasMarkedSummaryViewedRef.current) {
+      return;
+    }
+    hasMarkedSummaryViewedRef.current = true;
+    onSummaryViewed?.();
+  }, [isGenerating, isOpen, isProcessing, onSummaryViewed, summary]);
 
   const processFiles = async () => {
     if (!userId) {
@@ -193,6 +213,10 @@ export function MedicalSummaryModal({
       setSummary(data.summary || '');
       setReportCount(data.report_count || 0);
       setHasProcessed(true);
+      hasMarkedSummaryViewedRef.current = false;
+      if (!isOpenRef.current) {
+        onSummaryReady?.();
+      }
       
       console.log('✅ [Frontend] State updated, summary should display');
       return { ok: true };
@@ -275,7 +299,7 @@ export function MedicalSummaryModal({
                 {isGenerating && 'Generating AI-powered summary...'}
               </p>
               <p className="text-sm text-slate-500 mt-2">
-                This may take 10-30 seconds
+                This may take about a minute. We&apos;ll notify you when your summary is ready. Feel free to come back when it&apos;s ready.
               </p>
             </div>
           )}

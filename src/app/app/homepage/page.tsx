@@ -347,10 +347,15 @@ function HomePageContent() {
   const [medications, setMedications] = useState<Medication[]>([]);
   const [isSendingSOS, setIsSendingSOS] = useState(false);
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+  const [hasUnreadSummary, setHasUnreadSummary] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [greeting, setGreeting] = useState("Good Morning");
   const profileId = selectedProfile?.id ?? "";
   const cacheOwnerId = profileId || userId;
+
+  useEffect(() => {
+    setHasUnreadSummary(false);
+  }, [profileId]);
 
   useEffect(() => {
     if (!openParam) return;
@@ -1290,7 +1295,14 @@ function HomePageContent() {
                     : "bg-gray-400 cursor-not-allowed text-gray-200"
                 }`}
               >
-                Get Summary
+                <span className="inline-flex items-center gap-2">
+                  <span>Get Summary</span>
+                  {hasUnreadSummary && (
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1 text-xs font-black text-amber-700">
+                      !
+                    </span>
+                  )}
+                </span>
               </button>
 
               <button
@@ -1385,6 +1397,8 @@ function HomePageContent() {
           onClose={() => setIsSummaryModalOpen(false)}
           folderType="reports"
           userId={profileId}
+          onSummaryReady={() => setHasUnreadSummary(true)}
+          onSummaryViewed={() => setHasUnreadSummary(false)}
         />
 
         {/* CARDS */}
