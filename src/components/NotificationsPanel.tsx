@@ -259,7 +259,7 @@ export function NotificationsPanel({
   const [notificationsError, setNotificationsError] = useState("");
   const [familyNotificationsLoading, setFamilyNotificationsLoading] = useState(false);
   const [familyNotificationsError, setFamilyNotificationsError] = useState("");
-  const [now, setNow] = useState(() => new Date());
+  const [nowEpoch, setNowEpoch] = useState(0);
   const [dismissedInviteIds, setDismissedInviteIds] = useState<Set<string>>(() => new Set());
   const [dismissedAppointmentIds, setDismissedAppointmentIds] = useState<Set<string>>(() => new Set());
   const [dismissedFamilyNotificationIds, setDismissedFamilyNotificationIds] = useState<Set<string>>(
@@ -940,18 +940,24 @@ export function NotificationsPanel({
   }, [profileId, userId]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(new Date());
-    }, 60_000);
-    return () => clearInterval(interval);
+    const updateNow = () => {
+      setNowEpoch(Date.now());
+    };
+
+    const kickoff = window.setTimeout(updateNow, 0);
+    const interval = window.setInterval(updateNow, 60_000);
+    return () => {
+      window.clearTimeout(kickoff);
+      window.clearInterval(interval);
+    };
   }, []);
 
   const formatRelativeTimestamp = (value: string) => {
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return "Just now";
+    if (nowEpoch === 0) return "Just now";
 
-    const now = new Date();
-    const diffMs = now.getTime() - parsed.getTime();
+    const diffMs = nowEpoch - parsed.getTime();
     const diffMinutes = Math.floor(diffMs / 60000);
 
     if (diffMinutes < 1) return "Just now";
@@ -967,7 +973,8 @@ export function NotificationsPanel({
   };
 
   const formatTimeUntil = (target: Date) => {
-    const diffMs = target.getTime() - now.getTime();
+    if (nowEpoch === 0) return "Soon";
+    const diffMs = target.getTime() - nowEpoch;
     if (diffMs <= 0) return "Starting now";
     const diffMinutes = Math.floor(diffMs / 60_000);
     if (diffMinutes < 60) return `In ${diffMinutes}m`;
@@ -1363,7 +1370,7 @@ export function NotificationsPanel({
 
   const upcomingAppointments = allProfileAppointments
     .map((entry) => {
-      const diffMs = entry.dateTime.getTime() - now.getTime();
+      const diffMs = entry.dateTime.getTime() - nowEpoch;
       if (diffMs <= 0 || diffMs > ONE_DAY_MS) return null;
       return {
         ...entry,
@@ -1400,7 +1407,7 @@ export function NotificationsPanel({
       : [];
   const visibleFamilyAppointments = familyAppointments
     .filter(({ dateTime }) => {
-      const diffMs = dateTime.getTime() - now.getTime();
+      const diffMs = dateTime.getTime() - nowEpoch;
       return diffMs > 0 && diffMs <= ONE_DAY_MS;
     })
     .filter(
@@ -1410,13 +1417,14 @@ export function NotificationsPanel({
     if (!file.createdAt) return false;
     const createdTime = new Date(file.createdAt).getTime();
     if (Number.isNaN(createdTime)) return false;
-    if (Date.now() - createdTime > ONE_DAY_MS) return false;
+    if (nowEpoch === 0 || nowEpoch - createdTime > ONE_DAY_MS) return false;
     return !dismissedFamilyNotificationIds.has(file.id) && !serverDismissedNotificationIds.has(file.id);
   });
   const visibleFamilyMedicationStarts = familyMedicationStarts.filter((medication) => {
     const start = new Date(`${medication.startDate}T00:00:00`);
     if (Number.isNaN(start.getTime())) return false;
-    const diffMs = Date.now() - start.getTime();
+    if (nowEpoch === 0) return false;
+    const diffMs = nowEpoch - start.getTime();
     if (diffMs < 0 || diffMs > ONE_DAY_MS) return false;
     return (
       !dismissedFamilyNotificationIds.has(medication.id) &&
@@ -1444,7 +1452,8 @@ export function NotificationsPanel({
             .filter((log) => {
               const createdTime = Date.parse(log.created_at);
               if (!Number.isFinite(createdTime)) return false;
-              const ageMs = now.getTime() - createdTime;
+              if (nowEpoch === 0) return false;
+              const ageMs = nowEpoch - createdTime;
               return ageMs >= 0 && ageMs <= ONE_DAY_MS;
             })
             .slice(0, 8);

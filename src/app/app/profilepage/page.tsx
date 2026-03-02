@@ -1,9 +1,9 @@
 'use client'
 
 import {
-  User, Phone, Activity, Edit2,
+  User, Phone, Edit2,
   Droplet, Calculator, CalendarCheck,
-  ChevronDown, Users, Menu, X, Pill, History, LogOut, Calendar, Locate, Plus
+  ChevronDown, Menu, X, Pill, LogOut, Calendar, Locate, Plus
 } from 'lucide-react';
 import { supabase } from '@/lib/createClient';
 import { useRef, useEffect, useState } from 'react';
@@ -880,30 +880,30 @@ useEffect(() => {
             {/* KPI Section */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {/* KPI 1 */}
-              <div className="bg-red-50 p-4 rounded-2xl border border-red-100 hover:border-red-300 transition shadow-sm group">
-                <p className="text-[10px] text-red-500 font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Droplet className="w-3 h-3 fill-red-400 text-red-400 group-hover:scale-110 transition" /> Blood
+              <div className="bg-[var(--theme-surface)] p-4 rounded-2xl border border-[var(--theme-border)] hover:border-[var(--theme-button-primary)] transition shadow-sm group">
+                <p className="text-[10px] text-[var(--theme-button-primary)] font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Droplet className="w-3 h-3 fill-[var(--theme-button-primary)] text-[var(--theme-button-primary)] group-hover:scale-110 transition" /> Blood
                 </p>
-                <p className="text-2xl font-bold text-gray-800">{bloodGroup}</p>
+                <p className="text-2xl font-bold text-[var(--theme-text)]">{bloodGroup}</p>
               </div>
                
               {/* KPI 2 */}
-              <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 hover:border-blue-300 transition shadow-sm group">
-                <p className="text-[10px] text-blue-500 font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Calculator className="w-3 h-3 text-blue-500 group-hover:scale-110 transition" /> BMI
+              <div className="bg-[var(--theme-surface)] p-4 rounded-2xl border border-[var(--theme-border)] hover:border-[var(--theme-button-primary)] transition shadow-sm group">
+                <p className="text-[10px] text-[var(--theme-button-primary)] font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Calculator className="w-3 h-3 text-[var(--theme-button-primary)] group-hover:scale-110 transition" /> BMI
                 </p>
                 <div className="flex items-baseline gap-1">
-                  <p className="text-2xl font-bold text-gray-800">{bmi}</p>
-                  <span className="text-[10px] text-gray-500 font-medium">kg/m²</span>
+                  <p className="text-2xl font-bold text-[var(--theme-text)]">{bmi}</p>
+                  <span className="text-[10px] text-[var(--theme-text-secondary)] font-medium">kg/m²</span>
                 </div>
               </div>
 
               {/* KPI 3 */}
-              <div className="bg-purple-50 p-4 rounded-2xl border border-purple-100 hover:border-purple-300 transition shadow-sm group">
-                <p className="text-[10px] text-purple-500 font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <CalendarCheck className="w-3 h-3 text-purple-500 group-hover:scale-110 transition" /> Age
+              <div className="bg-[var(--theme-surface)] p-4 rounded-2xl border border-[var(--theme-border)] hover:border-[var(--theme-button-primary)] transition shadow-sm group">
+                <p className="text-[10px] text-[var(--theme-button-primary)] font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <CalendarCheck className="w-3 h-3 text-[var(--theme-button-primary)] group-hover:scale-110 transition" /> Age
                 </p>
-                <p className="text-2xl font-bold text-gray-800">{age || "—"}</p>
+                <p className="text-2xl font-bold text-[var(--theme-text)]">{age || "—"}</p>
               </div>
             </div>
           </div>
@@ -911,12 +911,7 @@ useEffect(() => {
           {/* Right: Historical Visits */}
           <div className="bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20 flex flex-col h-full">
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-blue-100 text-blue-600">
-                  <History className="w-4 h-4" />
-                </div>
-                Historical Visits
-              </h3>
+              <h3 className="font-bold text-gray-800">Historical Visits</h3>
 
               <button className="text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-md transition">
                 View All
@@ -939,9 +934,6 @@ useEffect(() => {
           {/* Current Medical Status */}
           <div className="bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20">
             <div className="flex items-center gap-2 mb-6 pb-4 border-b border-gray-100">
-              <div className="p-2 bg-red-50 rounded-lg text-red-600">
-                <Activity className="w-5 h-5" />
-              </div>
               <h3 className="font-bold text-gray-800">Current Medical Status</h3>
               <button 
                 onClick={() => setIsCurrentMedicalModalOpen(true)}
@@ -1042,9 +1034,6 @@ useEffect(() => {
           {/* Past Medical History */}
           <div className="bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20">
             <div className="flex items-center gap-2 mb-6 pb-4 border-b border-gray-100">
-              <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
-                <History className="w-5 h-5" />
-              </div>
               <h3 className="font-bold text-gray-800">Past Medical History</h3>
               <button 
                 onClick={() => setIsPastMedicalModalOpen(true)}
@@ -1139,9 +1128,6 @@ useEffect(() => {
         {/* Family Medical History */}
         <div className="bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20 mb-6">
           <div className="flex items-center gap-2 mb-6 pb-4 border-b border-gray-100">
-            <div className="p-2 bg-green-50 rounded-lg text-green-600">
-              <Users className="w-5 h-5" />
-            </div>
             <h3 className="font-bold text-gray-800">Family Medical History</h3>
             <button 
               onClick={() => setIsFamilyHistoryModalOpen(true)}

@@ -217,159 +217,161 @@ body {
   --theme-sidebar-active: #14b8a6;
   --theme-button-primary: #14b8a6;
   --theme-button-secondary: #134E4A;
+  --hero-greeting-from: #4FD1A6;
+  --hero-greeting-to: #FFBF69;
 }
 
 /* Charcoal Theme */
 .theme-charcoal {
-  --theme-primary: #828282;
-  --theme-secondary: #828282;
-  --theme-accent: #a5a5a5;
-  --theme-background: #f0f0f2;
-  --theme-surface: #a5a5a5;
-  --theme-text: #ffffff;
-  --theme-text-secondary: #ffffff;
-  --theme-border: #828282;
-  --theme-card: #a5a5a5;
-  --theme-navbar: #515151;
-  --theme-sidebar-active: #828282;
-  --theme-button-primary: #828282;
-  --theme-button-secondary: #828282;
+  --theme-primary: #4b5563;
+  --theme-secondary: #6b7280;
+  --theme-accent: #d1d5db;
+  --theme-background: #f3f4f6;
+  --theme-surface: #e5e7eb;
+  --theme-text: #111827;
+  --theme-text-secondary: #374151;
+  --theme-border: #cbd5e1;
+  --theme-card: #ffffff;
+  --theme-navbar: #111827;
+  --theme-sidebar-active: #4b5563;
+  --theme-button-primary: #4b5563;
+  --theme-button-secondary: #374151;
 }
 
 /* Clay Theme */
 .theme-clay {
-  --theme-primary: #4a342a;
-  --theme-secondary: #835c44;
-  --theme-accent: #c6a27e;
-  --theme-background: #d8b28e;
-  --theme-surface: #c6a27e;
-  --theme-text: #ffffff;
-  --theme-text-secondary: #ffffff;
-  --theme-border: #835c44;
-  --theme-card: #c6a27e;
+  --theme-primary: #835c44;
+  --theme-secondary: #a57a5e;
+  --theme-accent: #dec3aa;
+  --theme-background: #f3e6da;
+  --theme-surface: #e5cfba;
+  --theme-text: #3a2418;
+  --theme-text-secondary: #6b4a36;
+  --theme-border: #c9a888;
+  --theme-card: #f8efe6;
   --theme-navbar: #4a342a;
-  --theme-sidebar-active: #4a342a;
-  --theme-button-primary: #4a342a;
-  --theme-button-secondary: #835c44;
+  --theme-sidebar-active: #835c44;
+  --theme-button-primary: #835c44;
+  --theme-button-secondary: #6b4a36;
 }
 
 /* Olive Theme */
 .theme-olive {
-  --theme-primary: #87986a;
-  --theme-secondary: #87986a;
-  --theme-accent: #b5c99a;
-  --theme-background: #edf3e5;
-  --theme-surface: #b5c99a;
-  --theme-text: #ffffff;
-  --theme-text-secondary: #ffffff;
-  --theme-border: #87986a;
-  --theme-card: #b5c99a;
-  --theme-navbar: #87986a;
-  --theme-sidebar-active: #87986a;
-  --theme-button-primary: #87986a;
-  --theme-button-secondary: #87986a;
+  --theme-primary: #7b9460;
+  --theme-secondary: #97ad7f;
+  --theme-accent: #d8e4c4;
+  --theme-background: #f1f6e9;
+  --theme-surface: #dde7cb;
+  --theme-text: #2d3c24;
+  --theme-text-secondary: #556747;
+  --theme-border: #b8cba0;
+  --theme-card: #ffffff;
+  --theme-navbar: #5f7449;
+  --theme-sidebar-active: #7b9460;
+  --theme-button-primary: #7b9460;
+  --theme-button-secondary: #5f7449;
 }
 
 /* Coffee Theme */
 .theme-coffee {
-  --theme-primary: #391e10;
-  --theme-secondary: #734128;
-  --theme-accent: #C7A07A;
-  --theme-background: #E2CEB1;
-  --theme-surface: #C7A07A;
-  --theme-text: #ffffff;
-  --theme-text-secondary: #ffffff;
-  --theme-border: #734128;
-  --theme-card: #C7A07A;
-  --theme-navbar: #391e10;
-  --theme-sidebar-active: #391e10;
-  --theme-button-primary: #391e10;
-  --theme-button-secondary: #734128;
+  --theme-primary: #734128;
+  --theme-secondary: #9b6744;
+  --theme-accent: #d7b695;
+  --theme-background: #f2e4d4;
+  --theme-surface: #ddc1a4;
+  --theme-text: #2f1d12;
+  --theme-text-secondary: #5a3b2a;
+  --theme-border: #b78e69;
+  --theme-card: #fff7f0;
+  --theme-navbar: #3a2215;
+  --theme-sidebar-active: #734128;
+  --theme-button-primary: #734128;
+  --theme-button-secondary: #5a3020;
 }
 
 /* Ocean Theme */
 .theme-ocean {
-  --theme-primary: #629bb5;
-  --theme-secondary: #629bb5;
-  --theme-accent: #b9d8e1;
-  --theme-background: #f3f7f9;
-  --theme-surface: #b9d8e1;
-  --theme-text: #ffffff;
-  --theme-text-secondary: #ffffff;
-  --theme-border: #629bb5;
-  --theme-card: #b9d8e1;
-  --theme-navbar: #629bb5;
-  --theme-sidebar-active: #629bb5;
-  --theme-button-primary: #629bb5;
-  --theme-button-secondary: #629bb5;
+  --theme-primary: #4d86a1;
+  --theme-secondary: #6ea4bd;
+  --theme-accent: #d7e9f1;
+  --theme-background: #eef6fa;
+  --theme-surface: #d7e9f1;
+  --theme-text: #17384a;
+  --theme-text-secondary: #3a6074;
+  --theme-border: #a8c8d9;
+  --theme-card: #ffffff;
+  --theme-navbar: #2f6b87;
+  --theme-sidebar-active: #4d86a1;
+  --theme-button-primary: #4d86a1;
+  --theme-button-secondary: #2f6b87;
 }
 
 /* Sunset Theme */
 .theme-sunset {
-  --theme-primary: #eb5204;
-  --theme-secondary: #d55123;
-  --theme-accent: #e47a24;
-  --theme-background: #f4ebdd;
-  --theme-surface: #e47a24;
-  --theme-text: #ffffff;
-  --theme-text-secondary: #ffffff;
-  --theme-border: #d55123;
-  --theme-card: #e47a24;
-  --theme-navbar: #eb5204;
-  --theme-sidebar-active: #eb5204;
-  --theme-button-primary: #eb5204;
-  --theme-button-secondary: #d55123;
+  --theme-primary: #d85a18;
+  --theme-secondary: #e4884a;
+  --theme-accent: #ffb06c;
+  --theme-background: #fff3e8;
+  --theme-surface: #ffd7bc;
+  --theme-text: #4a2614;
+  --theme-text-secondary: #7a4325;
+  --theme-border: #f1b185;
+  --theme-card: #fff7f2;
+  --theme-navbar: #c74b12;
+  --theme-sidebar-active: #e46a2a;
+  --theme-button-primary: #d85a18;
+  --theme-button-secondary: #b44812;
 }
 
 /* Lemon Theme */
 .theme-lemon {
-  --theme-primary: #f49f04;
-  --theme-secondary: #fec428;
-  --theme-accent: #ffe745;
-  --theme-background: #f5f1c8;
-  --theme-surface: #ffdd00;
-  --theme-text: #1e293b;
-  --theme-text-secondary: #64748b;
-  --theme-border: #fec428;
-  --theme-card: #f1d941;
-  --theme-navbar: #f49f04;
-  --theme-sidebar-active: #f49f04;
-  --theme-button-primary: #f49f04;
-  --theme-button-secondary: #fec428;
+  --theme-primary: #d18f00;
+  --theme-secondary: #ebb733;
+  --theme-accent: #fff0a6;
+  --theme-background: #fffbe2;
+  --theme-surface: #f7e98a;
+  --theme-text: #3f3007;
+  --theme-text-secondary: #6b5b1f;
+  --theme-border: #e8c865;
+  --theme-card: #fff9d8;
+  --theme-navbar: #d18f00;
+  --theme-sidebar-active: #d18f00;
+  --theme-button-primary: #d18f00;
+  --theme-button-secondary: #ad7400;
 }
 
 /* Lavender Theme */
 .theme-lavender {
   --theme-primary: #7f4ca5;
-  --theme-secondary: #6e339b;
-  --theme-accent: #dbb6ee;
-  --theme-background: #f0e0fb;
-  --theme-surface: #dbb6ee;
-  --theme-text: #1e293b;
-  --theme-text-secondary: #64748b;
-  --theme-border: #b57edc;
-  --theme-card: #bf8fd7;
-  --theme-navbar: #7f4ca5;
-  --theme-sidebar-active: #7f4ca5;
+  --theme-secondary: #9a6fc1;
+  --theme-accent: #e8d4f8;
+  --theme-background: #f5ebff;
+  --theme-surface: #e6d1f5;
+  --theme-text: #2f1c45;
+  --theme-text-secondary: #5e3f82;
+  --theme-border: #c7a7df;
+  --theme-card: #ffffff;
+  --theme-navbar: #6c4190;
+  --theme-sidebar-active: #8b5bb3;
   --theme-button-primary: #7f4ca5;
-  --theme-button-secondary: #b57edc;
+  --theme-button-secondary: #6c4190;
 }
 
 /* Cherryblue Theme */
 .theme-cherryblue {
-  --theme-primary: #bfd9dc;
-  --theme-secondary: #bfd9dc;
-  --theme-accent: #86989a;
-  --theme-background: #bfd9dc;
-  --theme-surface: #ffffff;
-  --theme-text: #1e293b;
-  --theme-text-secondary: #64748b;
-  --theme-border: #e2e8f0;
-  --theme-card: #c7425b;  
+  --theme-primary: #9fc0c8;
+  --theme-secondary: #9fc0c8;
+  --theme-accent: #89aeb5;
+  --theme-background: #e6f1f4;
+  --theme-surface: #d1e3ea;
+  --theme-text: #1f3340;
+  --theme-text-secondary: #4a6471;
+  --theme-border: #b8ced8;
+  --theme-card: #ffffff;
   --theme-navbar: #c7425b;
   --theme-sidebar-active: #c7425b;
   --theme-button-primary: #c7425b;
-  --theme-button-secondary: #bfd9dc;
+  --theme-button-secondary: #a7364c;
 }
 
 .theme-cherryblue .symbol-bg {
@@ -382,6 +384,327 @@ body {
 
 .theme-lavender .invites-card {
   background-color: #8b54b5 !important;
+}
+
+/* bridge app tokens to theme variables so shared surfaces respond to theme changes */
+html[class*="theme-"] {
+  --background: var(--theme-background);
+  --foreground: var(--theme-text);
+  --card: var(--theme-card);
+  --card-foreground: var(--theme-text);
+  --popover: var(--theme-card);
+  --popover-foreground: var(--theme-text);
+  --primary: var(--theme-button-primary);
+  --primary-foreground: #ffffff;
+  --secondary: var(--theme-secondary);
+  --secondary-foreground: var(--theme-text);
+  --muted: var(--theme-surface);
+  --muted-foreground: var(--theme-text-secondary);
+  --accent: var(--theme-accent);
+  --accent-foreground: var(--theme-text);
+  --border: var(--theme-border);
+  --input: var(--theme-border);
+  --ring: var(--theme-button-primary);
+
+  --color-slate-50: var(--theme-background);
+  --color-slate-100: var(--theme-surface);
+  --color-slate-200: var(--theme-border);
+  --color-slate-300: var(--theme-border);
+  --color-slate-400: var(--theme-text-secondary);
+  --color-slate-500: var(--theme-text-secondary);
+  --color-slate-600: var(--theme-text-secondary);
+  --color-slate-700: var(--theme-text);
+  --color-slate-800: var(--theme-text);
+  --color-slate-900: var(--theme-text);
+
+  --color-gray-50: var(--theme-background);
+  --color-gray-100: var(--theme-surface);
+  --color-gray-200: var(--theme-border);
+  --color-gray-300: var(--theme-border);
+  --color-gray-400: var(--theme-text-secondary);
+  --color-gray-500: var(--theme-text-secondary);
+  --color-gray-600: var(--theme-text-secondary);
+  --color-gray-700: var(--theme-text);
+  --color-gray-800: var(--theme-text);
+  --color-gray-900: var(--theme-text);
+
+  --color-teal-50: var(--theme-accent);
+  --color-teal-100: var(--theme-accent);
+  --color-teal-200: var(--theme-secondary);
+  --color-teal-300: var(--theme-secondary);
+  --color-teal-400: var(--theme-secondary);
+  --color-teal-500: var(--theme-button-primary);
+  --color-teal-600: var(--theme-button-primary);
+  --color-teal-700: var(--theme-button-secondary);
+  --color-teal-800: var(--theme-button-secondary);
+
+  --color-orange-50: var(--theme-background);
+  --color-orange-100: var(--theme-accent);
+  --color-orange-200: var(--theme-secondary);
+  --color-orange-500: var(--theme-button-primary);
+  --color-orange-600: var(--theme-button-secondary);
+  --color-orange-700: var(--theme-button-secondary);
+
+  --color-amber-50: var(--theme-background);
+  --color-amber-100: var(--theme-accent);
+  --color-amber-200: var(--theme-secondary);
+  --color-amber-500: var(--theme-button-primary);
+  --color-amber-600: var(--theme-button-secondary);
+  --color-amber-700: var(--theme-button-secondary);
+
+  --color-blue-50: var(--theme-background);
+  --color-blue-100: var(--theme-accent);
+  --color-blue-200: var(--theme-secondary);
+  --color-blue-500: var(--theme-button-primary);
+  --color-blue-600: var(--theme-button-secondary);
+  --color-blue-700: var(--theme-button-secondary);
+
+  --color-indigo-50: var(--theme-background);
+  --color-indigo-100: var(--theme-accent);
+  --color-indigo-500: var(--theme-button-primary);
+
+  --color-emerald-50: var(--theme-background);
+  --color-emerald-100: var(--theme-accent);
+  --color-emerald-200: var(--theme-secondary);
+  --color-emerald-500: var(--theme-button-primary);
+  --color-emerald-600: var(--theme-button-secondary);
+  --color-emerald-700: var(--theme-button-secondary);
+
+  --color-green-50: var(--theme-background);
+  --color-green-100: var(--theme-accent);
+  --color-green-300: var(--theme-secondary);
+  --color-green-500: var(--theme-button-primary);
+  --color-green-600: var(--theme-button-secondary);
+
+  --color-rose-50: var(--theme-background);
+  --color-rose-100: var(--theme-accent);
+  --color-rose-200: var(--theme-secondary);
+  --color-rose-300: var(--theme-secondary);
+  --color-rose-400: var(--theme-secondary);
+  --color-rose-600: var(--theme-button-primary);
+  --color-rose-700: var(--theme-button-secondary);
+  --color-rose-800: var(--theme-button-secondary);
+  --color-rose-900: var(--theme-button-secondary);
+
+  --color-cyan-500: var(--theme-button-primary);
+  --color-sky-50: var(--theme-background);
+  --color-sky-100: var(--theme-accent);
+  --color-sky-500: var(--theme-button-primary);
+  --color-sky-700: var(--theme-button-secondary);
+  --color-pink-100: var(--theme-accent);
+  --color-pink-200: var(--theme-secondary);
+  --color-pink-700: var(--theme-button-secondary);
+  --color-purple-50: var(--theme-background);
+  --color-purple-100: var(--theme-accent);
+  --color-purple-300: var(--theme-secondary);
+  --color-purple-500: var(--theme-button-primary);
+  --color-violet-50: var(--theme-background);
+  --color-violet-500: var(--theme-button-primary);
+  --color-violet-600: var(--theme-button-secondary);
+  --hero-greeting-from: var(--theme-button-primary);
+  --hero-greeting-to: var(--theme-accent);
+}
+
+/* theme application for frequently used utility classes in /app shell */
+html[class*="theme-"] .vytara-theme-scope {
+  background-color: var(--theme-background);
+  color: var(--theme-text);
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+html[class*="theme-"] .vytara-theme-content.bg-white,
+html[class*="theme-"] .vytara-theme-content[class*="bg-white/"] {
+  background-color: var(--theme-card) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content.bg-slate-50,
+html[class*="theme-"] .vytara-theme-content.bg-slate-100,
+html[class*="theme-"] .vytara-theme-content.bg-gray-50,
+html[class*="theme-"] .vytara-theme-content.bg-gray-100 {
+  background-color: var(--theme-surface) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content[class*="border-slate-"],
+html[class*="theme-"] .vytara-theme-content[class*="border-gray-"],
+html[class*="theme-"] .vytara-theme-content[class*="border-white/"] {
+  border-color: var(--theme-border) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content .bg-white,
+html[class*="theme-"] .vytara-theme-content [class*="bg-white/"] {
+  background-color: var(--theme-card) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content .bg-slate-50,
+html[class*="theme-"] .vytara-theme-content .bg-slate-100,
+html[class*="theme-"] .vytara-theme-content .bg-slate-200,
+html[class*="theme-"] .vytara-theme-content .bg-slate-300,
+html[class*="theme-"] .vytara-theme-content [class*="bg-slate-50/"],
+html[class*="theme-"] .vytara-theme-content [class*="bg-slate-100/"],
+html[class*="theme-"] .vytara-theme-content [class*="bg-slate-200/"],
+html[class*="theme-"] .vytara-theme-content [class*="bg-slate-300/"],
+html[class*="theme-"] .vytara-theme-content .bg-gray-50,
+html[class*="theme-"] .vytara-theme-content .bg-gray-100,
+html[class*="theme-"] .vytara-theme-content .bg-gray-200,
+html[class*="theme-"] .vytara-theme-content .bg-gray-300,
+html[class*="theme-"] .vytara-theme-content [class*="bg-gray-50/"],
+html[class*="theme-"] .vytara-theme-content [class*="bg-gray-100/"],
+html[class*="theme-"] .vytara-theme-content [class*="bg-gray-200/"],
+html[class*="theme-"] .vytara-theme-content [class*="bg-gray-300/"] {
+  background-color: var(--theme-surface) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content [class*="hover:bg-slate-50"]:hover,
+html[class*="theme-"] .vytara-theme-content [class*="hover:bg-slate-100"]:hover,
+html[class*="theme-"] .vytara-theme-content [class*="hover:bg-gray-50"]:hover,
+html[class*="theme-"] .vytara-theme-content [class*="hover:bg-gray-100"]:hover {
+  background-color: var(--theme-surface) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content .text-slate-900,
+html[class*="theme-"] .vytara-theme-content .text-slate-800,
+html[class*="theme-"] .vytara-theme-content .text-slate-700,
+html[class*="theme-"] .vytara-theme-content .text-gray-900,
+html[class*="theme-"] .vytara-theme-content .text-gray-800,
+html[class*="theme-"] .vytara-theme-content .text-gray-700,
+html[class*="theme-"] .vytara-theme-content [class*="text-slate-900/"],
+html[class*="theme-"] .vytara-theme-content [class*="text-slate-800/"],
+html[class*="theme-"] .vytara-theme-content [class*="text-slate-700/"],
+html[class*="theme-"] .vytara-theme-content [class*="text-gray-900/"],
+html[class*="theme-"] .vytara-theme-content [class*="text-gray-800/"],
+html[class*="theme-"] .vytara-theme-content [class*="text-gray-700/"] {
+  color: var(--theme-text) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content .text-slate-600,
+html[class*="theme-"] .vytara-theme-content .text-slate-500,
+html[class*="theme-"] .vytara-theme-content .text-slate-400,
+html[class*="theme-"] .vytara-theme-content .text-gray-600,
+html[class*="theme-"] .vytara-theme-content .text-gray-500,
+html[class*="theme-"] .vytara-theme-content .text-gray-400,
+html[class*="theme-"] .vytara-theme-content [class*="text-slate-600/"],
+html[class*="theme-"] .vytara-theme-content [class*="text-slate-500/"],
+html[class*="theme-"] .vytara-theme-content [class*="text-slate-400/"],
+html[class*="theme-"] .vytara-theme-content [class*="text-gray-600/"],
+html[class*="theme-"] .vytara-theme-content [class*="text-gray-500/"],
+html[class*="theme-"] .vytara-theme-content [class*="text-gray-400/"] {
+  color: var(--theme-text-secondary) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content [class*="border-slate-"],
+html[class*="theme-"] .vytara-theme-content [class*="border-gray-"],
+html[class*="theme-"] .vytara-theme-content [class*="border-white/"],
+html[class*="theme-"] .vytara-theme-content [class*="divide-slate-"],
+html[class*="theme-"] .vytara-theme-content [class*="divide-gray-"] {
+  border-color: var(--theme-border) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content .bg-teal-50,
+html[class*="theme-"] .vytara-theme-content .bg-teal-100,
+html[class*="theme-"] .vytara-theme-content .bg-teal-200,
+html[class*="theme-"] .vytara-theme-content [class*="bg-teal-50/"],
+html[class*="theme-"] .vytara-theme-content [class*="bg-teal-100/"],
+html[class*="theme-"] .vytara-theme-content [class*="bg-teal-200/"] {
+  background-color: var(--theme-accent) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content .bg-teal-300,
+html[class*="theme-"] .vytara-theme-content .bg-teal-400,
+html[class*="theme-"] .vytara-theme-content .bg-teal-500,
+html[class*="theme-"] .vytara-theme-content .bg-teal-600,
+html[class*="theme-"] .vytara-theme-content [class*="bg-teal-300/"],
+html[class*="theme-"] .vytara-theme-content [class*="bg-teal-400/"],
+html[class*="theme-"] .vytara-theme-content [class*="bg-teal-500/"],
+html[class*="theme-"] .vytara-theme-content [class*="bg-teal-600/"] {
+  background-color: var(--theme-button-primary) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content .bg-teal-700,
+html[class*="theme-"] .vytara-theme-content .bg-teal-800,
+html[class*="theme-"] .vytara-theme-content [class*="bg-teal-700/"],
+html[class*="theme-"] .vytara-theme-content [class*="bg-teal-800/"],
+html[class*="theme-"] .vytara-theme-content [class*="hover:bg-teal-600"]:hover,
+html[class*="theme-"] .vytara-theme-content [class*="hover:bg-teal-700"]:hover,
+html[class*="theme-"] .vytara-theme-content [class*="hover:bg-teal-800"]:hover {
+  background-color: var(--theme-button-secondary) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content .text-teal-500,
+html[class*="theme-"] .vytara-theme-content .text-teal-600,
+html[class*="theme-"] .vytara-theme-content .text-teal-700,
+html[class*="theme-"] .vytara-theme-content [class*="text-teal-500/"],
+html[class*="theme-"] .vytara-theme-content [class*="text-teal-600/"],
+html[class*="theme-"] .vytara-theme-content [class*="text-teal-700/"],
+html[class*="theme-"] .vytara-theme-content [class*="hover:text-teal-600"]:hover,
+html[class*="theme-"] .vytara-theme-content [class*="hover:text-teal-700"]:hover {
+  color: var(--theme-button-primary) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content [class*="border-teal-"] {
+  border-color: var(--theme-button-primary) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content [class*="from-teal-600"],
+html[class*="theme-"] .vytara-theme-content [class*="from-teal-500"] {
+  --tw-gradient-from: var(--theme-button-primary) var(--tw-gradient-from-position) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content [class*="to-teal-700"],
+html[class*="theme-"] .vytara-theme-content [class*="to-teal-600"],
+html[class*="theme-"] .vytara-theme-content [class*="to-teal-500"] {
+  --tw-gradient-to: var(--theme-button-secondary) var(--tw-gradient-to-position) !important;
+}
+
+/* legacy arbitrary-hex class bridge used across profile/carecircle pages */
+html[class*="theme-"] .vytara-theme-content [class*="bg-[#f5f5dc]" i],
+html[class*="theme-"] .vytara-theme-content [class*="bg-[#f4f7f8]" i] {
+  background-color: var(--theme-background) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content [class*="bg-[#8b4513]" i],
+html[class*="theme-"] .vytara-theme-content [class*="bg-[#ff8000]" i],
+html[class*="theme-"] .vytara-theme-content [class*="bg-[#14b8a6]" i],
+html[class*="theme-"] .vytara-theme-content [class*="bg-[#309898]" i] {
+  background-color: var(--theme-button-primary) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content [class*="hover:bg-[#a0522d]" i]:hover,
+html[class*="theme-"] .vytara-theme-content [class*="hover:bg-[#309898]" i]:hover,
+html[class*="theme-"] .vytara-theme-content [class*="hover:bg-[#ff8000]" i]:hover,
+html[class*="theme-"] .vytara-theme-content [class*="hover:bg-[#14b8a6]" i]:hover {
+  background-color: var(--theme-button-secondary) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content [class*="text-[#ff8000]" i],
+html[class*="theme-"] .vytara-theme-content [class*="text-[#309898]" i],
+html[class*="theme-"] .vytara-theme-content [class*="text-[#14b8a6]" i],
+html[class*="theme-"] .vytara-theme-content [class*="text-[#8b4513]" i] {
+  color: var(--theme-button-primary) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content [class*="hover:text-[#ff8000]" i]:hover,
+html[class*="theme-"] .vytara-theme-content [class*="hover:text-[#309898]" i]:hover,
+html[class*="theme-"] .vytara-theme-content [class*="hover:text-[#14b8a6]" i]:hover {
+  color: var(--theme-button-secondary) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content [class*="border-[#309898]" i],
+html[class*="theme-"] .vytara-theme-content [class*="border-[#8b4513]" i],
+html[class*="theme-"] .vytara-theme-content [class*="border-[#14b8a6]" i] {
+  border-color: var(--theme-border) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content [class*="from-[#14b8a6]" i],
+html[class*="theme-"] .vytara-theme-content [class*="from-[#ff8000]" i],
+html[class*="theme-"] .vytara-theme-content [class*="from-[#8b4513]" i] {
+  --tw-gradient-from: var(--theme-button-primary) var(--tw-gradient-from-position) !important;
+}
+
+html[class*="theme-"] .vytara-theme-content [class*="to-[#134e4a]" i],
+html[class*="theme-"] .vytara-theme-content [class*="to-[#0f766e]" i],
+html[class*="theme-"] .vytara-theme-content [class*="to-[#a0522d]" i],
+html[class*="theme-"] .vytara-theme-content [class*="to-[#309898]" i] {
+  --tw-gradient-to: var(--theme-button-secondary) var(--tw-gradient-to-position) !important;
 }
 
 @layer base {

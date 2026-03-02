@@ -19,7 +19,7 @@ import {
   Star,
   Loader2,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/createClient';
@@ -79,6 +79,20 @@ export default function Navbar() {
   const { profiles, selectedProfile, selectProfile, refreshProfiles, userId, isLoading } = useAppProfile();
 
   const selectedProfileLabel = useMemo(() => getProfileLabel(selectedProfile), [selectedProfile]);
+  const mobileHeaderStyle: CSSProperties = {
+    borderColor: 'var(--theme-button-secondary)',
+    background: 'linear-gradient(90deg, var(--theme-navbar) 0%, #020617 100%)',
+  };
+  const desktopSidebarStyle: CSSProperties = {
+    borderColor: 'var(--theme-button-secondary)',
+    background: 'linear-gradient(180deg, var(--theme-navbar) 0%, #020617 100%)',
+  };
+  const activeItemStyle: CSSProperties = {
+    backgroundColor: 'var(--theme-sidebar-active)',
+  };
+  const brandDotStyle: CSSProperties = {
+    backgroundColor: 'var(--theme-primary)',
+  };
 
   const navItems = [
     { label: 'Home', href: '/app/homepage', icon: Home },
@@ -474,8 +488,9 @@ export default function Navbar() {
   return (
     <>
       <header
-        className={`sticky top-0 z-40 w-full border-b border-teal-900/20 bg-gradient-to-r from-teal-950 via-slate-950 to-slate-950 text-white md:hidden ${isOnboarding ? 'pointer-events-none opacity-70' : ''
+        className={`sticky top-0 z-40 w-full border-b text-white md:hidden ${isOnboarding ? 'pointer-events-none opacity-70' : ''
           }`}
+        style={mobileHeaderStyle}
       >
         <div className="flex items-center justify-between px-4 py-3">
           <button
@@ -483,7 +498,7 @@ export default function Navbar() {
             onClick={() => router.push('/app/homepage')}
           >
             <div className="w-9 h-9 bg-white rounded-full flex items-center justify-center shadow-md p-2">
-              <div className="w-full h-full bg-teal-600 rounded-full"></div>
+              <div className="w-full h-full rounded-full" style={brandDotStyle}></div>
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.25em] text-teal-200/70">G1</p>
@@ -518,9 +533,10 @@ export default function Navbar() {
                       router.push(item.href);
                     }}
                     className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${isActive
-                        ? 'bg-teal-500/25 text-white'
+                        ? 'text-white'
                         : 'text-teal-100/85 hover:bg-white/10 hover:text-white'
                       }`}
+                    style={isActive ? activeItemStyle : undefined}
                   >
                     <Icon className="h-4 w-4" />
                     {item.label}
@@ -538,15 +554,18 @@ export default function Navbar() {
                 <UserRoundCog className="h-4 w-4" />
                 Switch Profile
               </button>
+              {/* theme selector between switch profile and settings */}
+              <ThemeSelector variant="mobile" />
               <button
                 onClick={() => {
                   setMobileMenuOpen(false);
                   router.push('/app/settings');
                 }}
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${isSettingsPage
-                    ? 'bg-teal-500/25 text-white'
+                    ? 'text-white'
                     : 'text-teal-100/90 hover:bg-white/10 hover:text-white'
                   }`}
+                style={isSettingsPage ? activeItemStyle : undefined}
               >
                 <Settings2 className="h-4 w-4" />
                 Settings
@@ -560,10 +579,6 @@ export default function Navbar() {
                 <LogOut className="h-4 w-4" />
                 Logout
               </button>
-              {/* theme selector placement for mobile menu */}
-              <div className="mt-3 px-1">
-                <ThemeSelector />
-              </div>
             </div>
           </div>
         )}
@@ -575,8 +590,9 @@ export default function Navbar() {
       </header>
 
       <aside
-        className={`sticky top-0 hidden h-screen shrink-0 border-r border-teal-900/20 bg-gradient-to-b from-teal-950 via-slate-950 to-slate-950 text-white transition-[width] duration-200 md:block ${effectiveCollapsed ? 'w-20' : 'w-64'
+        className={`sticky top-0 hidden h-screen shrink-0 border-r text-white transition-[width] duration-200 md:block ${effectiveCollapsed ? 'w-20' : 'w-64'
           } ${isOnboarding ? 'pointer-events-none opacity-70' : ''}`}
+        style={desktopSidebarStyle}
       >
         <div className="flex h-full flex-col px-3 py-6">
           <div className="flex items-center justify-between px-1">
@@ -585,7 +601,7 @@ export default function Navbar() {
               onClick={() => router.push('/app/homepage')}
             >
               <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-md p-2">
-                <div className="w-full h-full bg-teal-600 rounded-full"></div>
+                <div className="w-full h-full rounded-full" style={brandDotStyle}></div>
               </div>
               {!effectiveCollapsed && (
                 <div>
@@ -618,10 +634,11 @@ export default function Navbar() {
                   key={item.href}
                   onClick={() => router.push(item.href)}
                   className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${isActive
-                      ? 'bg-teal-500/20 text-white shadow-sm'
+                      ? 'text-white shadow-sm'
                       : 'text-teal-100/80 hover:bg-white/10 hover:text-white'
                     }`}
                   title={effectiveCollapsed ? item.label : undefined}
+                  style={isActive ? activeItemStyle : undefined}
                 >
                   <Icon className="w-4 h-4" />
                   {!effectiveCollapsed && item.label}
@@ -645,14 +662,19 @@ export default function Navbar() {
               <UserRoundCog className="w-4 h-4" />
               {!effectiveCollapsed && 'Switch Profile'}
             </button>
+            {/* desktop theme selector between switch profile and settings */}
+            {!effectiveCollapsed && (
+              <ThemeSelector variant="desktop" />
+            )}
 
             <button
               onClick={() => router.push('/app/settings')}
               title={effectiveCollapsed ? 'Settings' : undefined}
               className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${isSettingsPage
-                  ? 'bg-teal-500/20 text-white shadow-sm'
+                  ? 'text-white shadow-sm'
                   : 'text-teal-100/90 hover:bg-white/10 hover:text-white'
                 }`}
+              style={isSettingsPage ? activeItemStyle : undefined}
             >
               <Settings2 className="w-4 h-4" />
               {!effectiveCollapsed && 'Settings'}
@@ -668,12 +690,6 @@ export default function Navbar() {
               <LogOut className="w-4 h-4" />
               {!effectiveCollapsed && 'Logout'}
             </button>
-            {/* desktop theme selector below the action buttons */}
-            {!effectiveCollapsed && (
-              <div className="mt-2 px-3">
-                <ThemeSelector />
-              </div>
-            )}
           </div>
         </div>
       </aside>

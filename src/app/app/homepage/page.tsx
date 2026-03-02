@@ -1259,7 +1259,8 @@ function HomePageContent() {
               <h2
                 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-4 leading-tight"
                 style={{
-                  background: `linear-gradient(90deg, #4FD1A6, #FFBF69)`,
+                  background:
+                    "linear-gradient(90deg, var(--hero-greeting-from), var(--hero-greeting-to))",
                   WebkitBackgroundClip: "text",
                   backgroundClip: "text",
                   color: "transparent",

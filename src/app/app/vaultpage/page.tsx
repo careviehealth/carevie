@@ -601,7 +601,10 @@ export default function VaultPage() {
             
             <button
               onClick={() => setShowUploadModal(true)}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-xl font-medium shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 hover:scale-[1.02] transition-all duration-200"
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-white rounded-xl font-medium shadow-lg hover:scale-[1.02] transition-all duration-200"
+              style={{
+                background: 'linear-gradient(90deg, var(--theme-button-primary), var(--theme-button-secondary))',
+              }}
               data-testid="upload-document-btn"
             >
               <Plus size={18} />
@@ -848,7 +851,7 @@ export default function VaultPage() {
                     <p className="text-slate-500 text-sm mb-6">Upload your first medical document to get started</p>
                     <button
                       onClick={() => setShowUploadModal(true)}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-teal-600 text-white rounded-xl font-medium hover:bg-teal-700 transition"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--theme-button-primary)] text-white rounded-xl font-medium hover:bg-[var(--theme-button-secondary)] transition"
                     >
                       <Plus size={18} />
                       Upload Document
@@ -1068,13 +1071,13 @@ export default function VaultPage() {
 
       {/* UPLOAD MODAL */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => {
+        <div className="vytara-theme-content fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => {
           setShowUploadModal(false);
           setUploadData({ category: 'lab-reports', file: null, fileName: '', uploading: false, error: null });
         }}>
           <div
             onClick={(e) => e.stopPropagation()}
-            className="relative bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl"
+            className="relative bg-[var(--theme-card)] text-[var(--theme-text)] rounded-3xl p-8 w-full max-w-lg shadow-2xl border border-[var(--theme-border)]"
           >
             <button
               type="button"
@@ -1082,28 +1085,33 @@ export default function VaultPage() {
                 setShowUploadModal(false);
                 setUploadData({ category: 'lab-reports', file: null, fileName: '', uploading: false, error: null });
               }}
-              className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+              className="absolute top-5 right-5 p-2 rounded-full text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-surface)] transition"
               aria-label="Close modal"
             >
               <X size={20} />
             </button>
 
             <div className="text-center mb-6">
-              <div className="w-14 h-14 mx-auto bg-gradient-to-br from-teal-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg shadow-teal-500/30 mb-4">
+              <div
+                className="w-14 h-14 mx-auto rounded-2xl flex items-center justify-center shadow-lg mb-4"
+                style={{
+                  background: 'linear-gradient(135deg, var(--theme-button-primary), var(--theme-button-secondary))',
+                }}
+              >
                 <Upload size={24} className="text-white" />
               </div>
-              <h3 className="text-xl font-bold text-slate-800">Upload Document</h3>
-              <p className="text-sm text-slate-500 mt-1">Add a new medical document to your vault</p>
+              <h3 className="text-xl font-bold text-[var(--theme-text)]">Upload Document</h3>
+              <p className="text-sm text-[var(--theme-text-secondary)] mt-1">Add a new medical document to your vault</p>
             </div>
 
             <form onSubmit={handleUpload} className="space-y-5">
               {/* Category Select */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Category</label>
+                <label className="block text-sm font-medium text-[var(--theme-text)] mb-2">Category</label>
                 <select
                   value={uploadData.category}
                   onChange={(e) => setUploadData({ ...uploadData, category: e.target.value as Category })}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                  className="w-full px-4 py-3 bg-[var(--theme-surface)] border border-[var(--theme-border)] rounded-xl text-[var(--theme-text)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-button-primary)] focus:border-[var(--theme-button-primary)]"
                 >
                   <option value="lab-reports">Lab Reports</option>
                   <option value="prescriptions">Prescriptions</option>
@@ -1114,8 +1122,8 @@ export default function VaultPage() {
 
               {/* File Upload */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">File</label>
-                <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:border-teal-400 hover:bg-teal-50/30 transition cursor-pointer">
+                <label className="block text-sm font-medium text-[var(--theme-text)] mb-2">File</label>
+                <div className="border-2 border-dashed border-[var(--theme-border)] rounded-xl p-6 text-center hover:border-[var(--theme-button-primary)] hover:bg-[var(--theme-surface)] transition cursor-pointer">
                   <input
                     type="file"
                     accept="application/pdf,image/*"
@@ -1142,14 +1150,14 @@ export default function VaultPage() {
                   <label htmlFor="file-upload" className="cursor-pointer">
                     {uploadData.file ? (
                       <div className="flex items-center justify-center gap-3">
-                        <FileText size={24} className="text-teal-600" />
-                        <span className="font-medium text-slate-700">{uploadData.file.name}</span>
+                        <FileText size={24} className="text-[var(--theme-button-primary)]" />
+                        <span className="font-medium text-[var(--theme-text)]">{uploadData.file.name}</span>
                       </div>
                     ) : (
                       <>
-                        <Upload size={28} className="mx-auto text-slate-400 mb-2" />
-                        <p className="text-sm text-slate-600 font-medium">Click to select a file</p>
-                        <p className="text-xs text-slate-400 mt-1">PDF, JPG, PNG up to 10MB</p>
+                        <Upload size={28} className="mx-auto text-[var(--theme-text-secondary)] mb-2" />
+                        <p className="text-sm text-[var(--theme-text)] font-medium">Click to select a file</p>
+                        <p className="text-xs text-[var(--theme-text-secondary)] mt-1">PDF, JPG, PNG up to 10MB</p>
                       </>
                     )}
                   </label>
@@ -1158,7 +1166,7 @@ export default function VaultPage() {
 
               {/* File Name */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">File name</label>
+                <label className="block text-sm font-medium text-[var(--theme-text)] mb-2">File name</label>
                 <input
                   type="text"
                   value={uploadData.fileName}
@@ -1166,10 +1174,10 @@ export default function VaultPage() {
                     setUploadData({ ...uploadData, fileName: e.target.value })
                   }
                   placeholder="e.g. 2024 Blood Test"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                  className="w-full px-4 py-3 bg-[var(--theme-surface)] border border-[var(--theme-border)] rounded-xl text-[var(--theme-text)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-button-primary)] focus:border-[var(--theme-button-primary)]"
                 />
                 {uploadData.file && (
-                  <p className="mt-1 text-xs text-slate-400">
+                  <p className="mt-1 text-xs text-[var(--theme-text-secondary)]">
                     Extension will be kept as .{getExtension(uploadData.file.name) || 'file'}
                   </p>
                 )}
@@ -1184,7 +1192,10 @@ export default function VaultPage() {
               <button
                 type="submit"
                 disabled={uploadData.uploading || !uploadData.file}
-                className="w-full py-3.5 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-xl font-semibold shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 hover:scale-[1.01] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                className="w-full py-3.5 text-white rounded-xl font-semibold shadow-lg hover:scale-[1.01] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                style={{
+                  background: 'linear-gradient(90deg, var(--theme-button-primary), var(--theme-button-secondary))',
+                }}
               >
                 {uploadData.uploading ? 'Uploading...' : 'Upload Document'}
               </button>

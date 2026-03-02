@@ -10,9 +10,11 @@ export default function AppLayout({
 }) {
   return (
     <AppProfileProvider>
-      <div className="min-h-screen flex flex-col md:flex-row">
+      <div className="vytara-theme-scope min-h-screen flex flex-col md:flex-row">
         <Navbar />
-        <main className="flex-1 min-w-0">{children}</main>
+        <main className="vytara-theme-content flex-1 min-w-0">
+          {children}
+        </main>
         <Suspense fallback={null}>
           <ChatWidget />
         </Suspense>

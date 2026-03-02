@@ -3885,7 +3885,7 @@ export default function CareCirclePage() {
                       createPortal(
                         <div
                           id="carecircle-invite-country-dropdown"
-                          className="fixed z-[9999] w-64 bg-white border-2 border-slate-200 rounded-xl shadow-xl overflow-hidden"
+                          className="vytara-theme-content fixed z-[9999] w-64 bg-white border-2 border-slate-200 rounded-xl shadow-xl overflow-hidden"
                           role="listbox"
                           style={{
                             top: inviteDropdownPosition.top,
