@@ -241,7 +241,7 @@ export default function SettingsPage() {
             </div>
             {isAccountTab ? (
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
-                3 sections
+                4 sections
               </span>
             ) : (
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
@@ -272,6 +272,31 @@ export default function SettingsPage() {
                     </span>
                   </div>
                 ))}
+              </div>
+
+              <div
+                className="flex items-center justify-between rounded-2xl border border-teal-200 bg-teal-50/70 px-4 py-3"
+                data-tour="settings-replay-tour"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl border border-teal-200 bg-white p-2 text-teal-700">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">Replay app tour</p>
+                    <p className="text-xs text-slate-500">Start the walkthrough again from the homepage.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    router.push('/app/homepage?tour=replay');
+                  }}
+                  className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-white px-3 py-2 text-sm font-semibold text-teal-700 transition hover:bg-teal-100"
+                >
+                  Start
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
 
               <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-4">

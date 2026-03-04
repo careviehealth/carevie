@@ -1289,6 +1289,7 @@ function HomePageContent() {
               <button
                 onClick={() => setIsSummaryModalOpen(true)}
                 disabled={!profileId}
+                data-tour="home-get-summary"
                 className={`px-10 py-5 text-lg rounded-2xl font-bold shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl ${
                   profileId
                     ? "bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer"
@@ -1308,6 +1309,7 @@ function HomePageContent() {
               <button
                 onClick={handleSOS}
                 disabled={isSendingSOS}
+                data-tour="home-sos"
                 className={`px-10 py-5 text-lg rounded-2xl font-bold shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl disabled:hover:scale-100 ${
                   isSendingSOS
                     ? "bg-red-400 cursor-not-allowed"
@@ -1325,6 +1327,7 @@ function HomePageContent() {
               <button
                 type="button"
                 onClick={() => setIsNotificationsOpen(true)}
+                data-tour="home-notifications-mobile"
                 className="w-full inline-flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white px-6 py-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
               >
                 <Bell size={18} className="text-teal-600" />
@@ -1334,7 +1337,7 @@ function HomePageContent() {
           </div>
 
           {/* Desktop Notification Panel */}
-          <div className="hidden lg:block">
+          <div className="hidden lg:block" data-tour="home-notifications-desktop">
             <NotificationsPanel userId={userId} profileId={profileId} appointments={appointments} />
           </div>
         </div>
@@ -1402,7 +1405,7 @@ function HomePageContent() {
         />
 
         {/* CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" data-tour="home-quick-cards">
           <Card
             title="Appointments"
             icon={Calendar}

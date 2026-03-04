@@ -1081,7 +1081,10 @@ useEffect(() => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6 items-stretch">
           
           {/* Left: Basic Info & KPIs */}
-          <div className="lg:col-span-2 bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20 flex flex-col h-full relative overflow-hidden">
+          <div
+            className="lg:col-span-2 bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20 flex flex-col h-full relative overflow-hidden"
+            data-tour="profile-overview"
+          >
             
             {/* Background Decoration */}
             <div className="absolute top-0 right-0 w-40 h-40 sm:w-64 sm:h-64 bg-gradient-to-br from-amber-50 to-brown-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 opacity-80 pointer-events-none"></div>

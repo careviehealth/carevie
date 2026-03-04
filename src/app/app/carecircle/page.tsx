@@ -2024,6 +2024,7 @@ export default function CareCirclePage() {
                 type="button"
                 onClick={() => setIsInviteOpen(true)}
                 disabled={!isSelectedProfilePrimary}
+                data-tour="care-invite-member"
                 className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold shadow-md shadow-teal-900/20 transition ${
                   isSelectedProfilePrimary
                     ? 'bg-teal-600 text-white hover:bg-teal-700'
@@ -2636,6 +2637,7 @@ export default function CareCirclePage() {
                                 : handleViewMemberEmergencyCard(member)
                             }
                             disabled={!canView}
+                            data-tour="care-view-access"
                             className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold ${
                               canView
                                 ? 'border-teal-200 bg-white text-teal-700 hover:bg-teal-50'

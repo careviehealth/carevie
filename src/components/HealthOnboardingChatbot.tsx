@@ -653,7 +653,7 @@ export default function HealthOnboardingChatbot() {
             if (isNewProfileOnboarding) {
               router.push("/app/profilepage");
             } else {
-              router.push("/app/homepage");
+              router.push("/app/homepage?tour=autostart");
             }
           }
         })();

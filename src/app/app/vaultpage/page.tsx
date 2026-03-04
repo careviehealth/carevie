@@ -606,6 +606,7 @@ export default function VaultPage() {
                 background: 'linear-gradient(90deg, var(--theme-button-primary), var(--theme-button-secondary))',
               }}
               data-testid="upload-document-btn"
+              data-tour="vault-upload"
             >
               <Plus size={18} />
               Upload Document
@@ -813,7 +814,7 @@ export default function VaultPage() {
 
             <div className="flex flex-col md:flex-row gap-6">
               {/* CATEGORY SIDEBAR */}
-              <div className="w-full md:w-56 flex-shrink-0">
+              <div className="w-full md:w-56 flex-shrink-0" data-tour="vault-categories">
                 <div className="mb-2 flex items-center justify-between px-1 md:hidden">
                   <p className="text-xs font-medium text-slate-500">Swipe to see all categories</p>
                   <span className="text-xs text-teal-600">↔</span>

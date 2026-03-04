@@ -1,5 +1,6 @@
 import Navbar from "@/components/Navbar";
 import ChatWidget from "@/components/ChatWidget";
+import AppTourController from "@/components/AppTourController";
 import { AppProfileProvider } from "@/components/AppProfileProvider";
 import { Suspense } from "react";
 
@@ -11,6 +12,7 @@ export default function AppLayout({
   return (
     <AppProfileProvider>
       <div className="vytara-theme-scope min-h-screen flex flex-col md:flex-row">
+        <AppTourController />
         <Navbar />
         <main className="vytara-theme-content flex-1 min-w-0">
           {children}

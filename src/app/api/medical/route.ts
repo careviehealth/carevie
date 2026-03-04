@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth';
 import { createRateLimiter, getClientIP } from '@/lib/rateLimit';
 
-const medicalLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, maxRequests: 15 });
+const medicalLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, maxRequests: 5 });
 
 const FLASK_API_URL = process.env.NEXT_PUBLIC_CHATBOT_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8000');
 const DEFAULT_BACKEND_URLS = process.env.NODE_ENV === 'production' ? [] : ['http://127.0.0.1:8000', 'http://localhost:8000'];
