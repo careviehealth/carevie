@@ -29,7 +29,6 @@
     "ogl": "^1.0.11",
     "react": "19.2.1",
     "react-dom": "19.2.1",
-    "react-joyride": "^2.9.3",
     "react-native": "0.81.5",
     "supabase": "^2.76.11",
     "tailwind-merge": "^3.4.0",
