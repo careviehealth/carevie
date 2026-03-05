@@ -907,7 +907,7 @@ useEffect(() => {
             className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100"
           >
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+              <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-teal-600">
                 <Pill className="w-4 h-4" />
               </div>
               <div>
@@ -1070,7 +1070,7 @@ useEffect(() => {
     : 0;
 
   return (
-    <div className="min-h-screen pb-10 font-sans relative bg-[#F5F5DC]">
+    <div className="min-h-screen pb-10 font-sans relative bg-gradient-to-br from-[var(--theme-background)] via-[var(--theme-surface)] to-[var(--theme-background)] text-[var(--theme-text)]">
 
       {/* Navbar */}
       
@@ -1082,25 +1082,25 @@ useEffect(() => {
           
           {/* Left: Basic Info & KPIs */}
           <div
-            className="lg:col-span-2 bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20 flex flex-col h-full relative overflow-hidden"
+            className="lg:col-span-2 bg-white rounded-3xl p-6 shadow-xl shadow-slate-900/10 border border-slate-200/80 flex flex-col h-full relative overflow-hidden"
             data-tour="profile-overview"
           >
             
             {/* Background Decoration */}
-            <div className="absolute top-0 right-0 w-40 h-40 sm:w-64 sm:h-64 bg-gradient-to-br from-amber-50 to-brown-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 opacity-80 pointer-events-none"></div>
+            <div className="absolute top-0 right-0 w-40 h-40 sm:w-64 sm:h-64 bg-gradient-to-br from-[var(--theme-accent)] to-[var(--theme-surface)] rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 opacity-80 pointer-events-none"></div>
 
             {/* Edit and Export Buttons */}
             <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
               <button
                 onClick={exportToPDF}
-                className="px-4 py-2 bg-[#8B4513] text-white text-xs font-semibold uppercase tracking-wide rounded-full shadow-sm transition hover:bg-[#A0522D] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8B4513]/40"
+                className="px-4 py-2 bg-[var(--theme-button-primary)] text-white text-xs font-semibold uppercase tracking-wide rounded-full shadow-sm transition hover:bg-[var(--theme-button-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-button-primary)]"
                 title="Export as PDF"
               >
                 Export as PDF
               </button>
               <button
                 onClick={openPersonalInfoModal}
-                className="p-2 bg-white/90 backdrop-blur text-gray-500 hover:text-[#FF8000] hover:bg-orange-50 rounded-full border border-gray-200 shadow-sm transition"
+                className="p-2 bg-white/90 backdrop-blur text-gray-500 hover:text-[var(--theme-button-primary)] hover:bg-[var(--theme-surface)] rounded-full border border-gray-200 shadow-sm transition"
               >
                 <Edit2 className="w-4 h-4" />
               </button>
@@ -1110,8 +1110,8 @@ useEffect(() => {
             <div className="flex flex-col md:flex-row items-start gap-6 mb-8 mt-2 relative z-0">
               {/* Avatar */}
               <div className="flex flex-col items-center gap-3">
-                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center border-[4px] border-white shadow-lg shrink-0">
-                  <User className="w-8 h-8 sm:w-10 sm:h-10 text-amber-700/80" />
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-teal-100 to-cyan-100 flex items-center justify-center border-[4px] border-white shadow-lg shrink-0">
+                  <User className="w-8 h-8 sm:w-10 sm:h-10 text-teal-700/80" />
                 </div>
               </div>
 
@@ -1128,20 +1128,20 @@ useEffect(() => {
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1 gap-x-4">
-                  <div className="flex items-center gap-2 text-sm text-gray-600 group hover:text-amber-600 transition">
-                    <div className="w-6 h-6 rounded-full bg-gray-100 group-hover:bg-amber-50 flex items-center justify-center">
+                  <div className="flex items-center gap-2 text-sm text-gray-600 group hover:text-teal-600 transition">
+                    <div className="w-6 h-6 rounded-full bg-gray-100 group-hover:bg-teal-50 flex items-center justify-center">
                       <Phone className="w-3 h-3" />
                     </div>
                     <span>{phoneNumber}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600 group hover:text-amber-600 transition">
-                    <div className="w-6 h-6 rounded-full bg-gray-100 group-hover:bg-amber-50 flex items-center justify-center">
+                  <div className="flex items-center gap-2 text-sm text-gray-600 group hover:text-teal-600 transition">
+                    <div className="w-6 h-6 rounded-full bg-gray-100 group-hover:bg-teal-50 flex items-center justify-center">
                       <Calendar className="w-3 h-3" />
                     </div>
                     <span>{dob}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600 group hover:text-amber-600 transition">
-                    <div className="w-6 h-6 rounded-full bg-gray-100 group-hover:bg-amber-50 flex items-center justify-center">
+                  <div className="flex items-center gap-2 text-sm text-gray-600 group hover:text-teal-600 transition">
+                    <div className="w-6 h-6 rounded-full bg-gray-100 group-hover:bg-teal-50 flex items-center justify-center">
                       <Locate className="w-3 h-3" />
                     </div>
                     <span className='break-words whitespace-normal'>{address}</span>
@@ -1182,12 +1182,12 @@ useEffect(() => {
           </div>
 
           {/* Right: Family Medical History */}
-          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20 flex flex-col h-full">
+          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-slate-900/10 border border-slate-200/80 flex flex-col h-full">
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
               <h3 className="font-bold text-gray-800">Family Medical History</h3>
               <button
                 onClick={() => setIsFamilyHistoryModalOpen(true)}
-                className="p-2 bg-white/90 backdrop-blur text-gray-500 hover:text-[#FF8000] hover:bg-orange-50 rounded-full border border-gray-200 shadow-sm transition"
+                className="p-2 bg-white/90 backdrop-blur text-gray-500 hover:text-[var(--theme-button-primary)] hover:bg-[var(--theme-surface)] rounded-full border border-gray-200 shadow-sm transition"
               >
                 <Edit2 className="w-4 h-4" />
               </button>
@@ -1219,12 +1219,12 @@ useEffect(() => {
         {/* Medical Information Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 items-start">
           {/* Current Medical Status */}
-          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20 self-start">
+          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-slate-900/10 border border-slate-200/80 self-start">
             <div className="flex items-center gap-2 mb-5 pb-4 border-b border-gray-100">
               <h3 className="font-bold text-gray-800">Current Medical Status</h3>
               <button
                 onClick={() => setIsCurrentMedicalModalOpen(true)}
-                className="p-2 bg-white/90 backdrop-blur text-gray-500 hover:text-[#FF8000] hover:bg-orange-50 rounded-full border border-gray-200 shadow-sm transition"
+                className="p-2 bg-white/90 backdrop-blur text-gray-500 hover:text-[var(--theme-button-primary)] hover:bg-[var(--theme-surface)] rounded-full border border-gray-200 shadow-sm transition"
               >
                 <Edit2 className="w-4 h-4" />
               </button>
@@ -1238,8 +1238,8 @@ useEffect(() => {
                   onClick={() => setActiveCurrentSection(tab.key)}
                   className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition ${
                     activeCurrentSection === tab.key
-                      ? "bg-[#8B4513] text-white border-[#8B4513]"
-                      : "bg-white text-gray-600 border-gray-200 hover:border-[#8B4513]/40 hover:text-[#8B4513]"
+                      ? "bg-[var(--theme-button-primary)] text-white border-[var(--theme-button-primary)]"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-[var(--theme-button-primary)] hover:text-[var(--theme-button-primary)]"
                   }`}
                 >
                   {tab.label} ({tab.count})
@@ -1264,7 +1264,7 @@ useEffect(() => {
                   })
                 }
                 disabled={currentSectionTotal === 0}
-                className="text-xs font-semibold text-[#8B4513] hover:text-[#A0522D] transition disabled:text-gray-300 disabled:cursor-not-allowed"
+                className="text-xs font-semibold text-[var(--theme-button-primary)] hover:text-[var(--theme-button-secondary)] transition disabled:text-gray-300 disabled:cursor-not-allowed"
               >
                 View full details
               </button>
@@ -1272,12 +1272,12 @@ useEffect(() => {
           </div>
 
           {/* Past Medical History */}
-          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-amber-900/20 border border-white/20 self-start">
+          <div className="bg-white rounded-3xl p-6 shadow-xl shadow-slate-900/10 border border-slate-200/80 self-start">
             <div className="flex items-center gap-2 mb-5 pb-4 border-b border-gray-100">
               <h3 className="font-bold text-gray-800">Past Medical History</h3>
               <button
                 onClick={() => setIsPastMedicalModalOpen(true)}
-                className="p-2 bg-white/90 backdrop-blur text-gray-500 hover:text-[#FF8000] hover:bg-orange-50 rounded-full border border-gray-200 shadow-sm transition"
+                className="p-2 bg-white/90 backdrop-blur text-gray-500 hover:text-[var(--theme-button-primary)] hover:bg-[var(--theme-surface)] rounded-full border border-gray-200 shadow-sm transition"
               >
                 <Edit2 className="w-4 h-4" />
               </button>
@@ -1291,8 +1291,8 @@ useEffect(() => {
                   onClick={() => setActivePastSection(tab.key)}
                   className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition ${
                     activePastSection === tab.key
-                      ? "bg-[#8B4513] text-white border-[#8B4513]"
-                      : "bg-white text-gray-600 border-gray-200 hover:border-[#8B4513]/40 hover:text-[#8B4513]"
+                      ? "bg-[var(--theme-button-primary)] text-white border-[var(--theme-button-primary)]"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-[var(--theme-button-primary)] hover:text-[var(--theme-button-primary)]"
                   }`}
                 >
                   {tab.label} ({tab.count})
@@ -1317,7 +1317,7 @@ useEffect(() => {
                   })
                 }
                 disabled={pastSectionTotal === 0}
-                className="text-xs font-semibold text-[#8B4513] hover:text-[#A0522D] transition disabled:text-gray-300 disabled:cursor-not-allowed"
+                className="text-xs font-semibold text-[var(--theme-button-primary)] hover:text-[var(--theme-button-secondary)] transition disabled:text-gray-300 disabled:cursor-not-allowed"
               >
                 View full details
               </button>
@@ -1325,16 +1325,16 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* Medical Details Drawer */}
+        {/* Medical Details Modal */}
         {medicalDrawerState && (
-          <div className="fixed inset-0 z-[60]">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6">
             <button
               type="button"
               onClick={() => setMedicalDrawerState(null)}
               className="absolute inset-0 bg-black/40"
-              aria-label="Close medical details drawer"
+              aria-label="Close medical details modal"
             />
-            <aside className="absolute inset-y-0 right-0 w-full max-w-2xl bg-white border-l border-gray-200 shadow-2xl flex flex-col">
+            <aside className="relative z-10 w-full max-w-2xl max-h-[85vh] bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
               <div className="p-5 border-b border-gray-200 flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-wider font-semibold text-gray-500">
@@ -1438,35 +1438,35 @@ useEffect(() => {
                   }
                 }}>
                   <div className="space-y-4">
-                    <h3 className="text-[#FF8000] mb-4">Basic Personal Information</h3>
+                    <h3 className="text-[var(--theme-button-primary)] mb-4">Basic Personal Information</h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="md:col-span-2">
-                        <label className="block text-[#309898] mb-2">Full Name *</label>
+                        <label className="block text-[var(--theme-button-primary)] mb-2">Full Name *</label>
                         <input
                           value={personalDraft.userName}
                           onChange={(e) => updatePersonalDraft({ userName: e.target.value })}
-                          className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                          className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                           placeholder="Full Name"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[#309898] mb-2">Date of Birth *</label>
+                        <label className="block text-[var(--theme-button-primary)] mb-2">Date of Birth *</label>
                         <input
                           type="date"
                           value={personalDraft.dob}
                           onChange={(e) => updatePersonalDraft({ dob: e.target.value })}
-                          className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                          className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[#309898] mb-2">Gender *</label>
+                        <label className="block text-[var(--theme-button-primary)] mb-2">Gender *</label>
                         <select
                           value={personalDraft.gender}
                           onChange={(e) => updatePersonalDraft({ gender: e.target.value })}
-                          className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                          className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                         >
                           <option>Select Gender</option>
                           <option>Male</option>
@@ -1476,11 +1476,11 @@ useEffect(() => {
                       </div>
 
                       <div>
-                        <label className="block text-[#309898] mb-2">Blood Group *</label>  
+                        <label className="block text-[var(--theme-button-primary)] mb-2">Blood Group *</label>  
                         <select
                           value={personalDraft.bloodGroup}
                           onChange={(e) => updatePersonalDraft({ bloodGroup: e.target.value })}
-                          className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                          className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                         >
                           <option>Select Blood Group</option>
                           <option>A+</option>
@@ -1495,48 +1495,48 @@ useEffect(() => {
                       </div>
                       
                       <div className="md:col-span-2">
-                        <label className="block text-[#309898] mb-2">Address *</label>
+                        <label className="block text-[var(--theme-button-primary)] mb-2">Address *</label>
                         <textarea
                           value={personalDraft.address}
                           onChange={(e) => updatePersonalDraft({ address: e.target.value })}
-                          className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                          className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                           placeholder="Address"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[#309898] mb-2">Contact Number *</label>
+                        <label className="block text-[var(--theme-button-primary)] mb-2">Contact Number *</label>
                         <input
                           type="tel"
                           value={personalDraft.phoneNumber}
                           onChange={(e) => updatePersonalDraft({ phoneNumber: e.target.value })}
-                          className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                          className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                           placeholder="eg: 1234567890"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[#309898] mb-2">Height (cm)</label>
+                        <label className="block text-[var(--theme-button-primary)] mb-2">Height (cm)</label>
                         <input
                           type="number"
                           min="0"
                           step="0.1"
                           value={personalDraft.heightCm}
                           onChange={(e) => updatePersonalDraft({ heightCm: e.target.value })}
-                          className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                          className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                           placeholder="eg: 170"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[#309898] mb-2">Weight (kg)</label>
+                        <label className="block text-[var(--theme-button-primary)] mb-2">Weight (kg)</label>
                         <input
                           type="number"
                           min="0"
                           step="0.1"
                           value={personalDraft.weightKg}
                           onChange={(e) => updatePersonalDraft({ weightKg: e.target.value })}
-                          className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                          className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                           placeholder="eg: 65"
                         />
                       </div>
@@ -1553,7 +1553,7 @@ useEffect(() => {
                     </button>
                     <button
                       type="submit"
-                      className="px-6 py-2 bg-[#8B4513] text-white rounded-lg hover:bg-[#A0522D] transition"
+                      className="px-6 py-2 bg-[var(--theme-button-primary)] text-white rounded-lg hover:bg-[var(--theme-button-secondary)] transition"
                     >
                       Save Changes
                     </button>
@@ -1685,7 +1685,7 @@ useEffect(() => {
                   <div className="space-y-6">
                     {/* CONDITIONS */}
                     <div className="space-y-4">
-                      <h3 className="text-[#FF8000] mb-4">Current Diagnosed Conditions</h3>
+                      <h3 className="text-[var(--theme-button-primary)] mb-4">Current Diagnosed Conditions</h3>
                       {conditions.map((cond, index) => (
                         <div key={index} className="flex gap-2 items-center">
                           <input
@@ -1696,7 +1696,7 @@ useEffect(() => {
                               setConditions(updated);
                             }}
                             placeholder="e.g., Diabetes, Asthma"
-                            className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                            className="flex-1 px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                           />
                           <button
                             type="button"
@@ -1712,7 +1712,7 @@ useEffect(() => {
                       <button
                         onClick={() => setConditions([...conditions, ""])}
                         type="button"
-                        className="flex items-center gap-2 text-[#FF8000] cursor-pointer"
+                        className="flex items-center gap-2 text-[var(--theme-button-primary)] cursor-pointer"
                       >
                         <Plus className="w-5 h-5" /> Add Condition
                       </button>
@@ -1720,11 +1720,11 @@ useEffect(() => {
 
                     {/* MEDICATIONS */}
                     <div className="space-y-4">
-                      <h3 className="text-[#FF8000] mb-4">Current Medications</h3>
+                      <h3 className="text-[var(--theme-button-primary)] mb-4">Current Medications</h3>
                       {currentMedications.map((med, index) => (
                         <div
                           key={index}
-                          className="p-4 border-2 border-[#309898]/30 rounded-lg bg-gray-50 space-y-3 relative"
+                          className="p-4 border-2 border-[var(--theme-border)] rounded-lg bg-gray-50 space-y-3 relative"
                         >
                           <button
                             type="button"
@@ -1737,7 +1737,7 @@ useEffect(() => {
                           </button>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                              <label className="block text-[#309898] mb-2">Name</label>
+                              <label className="block text-[var(--theme-button-primary)] mb-2">Name</label>
                               <input
                                 value={med.name || ""}
                                 onChange={(e) => {
@@ -1746,11 +1746,11 @@ useEffect(() => {
                                   setCurrentMedications(updated);
                                 }}
                                 placeholder="e.g., Paracetamol"
-                                className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800 bg-white"
+                                className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800 bg-white"
                               />
                             </div>
                             <div>
-                              <label className="block text-[#309898] mb-2">Dosage</label>
+                              <label className="block text-[var(--theme-button-primary)] mb-2">Dosage</label>
                               <input
                                 value={med.dosage || ""}
                                 onChange={(e) => {
@@ -1759,11 +1759,11 @@ useEffect(() => {
                                   setCurrentMedications(updated);
                                 }}
                                 placeholder="e.g., 500 mg"
-                                className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800 bg-white"
+                                className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800 bg-white"
                               />
                             </div>
                             <div>
-                              <label className="block text-[#309898] mb-2">Purpose (optional)</label>
+                              <label className="block text-[var(--theme-button-primary)] mb-2">Purpose (optional)</label>
                               <input
                                 value={med.purpose || ""}
                                 onChange={(e) => {
@@ -1772,11 +1772,11 @@ useEffect(() => {
                                   setCurrentMedications(updated);
                                 }}
                                 placeholder="e.g., Pain relief"
-                                className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800 bg-white"
+                                className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800 bg-white"
                               />
                             </div>
                             <div>
-                              <label className="block text-[#309898] mb-2">Frequency</label>
+                              <label className="block text-[var(--theme-button-primary)] mb-2">Frequency</label>
                               <select
                                 value={med.frequency || ""}
                                 onChange={(e) => {
@@ -1792,7 +1792,7 @@ useEffect(() => {
                                   };
                                   setCurrentMedications(updated);
                                 }}
-                                className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800 bg-white"
+                                className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800 bg-white"
                               >
                                 <option value="">Select frequency</option>
                                 {medicationFrequencyOptions.map((option) => (
@@ -1809,7 +1809,7 @@ useEffect(() => {
                               </select>
                             </div>
                             <div>
-                              <label className="block text-[#309898] mb-2">Times per Day</label>
+                              <label className="block text-[var(--theme-button-primary)] mb-2">Times per Day</label>
                               <input
                                 type="number"
                                 min="0"
@@ -1831,12 +1831,12 @@ useEffect(() => {
                                 disabled={medicationFrequencyOptions.some(
                                   (option) => option.value === (med.frequency || "")
                                 )}
-                                className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800 bg-white disabled:bg-gray-100"
+                                className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800 bg-white disabled:bg-gray-100"
                                 placeholder="1"
                               />
                             </div>
                             <div>
-                              <label className="block text-[#309898] mb-2">Start Date</label>
+                              <label className="block text-[var(--theme-button-primary)] mb-2">Start Date</label>
                               <input
                                 type="date"
                                 value={med.startDate || ""}
@@ -1845,11 +1845,11 @@ useEffect(() => {
                                   updated[index] = { ...updated[index], startDate: e.target.value };
                                   setCurrentMedications(updated);
                                 }}
-                                className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800 bg-white"
+                                className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800 bg-white"
                               />
                             </div>
                             <div className="md:col-span-2">
-                              <label className="block text-[#309898] mb-2">End Date (optional)</label>
+                              <label className="block text-[var(--theme-button-primary)] mb-2">End Date (optional)</label>
                               <input
                                 type="date"
                                 value={med.endDate || ""}
@@ -1861,7 +1861,7 @@ useEffect(() => {
                                   };
                                   setCurrentMedications(updated);
                                 }}
-                                className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800 bg-white"
+                                className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800 bg-white"
                               />
                             </div>
                           </div>
@@ -1885,7 +1885,7 @@ useEffect(() => {
                             },
                           ]);
                         }}
-                        className="flex items-center gap-2 text-[#FF8000] cursor-pointer"
+                        className="flex items-center gap-2 text-[var(--theme-button-primary)] cursor-pointer"
                       >
                         <Plus className="w-5 h-5" /> Add Medication
                       </button>
@@ -1893,7 +1893,7 @@ useEffect(() => {
 
                     {/* ALLERGIES */}
                     <div className="space-y-4">
-                      <h3 className="text-[#FF8000] mb-4">Allergies</h3>
+                      <h3 className="text-[var(--theme-button-primary)] mb-4">Allergies</h3>
                       {allergy.map((allergyItem, index) => (
                         <div key={index} className="flex gap-2 items-center">
                           <input
@@ -1904,7 +1904,7 @@ useEffect(() => {
                               setAllergy(updated);
                             }}
                             placeholder="e.g., Peanuts, Penicillin"
-                            className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                            className="flex-1 px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                           />
                           <button
                             type="button"
@@ -1920,7 +1920,7 @@ useEffect(() => {
                       <button
                         type="button"
                         onClick={() => setAllergy([...allergy, ""])}
-                        className="flex items-center gap-2 text-[#FF8000] cursor-pointer"
+                        className="flex items-center gap-2 text-[var(--theme-button-primary)] cursor-pointer"
                       >
                         <Plus className="w-5 h-5" /> Add Allergy
                       </button>
@@ -1928,7 +1928,7 @@ useEffect(() => {
 
                     {/* TREATMENTS */}
                     <div className="space-y-4">
-                      <h3 className="text-[#FF8000] mb-4">Ongoing Treatments</h3>
+                      <h3 className="text-[var(--theme-button-primary)] mb-4">Ongoing Treatments</h3>
                       {treatment.map((treat, index) => (
                         <div key={index} className="flex gap-2 items-center">
                           <input
@@ -1939,7 +1939,7 @@ useEffect(() => {
                               setTreatment(updated);
                             }}
                             placeholder="e.g., Physiotherapy, Dialysis"
-                            className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                            className="flex-1 px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                           />
                           <button
                             type="button"
@@ -1955,7 +1955,7 @@ useEffect(() => {
                       <button
                         type="button"
                         onClick={() => setTreatment([...treatment, ""])}
-                        className="flex items-center gap-2 text-[#FF8000] cursor-pointer"
+                        className="flex items-center gap-2 text-[var(--theme-button-primary)] cursor-pointer"
                       >
                         <Plus className="w-5 h-5" /> Add Treatment
                       </button>
@@ -1972,7 +1972,7 @@ useEffect(() => {
                     </button>
                     <button
                       type="submit"
-                      className="px-6 py-2 bg-[#8B4513] text-white rounded-lg hover:bg-[#A0522D] transition"
+                      className="px-6 py-2 bg-[var(--theme-button-primary)] text-white rounded-lg hover:bg-[var(--theme-button-secondary)] transition"
                     >
                       Save Changes
                     </button>
@@ -2030,7 +2030,7 @@ useEffect(() => {
                   <div className="space-y-6">
                     {/* PREVIOUSLY DIAGNOSED DISEASES */}
                     <div className="space-y-4">
-                      <h3 className="text-[#FF8000] mb-4">Previously Diagnosed Diseases</h3>
+                      <h3 className="text-[var(--theme-button-primary)] mb-4">Previously Diagnosed Diseases</h3>
                       {previousDiagnosedCondition.map((diag, index) => (
                         <div className="flex gap-2 items-center" key={index}>
                           <input
@@ -2041,14 +2041,14 @@ useEffect(() => {
                               setPreviousDiagnosedCondition(updated);
                             }}
                             placeholder="e.g., Thyroid, Jaundice"
-                            className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                            className="flex-1 px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                           />
                           <button
                             type="button"
                             onClick={() =>
                               setPreviousDiagnosedCondition(previousDiagnosedCondition.filter((_, i) => i !== index))
                             }
-                            className="text-[#FF8000]"
+                            className="text-[var(--theme-button-primary)]"
                           >
                             <X className="w-5 h-5" />
                           </button>
@@ -2057,7 +2057,7 @@ useEffect(() => {
                       <button
                         type="button"
                         onClick={() => setPreviousDiagnosedCondition([...previousDiagnosedCondition, ""])}
-                        className="flex items-center gap-2 text-[#FF8000] cursor-pointer"
+                        className="flex items-center gap-2 text-[var(--theme-button-primary)] cursor-pointer"
                       >
                         <Plus className="w-5 h-5" /> Add Diagnosed Condition
                       </button>
@@ -2065,7 +2065,7 @@ useEffect(() => {
 
                     {/* PAST SURGERIES */}
                     <div className="space-y-4">
-                      <h3 className="text-[#FF8000] mb-4">Past Surgeries</h3>
+                      <h3 className="text-[var(--theme-button-primary)] mb-4">Past Surgeries</h3>
                       {pastSurgeries.map((surg, index) => (
                         <div key={index} className="p-4 border rounded-lg bg-gray-50 space-y-3 relative text-gray-800">
                           <button
@@ -2083,7 +2083,7 @@ useEffect(() => {
                               setPastSurgeries(updated);
                             }}
                             placeholder="Surgery Name"
-                            className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                            className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                           />
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <select
@@ -2093,7 +2093,7 @@ useEffect(() => {
                                 updated[index].month = e.target.value ? Number(e.target.value) : null;
                                 setPastSurgeries(updated);
                               }}
-                              className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                              className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                             >
                               <option value="">Select Month</option>
                               {monthOptions.map((opt) => (
@@ -2109,7 +2109,7 @@ useEffect(() => {
                                 updated[index].year = e.target.value ? Number(e.target.value) : null;
                                 setPastSurgeries(updated);
                               }}
-                              className="w-full px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                              className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                             >
                               <option value="">Select Year</option>
                               {yearOptions.map((year) => (
@@ -2124,7 +2124,7 @@ useEffect(() => {
                       <button
                         type="button"
                         onClick={() => setPastSurgeries([...pastSurgeries, { name: "", month: null, year: null }])}
-                        className="flex items-center gap-2 text-[#FF8000] cursor-pointer"
+                        className="flex items-center gap-2 text-[var(--theme-button-primary)] cursor-pointer"
                       >
                         <Plus className="w-5 h-5" /> Add Surgery
                       </button>
@@ -2132,7 +2132,7 @@ useEffect(() => {
 
                     {/* CHILDHOOD ILLNESSES */}
                     <div className="space-y-4">
-                      <h3 className="text-[#FF8000] mb-4">Childhood Illnesses</h3>
+                      <h3 className="text-[var(--theme-button-primary)] mb-4">Childhood Illnesses</h3>
                       {childhoodIllness.map((ill, index) => (
                         <div key={index} className="flex gap-2 items-center">
                           <input
@@ -2143,14 +2143,14 @@ useEffect(() => {
                               setChildhoodIllness(updated);
                             }}
                             placeholder="e.g., Chickenpox"
-                            className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                            className="flex-1 px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                           />
                           <button
                             type="button"
                             onClick={() =>
                               setChildhoodIllness(childhoodIllness.filter((_, i) => i !== index))
                             }
-                            className="text-[#FF8000]"
+                            className="text-[var(--theme-button-primary)]"
                           >
                             <X className="w-5 h-5" />
                           </button>
@@ -2159,7 +2159,7 @@ useEffect(() => {
                       <button
                         type="button"
                         onClick={() => setChildhoodIllness([...childhoodIllness, ""])}
-                        className="flex items-center gap-2 text-[#FF8000] cursor-pointer"
+                        className="flex items-center gap-2 text-[var(--theme-button-primary)] cursor-pointer"
                       >
                         <Plus className="w-5 h-5" /> Add Childhood Illness
                       </button>
@@ -2167,7 +2167,7 @@ useEffect(() => {
 
                     {/* LONG-TERM TREATMENTS */}
                     <div className="space-y-4">
-                      <h3 className="text-[#FF8000] mb-4">Long-Term Treatments (Previously Taken)</h3>
+                      <h3 className="text-[var(--theme-button-primary)] mb-4">Long-Term Treatments (Previously Taken)</h3>
                       {longTermTreatments.map((treat, index) => (
                         <div key={index} className="flex gap-2 items-center">
                           <input
@@ -2178,14 +2178,14 @@ useEffect(() => {
                               setLongTermTreatments(updated);
                             }}
                             placeholder="e.g., Physical Therapy"
-                            className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                            className="flex-1 px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                           />
                           <button
                             type="button"
                             onClick={() =>
                               setLongTermTreatments(longTermTreatments.filter((_, i) => i !== index))
                             }
-                            className="text-[#FF8000]"
+                            className="text-[var(--theme-button-primary)]"
                           >
                             <X className="w-5 h-5" />
                           </button>
@@ -2194,7 +2194,7 @@ useEffect(() => {
                       <button
                         type="button"
                         onClick={() => setLongTermTreatments([...longTermTreatments, ""])}
-                        className="flex items-center gap-2 text-[#FF8000] cursor-pointer"
+                        className="flex items-center gap-2 text-[var(--theme-button-primary)] cursor-pointer"
                       >
                         <Plus className="w-5 h-5" /> Add Treatment
                       </button>
@@ -2211,7 +2211,7 @@ useEffect(() => {
                     </button>
                     <button
                       type="submit"
-                      className="px-6 py-2 bg-[#FF8000] text-white rounded-lg hover:bg-[#309898] transition"
+                      className="px-6 py-2 bg-[var(--theme-button-primary)] text-white rounded-lg hover:bg-[var(--theme-button-secondary)] transition"
                     >
                       Save Changes
                     </button>
@@ -2262,7 +2262,7 @@ useEffect(() => {
                   }
                 }}>
                   <div className="space-y-6">
-                    <h3 className="text-[#FF8000] mb-2">Family Medical History</h3>
+                    <h3 className="text-[var(--theme-button-primary)] mb-2">Family Medical History</h3>
                     {familyMedicalHistory.map((row, index) => (
                       <div key={index} className="flex gap-4 items-center relative">
                         <input
@@ -2273,7 +2273,7 @@ useEffect(() => {
                             setFamilyMedicalHistory(updated);
                           }}
                           placeholder="e.g., Diabetes"
-                          className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                          className="flex-1 px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                         />
                         <select
                           value={row.relation}
@@ -2282,7 +2282,7 @@ useEffect(() => {
                             updated[index].relation = e.target.value;
                             setFamilyMedicalHistory(updated);
                           }}
-                          className="flex-1 px-4 py-2 rounded-lg border-2 border-[#309898]/30 text-gray-800"
+                          className="flex-1 px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
                         >
                           <option value="">Select Relation</option>
                           <option>Father</option>
@@ -2312,7 +2312,7 @@ useEffect(() => {
                           { disease: "", relation: "" },
                         ])
                       }
-                      className="flex items-center gap-2 text-[#FF8000] cursor-pointer"
+                      className="flex items-center gap-2 text-[var(--theme-button-primary)] cursor-pointer"
                     >
                       <Plus className="w-5 h-5" /> Add More
                     </button>
@@ -2328,7 +2328,7 @@ useEffect(() => {
                     </button>
                     <button
                       type="submit"
-                      className="px-6 py-2 bg-[#8B4513] text-white rounded-lg hover:bg-[#A0522D] transition"
+                      className="px-6 py-2 bg-[var(--theme-button-primary)] text-white rounded-lg hover:bg-[var(--theme-button-secondary)] transition"
                     >
                       Save Changes
                     </button>
