@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { usePathname } from 'next/navigation';
 import {
   applyTheme,
+  getAppliedTheme,
   getCurrentTheme,
   isThemeStorageKey,
   seedThemeForUserFromLegacy,
@@ -42,23 +43,33 @@ export default function ThemeSelector({ variant = 'desktop', userId = '' }: Them
         onStoreChange();
       }
     };
+    const observer = new MutationObserver(() => onStoreChange());
 
     window.addEventListener('themeChange', onThemeChange as EventListener);
     window.addEventListener('storage', onStorage);
     window.addEventListener('focus', onThemeChange);
     window.addEventListener('pageshow', onThemeChange);
     document.addEventListener('visibilitychange', onVisibilityChange);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
     return () => {
       window.removeEventListener('themeChange', onThemeChange as EventListener);
       window.removeEventListener('storage', onStorage);
       window.removeEventListener('focus', onThemeChange);
       window.removeEventListener('pageshow', onThemeChange);
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      observer.disconnect();
     };
   }, []);
 
   const getThemeSnapshot = useCallback(() => {
     try {
+      const appliedTheme = getAppliedTheme();
+      if (appliedTheme !== 'default') {
+        return appliedTheme;
+      }
       return getCurrentTheme(trimmedUserId || undefined);
     } catch {
       return 'default';

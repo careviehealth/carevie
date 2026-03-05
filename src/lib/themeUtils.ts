@@ -19,6 +19,20 @@ const normalizeTheme = (theme: string | null | undefined) =>
 
 const getUserThemeStorageKey = (userId: string) => `${USER_THEME_STORAGE_PREFIX}${userId}`;
 
+export const getAppliedTheme = (): string => {
+  if (typeof document === 'undefined') return 'default';
+
+  const root = document.documentElement;
+  for (const theme of themeValues) {
+    if (theme === 'default') continue;
+    if (root.classList.contains(`theme-${theme}`)) {
+      return theme;
+    }
+  }
+
+  return 'default';
+};
+
 const hasAnyUserScopedTheme = () => {
   if (typeof window === 'undefined') return false;
 
