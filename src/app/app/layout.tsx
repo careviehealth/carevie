@@ -2,6 +2,7 @@ import Navbar from "@/components/Navbar";
 import ChatWidget from "@/components/ChatWidget";
 import AppTourController from "@/components/AppTourController";
 import { AppProfileProvider } from "@/components/AppProfileProvider";
+import ThemeBootstrap from "@/components/ThemeBootstrap";
 import { Suspense } from "react";
 
 export default function AppLayout({
@@ -12,6 +13,7 @@ export default function AppLayout({
   return (
     <AppProfileProvider>
       <div className="vytara-theme-scope min-h-screen flex flex-col md:flex-row">
+        <ThemeBootstrap />
         <Suspense fallback={null}>
           <AppTourController />
         </Suspense>

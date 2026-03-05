@@ -721,3 +721,107 @@ html[class*="theme-"] .vytara-theme-content [class*="to-[#309898]" i] {
     @apply bg-background text-foreground;
   }
 }
+
+/* Driver.js app tour styling */
+body .driver-overlay {
+  z-index: 12000 !important;
+}
+
+.vytara-driver-popover {
+  width: min(24rem, calc(100vw - 1.5rem)) !important;
+  max-width: min(24rem, calc(100vw - 1.5rem)) !important;
+  border-radius: 0.75rem !important;
+  border: 1px solid rgb(226 232 240) !important;
+  box-shadow: 0 24px 40px rgba(15, 23, 42, 0.22) !important;
+  background: #ffffff !important;
+  padding: 1rem !important;
+  z-index: 12001 !important;
+}
+
+.vytara-driver-popover .driver-popover-title {
+  display: none !important;
+}
+
+.vytara-driver-popover .driver-popover-close-btn {
+  top: 0.5rem !important;
+  right: 0.5rem !important;
+  color: rgb(148 163 184) !important;
+}
+
+.vytara-driver-popover .driver-popover-close-btn:hover,
+.vytara-driver-popover .driver-popover-close-btn:focus {
+  color: rgb(71 85 105) !important;
+}
+
+.vytara-driver-popover .driver-popover-description {
+  margin-right: 1.5rem !important;
+  color: rgb(51 65 85) !important;
+  font-size: 0.875rem !important;
+  line-height: 1.5rem !important;
+}
+
+.vytara-driver-popover .driver-popover-footer {
+  margin-top: 0.75rem !important;
+  gap: 0.5rem !important;
+}
+
+.vytara-driver-popover .driver-popover-progress-text {
+  color: rgb(100 116 139) !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+}
+
+.vytara-driver-popover .driver-popover-navigation-btns {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.vytara-driver-popover .driver-popover-footer button {
+  border-radius: 0.375rem !important;
+  text-shadow: none !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  line-height: 1.25rem !important;
+  padding: 0.5rem 0.75rem !important;
+}
+
+.vytara-driver-popover .driver-popover-prev-btn {
+  border: 1px solid rgb(203 213 225) !important;
+  color: rgb(51 65 85) !important;
+  background: #ffffff !important;
+}
+
+.vytara-driver-popover .driver-popover-prev-btn:hover,
+.vytara-driver-popover .driver-popover-prev-btn:focus {
+  background: rgb(248 250 252) !important;
+}
+
+.vytara-driver-popover .driver-popover-next-btn {
+  border: 1px solid rgb(15 118 110) !important;
+  color: #ffffff !important;
+  background: rgb(15 118 110) !important;
+}
+
+.vytara-driver-popover .driver-popover-next-btn:hover,
+.vytara-driver-popover .driver-popover-next-btn:focus {
+  border-color: rgb(17 94 89) !important;
+  background: rgb(17 94 89) !important;
+}
+
+.vytara-driver-popover .vytara-driver-skip-btn {
+  border: none !important;
+  color: rgb(71 85 105) !important;
+  background: transparent !important;
+  padding: 0.5rem 0.25rem !important;
+}
+
+.vytara-driver-popover .vytara-driver-skip-btn:hover,
+.vytara-driver-popover .vytara-driver-skip-btn:focus {
+  color: rgb(30 41 59) !important;
+  background: rgb(248 250 252) !important;
+}
+
+.vytara-driver-popover .driver-popover-arrow {
+  border-color: #ffffff !important;
+}

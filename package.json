@@ -18,6 +18,7 @@
     "@supabase/supabase-js": "^2.87.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "driver.js": "^1.4.0",
     "expo": "^54.0.32",
     "form-data": "^4.0.5",
     "framer-motion": "^12.23.26",

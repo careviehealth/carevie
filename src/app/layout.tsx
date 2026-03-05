@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "driver.js/dist/driver.css";
 
 import ChatWidget from "@/components/ChatWidget";
 import ConveyThisProvider from "@/components/ConveyThisProvider";

@@ -1,29 +1,25 @@
 "use client";
 
+import { driver, type DriveStep, type Driver, type Side } from "driver.js";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/createClient";
 import { useAppProfile } from "@/components/AppProfileProvider";
 
 type TourStep = {
   route: string;
-  target: string;
+  selector: string;
   content: string;
-  placement: "top" | "bottom" | "left" | "right";
-  disableBeacon?: boolean;
-};
-
-type TooltipPosition = {
-  top: number;
-  left: number;
-  transformOrigin: string;
+  side: Exclude<Side, "over">;
+  viewport?: "all" | "desktop" | "mobile";
 };
 
 const TOUR_QUERY_KEY = "tour";
 const DESKTOP_MEDIA_QUERY = "(min-width: 768px)";
-const TOOLTIP_GAP = 12;
-const VIEWPORT_PADDING = 12;
+const ROUTE_RESUME_DELAY_MS = 120;
+const TARGET_INITIAL_DELAY_MS = 150;
+const TARGET_RETRY_MS = 120;
+const TARGET_MAX_ATTEMPTS = 10;
 
 const isMissingColumnError = (error: { code?: string; message?: string } | null) =>
   error?.code === "PGRST204" ||
@@ -32,157 +28,136 @@ const isMissingColumnError = (error: { code?: string; message?: string } | null)
 const isDesktopViewport = () =>
   typeof window !== "undefined" && window.matchMedia(DESKTOP_MEDIA_QUERY).matches;
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
-
-const getTooltipPosition = (
-  targetRect: DOMRect,
-  tooltipRect: DOMRect,
-  placement: TourStep["placement"]
-): TooltipPosition => {
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-
-  let top = targetRect.bottom + TOOLTIP_GAP;
-  let left = targetRect.left + targetRect.width / 2 - tooltipRect.width / 2;
-  let transformOrigin = "50% 0%";
-
-  if (placement === "top") {
-    top = targetRect.top - tooltipRect.height - TOOLTIP_GAP;
-    transformOrigin = "50% 100%";
-  } else if (placement === "left") {
-    top = targetRect.top + targetRect.height / 2 - tooltipRect.height / 2;
-    left = targetRect.left - tooltipRect.width - TOOLTIP_GAP;
-    transformOrigin = "100% 50%";
-  } else if (placement === "right") {
-    top = targetRect.top + targetRect.height / 2 - tooltipRect.height / 2;
-    left = targetRect.right + TOOLTIP_GAP;
-    transformOrigin = "0% 50%";
+const isElementVisible = (element: Element) => {
+  const style = window.getComputedStyle(element);
+  if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+    return false;
   }
 
-  const maxLeft = Math.max(VIEWPORT_PADDING, viewportWidth - tooltipRect.width - VIEWPORT_PADDING);
-  const maxTop = Math.max(VIEWPORT_PADDING, viewportHeight - tooltipRect.height - VIEWPORT_PADDING);
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+};
+
+const findVisibleTarget = (selector: string) => {
+  const candidates = Array.from(document.querySelectorAll(selector));
+  const visibleTarget = candidates.find(isElementVisible) as HTMLElement | undefined;
 
   return {
-    top: clamp(top, VIEWPORT_PADDING, maxTop),
-    left: clamp(left, VIEWPORT_PADDING, maxLeft),
-    transformOrigin,
+    target: visibleTarget ?? null,
+    hasCandidates: candidates.length > 0,
   };
 };
 
 const TOUR_STEPS: TourStep[] = [
   {
     route: "/app/homepage",
-    target: '[data-tour="nav-home"]',
+    selector: '[data-tour="nav-home"]',
     content: "Use Home anytime to come back to your main dashboard.",
-    placement: "right",
-    disableBeacon: true,
+    side: "right",
   },
   {
     route: "/app/homepage",
-    target: '[data-tour="nav-switch-profile"]',
+    selector: '[data-tour="nav-switch-profile"]',
     content: "Switch Profile lets you quickly move between family members.",
-    placement: "right",
-    disableBeacon: true,
+    side: "right",
   },
   {
     route: "/app/homepage",
-    target: '[data-tour="home-get-summary"]',
+    selector: '[data-tour="home-get-summary"]',
     content: "Get Summary generates a quick overview from your uploaded reports.",
-    placement: "bottom",
-    disableBeacon: true,
+    side: "bottom",
   },
   {
     route: "/app/homepage",
-    target: '[data-tour="home-sos"]',
+    selector: '[data-tour="home-sos"]',
     content: "SOS instantly alerts your emergency contacts.",
-    placement: "bottom",
-    disableBeacon: true,
+    side: "bottom",
   },
   {
     route: "/app/homepage",
-    target: '[data-tour="home-notifications-desktop"]',
+    selector: '[data-tour="home-notifications-desktop"]',
     content: "This notifications and activity panel shows updates and recent logs.",
-    placement: "left",
-    disableBeacon: true,
+    side: "left",
+    viewport: "desktop",
   },
   {
     route: "/app/homepage",
-    target: '[data-tour="home-notifications-mobile"]',
+    selector: '[data-tour="home-notifications-mobile"]',
     content: "Open Notifications to review alerts and recent activity logs.",
-    placement: "bottom",
-    disableBeacon: true,
+    side: "bottom",
+    viewport: "mobile",
   },
   {
     route: "/app/homepage",
-    target: '[data-tour="home-quick-cards"]',
+    selector: '[data-tour="home-quick-cards"]',
     content: "These cards open appointments, emergency contacts, medical team, and medications.",
-    placement: "top",
-    disableBeacon: true,
+    side: "top",
   },
   {
     route: "/app/profilepage",
-    target: '[data-tour="nav-profile"]',
+    selector: '[data-tour="nav-profile"]',
     content: "Profile is where your full health information lives.",
-    placement: "right",
-    disableBeacon: true,
+    side: "right",
   },
   {
     route: "/app/profilepage",
-    target: '[data-tour="profile-overview"]',
+    selector: '[data-tour="profile-overview"]',
     content: "Review and update personal details, vitals, and medical history here.",
-    placement: "bottom",
-    disableBeacon: true,
+    side: "bottom",
   },
   {
     route: "/app/vaultpage",
-    target: '[data-tour="nav-vault"]',
+    selector: '[data-tour="nav-vault"]',
     content: "Vault stores your medical documents in one place.",
-    placement: "right",
-    disableBeacon: true,
+    side: "right",
   },
   {
     route: "/app/vaultpage",
-    target: '[data-tour="vault-upload"]',
+    selector: '[data-tour="vault-upload"]',
     content: "Upload lab reports, prescriptions, insurance docs, and bills here.",
-    placement: "bottom",
-    disableBeacon: true,
+    side: "bottom",
   },
   {
     route: "/app/carecircle",
-    target: '[data-tour="nav-care-circle"]',
+    selector: '[data-tour="nav-care-circle"]',
     content: "Care Circle helps you coordinate with trusted family or friends.",
-    placement: "right",
-    disableBeacon: true,
+    side: "right",
   },
   {
     route: "/app/carecircle",
-    target: '[data-tour="care-invite-member"]',
+    selector: '[data-tour="care-invite-member"]',
     content: "Invite members to collaborate on care and emergency readiness.",
-    placement: "bottom",
-    disableBeacon: true,
+    side: "bottom",
   },
   {
     route: "/app/carecircle",
-    target: '[data-tour="care-view-access"]',
+    selector: '[data-tour="care-view-access"]',
     content: "Use this action to open shared details or the emergency card.",
-    placement: "left",
-    disableBeacon: true,
+    side: "left",
   },
   {
     route: "/app/settings",
-    target: '[data-tour="nav-settings"]',
+    selector: '[data-tour="nav-settings"]',
     content: "Settings manages account controls, legal docs, and safety actions.",
-    placement: "right",
-    disableBeacon: true,
+    side: "right",
   },
   {
     route: "/app/settings",
-    target: '[data-tour="settings-replay-tour"]',
+    selector: '[data-tour="settings-replay-tour"]',
     content: "You can replay this walkthrough anytime from here.",
-    placement: "top",
-    disableBeacon: true,
+    side: "top",
   },
 ];
+
+const resolveTourStepsForViewport = () => {
+  const desktop = isDesktopViewport();
+  return TOUR_STEPS.filter((step) => {
+    const viewport = step.viewport ?? "all";
+    if (viewport === "all") return true;
+    if (viewport === "desktop") return desktop;
+    return !desktop;
+  });
+};
 
 export default function AppTourController() {
   const router = useRouter();
@@ -190,16 +165,17 @@ export default function AppTourController() {
   const searchParams = useSearchParams();
   const { userId } = useAppProfile();
 
-  const [run, setRun] = useState(false);
-  const [stepIndex, setStepIndex] = useState(0);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
-  const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
-  const [tooltipPosition, setTooltipPosition] = useState<TooltipPosition | null>(null);
 
   const processedQueryRef = useRef<string | null>(null);
-  const tooltipRef = useRef<HTMLDivElement | null>(null);
-
-  const currentStep = TOUR_STEPS[stepIndex];
+  const activeStepsRef = useRef<TourStep[]>(TOUR_STEPS);
+  const driverRef = useRef<Driver | null>(null);
+  const isTourRunningRef = useRef(false);
+  const currentStepRef = useRef(0);
+  const pendingStepIndexRef = useRef<number | null>(null);
+  const suppressDestroyHookRef = useRef(false);
+  const targetCheckTimerRef = useRef<number | null>(null);
+  const navigateToStepRef = useRef<(index: number, direction: 1 | -1) => void>(() => undefined);
 
   const markTourSeen = useCallback(async () => {
     if (!userId) return;
@@ -220,57 +196,209 @@ export default function AppTourController() {
     }
   }, [userId]);
 
+  const clearTargetCheckTimer = useCallback(() => {
+    if (targetCheckTimerRef.current !== null) {
+      window.clearTimeout(targetCheckTimerRef.current);
+      targetCheckTimerRef.current = null;
+    }
+  }, []);
+
+  const destroyDriver = useCallback((suppressHooks = true) => {
+    const instance = driverRef.current;
+    if (!instance) return;
+
+    try {
+      suppressDestroyHookRef.current = suppressHooks;
+      instance.destroy();
+    } finally {
+      suppressDestroyHookRef.current = false;
+      driverRef.current = null;
+    }
+  }, []);
+
   const stopTour = useCallback(
     (markSeen: boolean) => {
-      setRun(false);
+      isTourRunningRef.current = false;
+      pendingStepIndexRef.current = null;
+      clearTargetCheckTimer();
+      destroyDriver(true);
       setPendingRoute(null);
-      setTargetRect(null);
-      setTooltipPosition(null);
+      currentStepRef.current = 0;
 
       if (markSeen) {
         void markTourSeen();
       }
     },
-    [markTourSeen]
+    [clearTargetCheckTimer, destroyDriver, markTourSeen]
   );
 
+  const createDriver = useCallback(() => {
+    const activeSteps = activeStepsRef.current;
+    const driverSteps: DriveStep[] = activeSteps.map((step) => ({
+      element: step.selector,
+      popover: {
+        description: step.content,
+        side: step.side,
+        align: "center",
+      },
+    }));
+
+    const instance = driver({
+      steps: driverSteps,
+      animate: true,
+      smoothScroll: true,
+      allowClose: true,
+      overlayColor: "#020617",
+      overlayOpacity: 0.45,
+      stagePadding: 8,
+      stageRadius: 12,
+      disableActiveInteraction: true,
+      showButtons: ["previous", "next", "close"],
+      showProgress: true,
+      progressText: "Step {{current}} of {{total}}",
+      prevBtnText: "Back",
+      nextBtnText: "Next",
+      doneBtnText: "Finish",
+      popoverClass: "vytara-driver-popover",
+      onNextClick: (_element, _step, opts) => {
+        const activeIndex = opts.driver.getActiveIndex() ?? currentStepRef.current;
+        navigateToStepRef.current(activeIndex + 1, 1);
+      },
+      onPrevClick: (_element, _step, opts) => {
+        const activeIndex = opts.driver.getActiveIndex() ?? currentStepRef.current;
+        navigateToStepRef.current(activeIndex - 1, -1);
+      },
+      onCloseClick: () => {
+        stopTour(true);
+      },
+      onDestroyStarted: () => {
+        if (suppressDestroyHookRef.current) return;
+        if (!isTourRunningRef.current) return;
+        stopTour(true);
+      },
+      onPopoverRender: (popover, opts) => {
+        const activeIndex = opts.driver.getActiveIndex() ?? currentStepRef.current;
+        popover.nextButton.innerHTML = activeIndex >= activeSteps.length - 1 ? "Finish" : "Next";
+        popover.previousButton.innerHTML = "Back";
+
+        if (!popover.footerButtons.classList.contains("vytara-driver-nav-buttons")) {
+          popover.footerButtons.classList.add("vytara-driver-nav-buttons");
+        }
+
+        let skipButton = popover.footer.querySelector(
+          ".vytara-driver-skip-btn"
+        ) as HTMLButtonElement | null;
+
+        if (!skipButton) {
+          skipButton = document.createElement("button");
+          skipButton.type = "button";
+          skipButton.className = "vytara-driver-skip-btn";
+          skipButton.setAttribute("aria-label", "Skip onboarding tour");
+          popover.footer.insertBefore(skipButton, popover.footerButtons);
+        }
+
+        skipButton.innerHTML = "Skip";
+        skipButton.onclick = () => stopTour(true);
+      },
+    });
+
+    return instance;
+  }, [stopTour]);
+
+  const ensureDriver = useCallback(() => {
+    if (!driverRef.current) {
+      driverRef.current = createDriver();
+    }
+
+    return driverRef.current;
+  }, [createDriver]);
+
   const navigateToStep = useCallback(
-    (nextIndex: number) => {
+    (nextIndex: number, direction: 1 | -1) => {
+      if (!isTourRunningRef.current) return;
       if (nextIndex < 0) return;
-      if (nextIndex >= TOUR_STEPS.length) {
+      const activeSteps = activeStepsRef.current;
+
+      if (nextIndex >= activeSteps.length) {
         stopTour(true);
         return;
       }
 
-      const nextStep = TOUR_STEPS[nextIndex];
-      setStepIndex(nextIndex);
+      const nextStep = activeSteps[nextIndex];
+      currentStepRef.current = nextIndex;
 
       if (nextStep.route !== pathname) {
-        setRun(false);
+        pendingStepIndexRef.current = nextIndex;
         setPendingRoute(nextStep.route);
-        setTargetRect(null);
-        setTooltipPosition(null);
+        clearTargetCheckTimer();
+        destroyDriver(true);
         router.push(nextStep.route);
         return;
       }
 
-      setPendingRoute(null);
-      setRun(true);
+      let attempts = 0;
+
+      const focusStepTarget = () => {
+        if (!isTourRunningRef.current) return;
+
+        const { target, hasCandidates } = findVisibleTarget(nextStep.selector);
+        if (target) {
+          target.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+            inline: "nearest",
+          });
+
+          clearTargetCheckTimer();
+          const instance = ensureDriver();
+          if (instance.isActive()) {
+            instance.moveTo(nextIndex);
+          } else {
+            instance.drive(nextIndex);
+          }
+          return;
+        }
+
+        // Responsive variants can leave hidden matches in the DOM; skip these quickly.
+        if (hasCandidates) {
+          navigateToStep(nextIndex + direction, direction);
+          return;
+        }
+
+        attempts += 1;
+        if (attempts >= TARGET_MAX_ATTEMPTS) {
+          navigateToStep(nextIndex + direction, direction);
+          return;
+        }
+
+        clearTargetCheckTimer();
+        targetCheckTimerRef.current = window.setTimeout(focusStepTarget, TARGET_RETRY_MS);
+      };
+
+      clearTargetCheckTimer();
+      targetCheckTimerRef.current = window.setTimeout(focusStepTarget, TARGET_INITIAL_DELAY_MS);
     },
-    [pathname, router, stopTour]
+    [clearTargetCheckTimer, destroyDriver, ensureDriver, pathname, router, stopTour]
   );
 
   useEffect(() => {
+    navigateToStepRef.current = navigateToStep;
+  }, [navigateToStep]);
+
+  useEffect(() => {
+    if (!isTourRunningRef.current) return;
     if (!pendingRoute) return;
     if (pathname !== pendingRoute) return;
 
+    const resumeIndex = pendingStepIndexRef.current ?? currentStepRef.current;
+
     const timer = window.setTimeout(() => {
-      setRun(true);
       setPendingRoute(null);
-    }, 120);
+      navigateToStep(resumeIndex, 1);
+    }, ROUTE_RESUME_DELAY_MS);
 
     return () => window.clearTimeout(timer);
-  }, [pathname, pendingRoute]);
+  }, [navigateToStep, pathname, pendingRoute]);
 
   useEffect(() => {
     const mode = searchParams.get(TOUR_QUERY_KEY);
@@ -294,6 +422,9 @@ export default function AppTourController() {
 
     params.delete(TOUR_QUERY_KEY);
     const nextPath = params.toString() ? `${pathname}?${params.toString()}` : pathname;
+    if (typeof window !== "undefined") {
+      window.history.replaceState(window.history.state, "", nextPath);
+    }
     router.replace(nextPath, { scroll: false });
 
     let cancelled = false;
@@ -320,7 +451,10 @@ export default function AppTourController() {
         if (hasSeen) return;
       }
 
-      navigateToStep(0);
+      isTourRunningRef.current = true;
+      activeStepsRef.current = resolveTourStepsForViewport();
+      pendingStepIndexRef.current = 0;
+      navigateToStep(0, 1);
     };
 
     void startTour();
@@ -331,189 +465,13 @@ export default function AppTourController() {
   }, [navigateToStep, pathname, router, searchParams, userId]);
 
   useEffect(() => {
-    if (!run) return;
-    if (!currentStep) return;
-    if (currentStep.route !== pathname) return;
-
-    let rafId: number | null = null;
-    const findStepTarget = () => document.querySelector(currentStep.target) as HTMLElement | null;
-
-    const updateTargetRect = () => {
-      const target = findStepTarget();
-      if (!target) {
-        setTargetRect(null);
-        return;
-      }
-
-      setTargetRect(target.getBoundingClientRect());
-    };
-
-    const scheduleUpdate = () => {
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId);
-      }
-
-      rafId = window.requestAnimationFrame(updateTargetRect);
-    };
-
-    const initialTimer = window.setTimeout(() => {
-      const target = findStepTarget();
-
-      if (!target) {
-        navigateToStep(stepIndex + 1);
-        return;
-      }
-
-      target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
-      window.setTimeout(updateTargetRect, 120);
-    }, 180);
-
-    const onResize = () => scheduleUpdate();
-    const onScroll = () => scheduleUpdate();
-
-    window.addEventListener("resize", onResize);
-    window.addEventListener("scroll", onScroll, true);
-
     return () => {
-      window.clearTimeout(initialTimer);
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("scroll", onScroll, true);
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId);
-      }
+      isTourRunningRef.current = false;
+      pendingStepIndexRef.current = null;
+      clearTargetCheckTimer();
+      destroyDriver(true);
     };
-  }, [currentStep, navigateToStep, pathname, run, stepIndex]);
+  }, [clearTargetCheckTimer, destroyDriver]);
 
-  useEffect(() => {
-    if (!run || !targetRect || !currentStep || !tooltipRef.current) return;
-
-    const tooltipRect = tooltipRef.current.getBoundingClientRect();
-    setTooltipPosition(getTooltipPosition(targetRect, tooltipRect, currentStep.placement));
-  }, [currentStep, run, targetRect]);
-
-  useEffect(() => {
-    if (!run) return;
-
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        stopTour(true);
-      }
-    };
-
-    window.addEventListener("keydown", onEscape);
-    return () => window.removeEventListener("keydown", onEscape);
-  }, [run, stopTour]);
-
-  const handleSkip = useCallback(() => {
-    stopTour(true);
-  }, [stopTour]);
-
-  const handleNext = useCallback(() => {
-    if (stepIndex >= TOUR_STEPS.length - 1) {
-      stopTour(true);
-      return;
-    }
-    navigateToStep(stepIndex + 1);
-  }, [navigateToStep, stepIndex, stopTour]);
-
-  const handleBack = useCallback(() => {
-    if (stepIndex === 0) return;
-    navigateToStep(stepIndex - 1);
-  }, [navigateToStep, stepIndex]);
-
-  if (
-    typeof document === "undefined" ||
-    !run ||
-    !currentStep ||
-    currentStep.route !== pathname ||
-    !targetRect
-  ) {
-    return null;
-  }
-
-  const highlightTop = Math.max(0, targetRect.top - 8);
-  const highlightLeft = Math.max(0, targetRect.left - 8);
-  const highlightWidth = targetRect.width + 16;
-  const highlightHeight = targetRect.height + 16;
-
-  return createPortal(
-    <div className="pointer-events-none fixed inset-0 z-[12000]">
-      <button
-        type="button"
-        aria-label="Close onboarding tour"
-        className="pointer-events-auto absolute inset-0 bg-slate-950/45"
-        onClick={handleSkip}
-      />
-
-      <div
-        className="pointer-events-none absolute rounded-xl border-2 border-teal-600 shadow-[0_0_0_9999px_rgba(2,6,23,0.45)] transition-all duration-150"
-        style={{
-          top: highlightTop,
-          left: highlightLeft,
-          width: highlightWidth,
-          height: highlightHeight,
-        }}
-      />
-
-      <div
-        ref={tooltipRef}
-        className="pointer-events-auto absolute w-[min(24rem,calc(100vw-1.5rem))] rounded-xl bg-white p-4 shadow-2xl ring-1 ring-slate-200"
-        role="dialog"
-        aria-live="polite"
-        style={
-          tooltipPosition
-            ? {
-                top: tooltipPosition.top,
-                left: tooltipPosition.left,
-                transformOrigin: tooltipPosition.transformOrigin,
-              }
-            : { top: VIEWPORT_PADDING, left: VIEWPORT_PADDING }
-        }
-      >
-        <button
-          type="button"
-          onClick={handleSkip}
-          className="absolute right-3 top-3 text-lg leading-none text-slate-400 hover:text-slate-600"
-          aria-label="Close onboarding tour"
-        >
-          ×
-        </button>
-
-        <p className="mb-4 pr-6 text-sm leading-6 text-slate-700">{currentStep.content}</p>
-
-        <div className="mb-3 text-xs font-medium text-slate-500">
-          Step {stepIndex + 1} of {TOUR_STEPS.length}
-        </div>
-
-        <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={handleSkip}
-            className="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
-          >
-            Skip
-          </button>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleBack}
-              disabled={stepIndex === 0}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              onClick={handleNext}
-              className="rounded-md bg-teal-700 px-3 py-2 text-sm font-medium text-white hover:bg-teal-800"
-            >
-              {stepIndex === TOUR_STEPS.length - 1 ? "Finish" : "Next"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
+  return null;
 }
