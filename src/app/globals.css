@@ -2,6 +2,58 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Global button hover styles - cursor and color change */
+@layer components {
+  /* Base button styles - cursor pointer */
+  button,
+  [role="button"],
+  .btn,
+  .button {
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+  }
+  
+  /* Button hover effects with noticeable color darkening */
+  button:hover:not(:disabled),
+  [role="button"]:hover:not(:disabled),
+  .btn:hover:not(:disabled),
+  .button:hover:not(:disabled) {
+    filter: brightness(0.9);
+    transform: translateY(-1px);
+  }
+  
+  /* Focus states for accessibility */
+  button:focus-visible,
+  [role="button"]:focus-visible,
+  .btn:focus-visible,
+  .button:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  
+  /* Disabled buttons */
+  button:disabled,
+  [role="button"]:disabled,
+  .btn:disabled,
+  .button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+
+@layer utilities {
+  /* Additional utility classes for clickable elements */
+  .clickable {
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+  }
+  
+  .clickable:hover:not(:disabled) {
+    filter: brightness(0.9);
+    transform: translateY(-1px);
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -365,19 +417,19 @@ body > #conveythis-wrapper {
 
 /* Cherryblue Theme */
 .theme-cherryblue {
-  --theme-primary: #9fc0c8;
-  --theme-secondary: #9fc0c8;
-  --theme-accent: #89aeb5;
-  --theme-background: #e6f1f4;
-  --theme-surface: #d1e3ea;
-  --theme-text: #1f3340;
-  --theme-text-secondary: #4a6471;
-  --theme-border: #b8ced8;
-  --theme-card: #ffffff;
+  --theme-primary: #bfd9dc;
+  --theme-secondary: #bfd9dc;
+  --theme-accent: #86989a;
+  --theme-background: #bfd9dc;
+  --theme-surface: #ffffff;
+  --theme-text: #1e293b;
+  --theme-text-secondary: #64748b;
+  --theme-border: #e2e8f0;
+  --theme-card: #c7425b;  
   --theme-navbar: #c7425b;
   --theme-sidebar-active: #c7425b;
   --theme-button-primary: #c7425b;
-  --theme-button-secondary: #a7364c;
+  --theme-button-secondary: #bfd9dc;
 }
 
 .theme-cherryblue .symbol-bg {

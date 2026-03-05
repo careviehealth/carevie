@@ -28,12 +28,58 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    
+    // Validate Flask API URL is configured
+    if (!FLASK_API_URL || FLASK_API_URL === '') {
+      console.error('[api/chat] Flask API URL not configured');
+      return NextResponse.json(
+        {
+          success: false,
+          reply: "Assistant is unavailable. Backend URL not configured.",
+        },
+        { status: 503 }
+      );
+    }
+    
+    console.log('[api/chat] Calling Flask at:', FLASK_API_URL);
+    
     const res = await fetch(`${FLASK_API_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30000), // 30 second timeout for chat requests
     });
-    const data = await res.json();
+    
+    // Get response text first to handle empty or non-JSON responses
+    const responseText = await res.text();
+    
+    if (!responseText || responseText.trim() === '') {
+      console.error('[api/chat] Empty response from Flask');
+      return NextResponse.json(
+        {
+          success: false,
+          reply: "Assistant is unavailable. Received empty response from backend.",
+        },
+        { status: 502 }
+      );
+    }
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('[api/chat] Invalid JSON from Flask:', responseText.slice(0, 200));
+      return NextResponse.json(
+        {
+          success: false,
+          reply: "Assistant is unavailable. Invalid response from backend.",
+        },
+        { status: 502 }
+      );
+    }
+    
+    console.log('[api/chat] Flask response:', JSON.stringify(data));
+    
     return NextResponse.json(data, { status: res.status });
   } catch (e) {
     console.error('[api/chat] Flask backend unreachable:', e);

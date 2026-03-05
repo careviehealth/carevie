@@ -31,7 +31,7 @@
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "react-native": "0.81.5",
-    "supabase": "^2.76.11",
+    "supabase": "^2.76.16",
     "tailwind-merge": "^3.4.0",
     "three": "^0.167.1",
     "twilio": "^5.11.2"

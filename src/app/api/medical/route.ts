@@ -54,6 +54,7 @@ async function callFlask(endpoint: string, method: string, body?: unknown) {
   const options: RequestInit = {
     method,
     headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(60000), // 60 second timeout for medical processing
   };
   
   if (body && method !== 'GET') {
