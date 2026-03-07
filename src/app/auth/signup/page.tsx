@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { supabase } from "@/lib/createClient";
 import Plasma from "@/components/Plasma";
@@ -389,13 +390,12 @@ export default function SignupPage() {
                   <div className="mt-8 pt-6 border-t border-gray-100 text-center">
                     <p className="text-sm text-gray-500">
                       Already have an account?{" "}
-                      <button
+                      <Link
+                        href="/auth/login"
                         className="text-[#14b8a6] font-bold hover:underline"
-                        type="button"
-                        onClick={() => router.push("/auth/login")}
                       >
                         Sign In
-                      </button>
+                      </Link>
                     </p>
                   </div>
                 </>

@@ -1,7 +1,7 @@
 'use client';
 
 import { Palette, ChevronDown } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import {
   applyTheme,
@@ -31,40 +31,7 @@ export default function ThemeSelector({ variant = 'desktop', userId = '' }: Them
     seedThemeForUserFromLegacy(trimmedUserId);
   }, [trimmedUserId]);
 
-  const subscribeTheme = useCallback((onStoreChange: () => void) => {
-    const onThemeChange = () => onStoreChange();
-    const onStorage = (event: StorageEvent) => {
-      if (isThemeStorageKey(event.key)) {
-        onStoreChange();
-      }
-    };
-    const onVisibilityChange = () => {
-      if (!document.hidden) {
-        onStoreChange();
-      }
-    };
-    const observer = new MutationObserver(() => onStoreChange());
-
-    window.addEventListener('themeChange', onThemeChange as EventListener);
-    window.addEventListener('storage', onStorage);
-    window.addEventListener('focus', onThemeChange);
-    window.addEventListener('pageshow', onThemeChange);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-    return () => {
-      window.removeEventListener('themeChange', onThemeChange as EventListener);
-      window.removeEventListener('storage', onStorage);
-      window.removeEventListener('focus', onThemeChange);
-      window.removeEventListener('pageshow', onThemeChange);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      observer.disconnect();
-    };
-  }, []);
-
-  const getThemeSnapshot = useCallback(() => {
+  const resolveTheme = useCallback(() => {
     try {
       const appliedTheme = getAppliedTheme();
       if (appliedTheme !== 'default') {
@@ -76,15 +43,49 @@ export default function ThemeSelector({ variant = 'desktop', userId = '' }: Them
     }
   }, [trimmedUserId]);
 
-  const currentTheme = useSyncExternalStore(
-    subscribeTheme,
-    getThemeSnapshot,
-    () => 'default'
-  );
+  const [currentTheme, setCurrentTheme] = useState<string>('default');
 
   useEffect(() => {
-    applyTheme(currentTheme, trimmedUserId || undefined);
-  }, [currentTheme, trimmedUserId]);
+    setCurrentTheme(resolveTheme());
+  }, [resolveTheme]);
+
+  useEffect(() => {
+    const syncTheme = () => setCurrentTheme(resolveTheme());
+    const onStorage = (event: StorageEvent) => {
+      if (isThemeStorageKey(event.key)) {
+        syncTheme();
+      }
+    };
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        syncTheme();
+      }
+    };
+    const observer = new MutationObserver(syncTheme);
+
+    window.addEventListener('themeChange', syncTheme as EventListener);
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('focus', syncTheme);
+    window.addEventListener('pageshow', syncTheme);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+    return () => {
+      window.removeEventListener('themeChange', syncTheme as EventListener);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('focus', syncTheme);
+      window.removeEventListener('pageshow', syncTheme);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      observer.disconnect();
+    };
+  }, [resolveTheme]);
+
+  useEffect(() => {
+    if (!trimmedUserId) return;
+    applyTheme(resolveTheme(), trimmedUserId);
+  }, [resolveTheme, trimmedUserId]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -152,6 +153,7 @@ export default function ThemeSelector({ variant = 'desktop', userId = '' }: Them
 
   const selectTheme = (themeValue: string) => {
     applyTheme(themeValue, trimmedUserId || undefined);
+    setCurrentTheme(themeValue);
     // Dispatch custom event to notify other components of theme change
     window.dispatchEvent(new CustomEvent('themeChange', { detail: themeValue }));
     setIsOpen(false);

@@ -102,14 +102,22 @@ export default function Navbar() {
   ];
 
   useEffect(() => {
-    const stored = window.localStorage.getItem('g1_nav_collapsed');
-    if (stored) {
-      window.setTimeout(() => setCollapsed(stored === '1'), 0);
+    try {
+      const stored = window.localStorage.getItem('g1_nav_collapsed');
+      if (stored) {
+        window.setTimeout(() => setCollapsed(stored === '1'), 0);
+      }
+    } catch {
+      // Storage may be unavailable; keep default expanded state.
     }
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem('g1_nav_collapsed', collapsed ? '1' : '0');
+    try {
+      window.localStorage.setItem('g1_nav_collapsed', collapsed ? '1' : '0');
+    } catch {
+      // Storage may be unavailable; skip persistence.
+    }
   }, [collapsed]);
 
   useEffect(() => {
@@ -200,7 +208,11 @@ export default function Navbar() {
   const persistSelectedProfileHint = async (profileId: string) => {
     if (!userId || !profileId) return;
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(profilePreferenceKey(userId), profileId);
+      try {
+        window.localStorage.setItem(profilePreferenceKey(userId), profileId);
+      } catch {
+        // Keep the server-side preference write even if local storage fails.
+      }
     }
     await supabase
       .from('user_profile_preferences')

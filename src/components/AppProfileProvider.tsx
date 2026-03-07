@@ -42,12 +42,20 @@ const localSelectedProfileKey = (userId: string) => `vytara:last-selected-profil
 
 const readLocalSelectedProfileId = (userId: string) => {
   if (!userId || typeof window === "undefined") return null;
-  return window.localStorage.getItem(localSelectedProfileKey(userId));
+  try {
+    return window.localStorage.getItem(localSelectedProfileKey(userId));
+  } catch {
+    return null;
+  }
 };
 
 const writeLocalSelectedProfileId = (userId: string, profileId: string) => {
   if (!userId || typeof window === "undefined") return;
-  window.localStorage.setItem(localSelectedProfileKey(userId), profileId);
+  try {
+    window.localStorage.setItem(localSelectedProfileKey(userId), profileId);
+  } catch {
+    // Local storage can be unavailable in private browsing or strict environments.
+  }
 };
 
 const parseDate = (value: string | null | undefined) => {
@@ -190,6 +198,10 @@ export function AppProfileProvider({ children }: { children: ReactNode }) {
 
       if (chosen && chosen.id !== remembered) {
         await persistLastSelectedProfileId(userId, chosen.id);
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.error("Failed to load app profiles:", error);
       }
     } finally {
       setIsLoading(false);

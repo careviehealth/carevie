@@ -33,19 +33,6 @@ export const getAppliedTheme = (): string => {
   return 'default';
 };
 
-const hasAnyUserScopedTheme = () => {
-  if (typeof window === 'undefined') return false;
-
-  for (let i = 0; i < window.localStorage.length; i += 1) {
-    const key = window.localStorage.key(i);
-    if (key?.startsWith(USER_THEME_STORAGE_PREFIX)) {
-      return true;
-    }
-  }
-
-  return false;
-};
-
 export const isThemeStorageKey = (key: string | null) =>
   key !== null && (key === BASE_THEME_STORAGE_KEY || key.startsWith(USER_THEME_STORAGE_PREFIX));
 
@@ -54,7 +41,6 @@ export const seedThemeForUserFromLegacy = (userId: string) => {
 
   const userKey = getUserThemeStorageKey(userId);
   if (window.localStorage.getItem(userKey) !== null) return;
-  if (hasAnyUserScopedTheme()) return;
 
   const legacyTheme = window.localStorage.getItem(BASE_THEME_STORAGE_KEY);
   if (legacyTheme === null) return;
@@ -104,12 +90,7 @@ export const getCurrentTheme = (userId?: string): string => {
     if (accountTheme !== null) {
       return normalizeTheme(accountTheme);
     }
-
-    if (!hasAnyUserScopedTheme()) {
-      return normalizeTheme(window.localStorage.getItem(BASE_THEME_STORAGE_KEY));
-    }
-
-    return 'default';
+    return normalizeTheme(window.localStorage.getItem(BASE_THEME_STORAGE_KEY));
   }
 
   return normalizeTheme(window.localStorage.getItem(BASE_THEME_STORAGE_KEY));
