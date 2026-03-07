@@ -436,17 +436,13 @@ export default function Landing() {
             <h2 style={{ fontFamily:"'Playfair Display', serif", fontSize:'clamp(1.8rem,3.5vw,2.6rem)', fontWeight:800, maxWidth:500, margin:'0 auto 48px', lineHeight:1.2 }}>
               Watch how G1 works for your family
             </h2>
-            <div style={{ borderRadius:24, overflow:'hidden', position:'relative', aspectRatio:'16/9', boxShadow:'0 30px 80px rgba(13,78,74,0.25)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-              <div style={{ position:'absolute', inset:0, background:'linear-gradient(135deg,#134e4a,#0d524e)', opacity:0.95 }} />
-              <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(255,255,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.04) 1px,transparent 1px)', backgroundSize:'40px 40px' }} />
-              <div style={{ position:'relative', zIndex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:16 }}>
-                <div style={{ width:72, height:72, borderRadius:'50%', background:'white', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 8px 30px rgba(0,0,0,0.3)', transition:'transform 0.2s', cursor:'pointer' }}
-                  onMouseEnter={e => (e.currentTarget.style.transform='scale(1.1)')}
-                  onMouseLeave={e => (e.currentTarget.style.transform='scale(1)')}>
-                  <span style={{ color:'#134e4a', fontSize:'1.8rem', marginLeft:4 }}>▶</span>
-                </div>
-                <p style={{ color:'rgba(255,255,255,0.6)', fontSize:'0.85rem', fontWeight:500, letterSpacing:'0.06em' }}>Demo Video · 2 min</p>
-              </div>
+            <div style={{ borderRadius:24, overflow:'hidden', boxShadow:'0 30px 80px rgba(13,78,74,0.25)' }}>
+              <video 
+                src="/videos/Demo Video.mp4" 
+                poster="/images/vytara/homepagess.png"
+                controls 
+                style={{ width: '100%', display: 'block' }}
+              />
             </div>
           </div>
         </section>
