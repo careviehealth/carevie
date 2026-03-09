@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Loader2, FileText, AlertCircle } from 'lucide-react';
 
 interface SummaryResponse {
@@ -23,13 +23,32 @@ interface MedicalSummaryModalProps {
 const PUBLIC_BACKEND_BASE_URL = (
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   (process.env.NODE_ENV === 'production'
-    ? 'https://testing-9obu.onrender.com'
+    ? 'https://medical-rag-backend-phaq.onrender.com'
     : 'http://localhost:5000')
 ).replace(/\/+$/, '');
 const HEALTH_CHECK_URL = `${PUBLIC_BACKEND_BASE_URL}/api/health`;
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Unknown error';
+}
+
+
+function isBackendWakeupError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('backend is unavailable or waking up') ||
+    normalized.includes('render cold start') ||
+    normalized.includes('operation was aborted due to timeout') ||
+    normalized.includes('timeout')
+  );
+}
+
+function toUserFriendlyError(message: string): string {
+  if (!isBackendWakeupError(message)) {
+    return message;
+  }
+
+  return 'Our medical backend is waking up (Render free tier cold start). Please wait about 60-90 seconds and tap “Try Again”.';
 }
 
 function sanitizeAndFormat(text: string): string {
@@ -97,7 +116,7 @@ export function MedicalSummaryModal({
       }
       // Don't set error here, let the first useEffect handle it
     }
-  }, [isOpen, userId, hasProcessed]);
+  }, [handleGenerateSummary, hasProcessed, isOpen, userId]);
 
   // Reset when modal closes
   useEffect(() => {
@@ -121,7 +140,7 @@ export function MedicalSummaryModal({
     onSummaryViewed?.();
   }, [isGenerating, isOpen, isProcessing, onSummaryViewed, summary]);
 
-  const processFiles = async () => {
+  const processFiles = useCallback(async () => {
     if (!userId) {
       console.error('❌ [Frontend] No profileId available');
       setError('Please select a profile first');
@@ -153,7 +172,7 @@ export function MedicalSummaryModal({
       console.log('📦 [Frontend] Process response data:', data);
       
       if (!data.success) {
-        throw new Error(data.error || 'Failed to process files');
+        throw new Error(toUserFriendlyError(data.error || 'Failed to process files'));
       }
       
       console.log('✅ [Frontend] Files processed:', data.processed_count);
@@ -161,14 +180,14 @@ export function MedicalSummaryModal({
       
     } catch (err: unknown) {
       console.error('❌ [Frontend] Process error:', err);
-      setError(getErrorMessage(err));
+      setError(toUserFriendlyError(getErrorMessage(err)));
       return false;
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [folderType, userId]);
 
-  const generateSummary = async (): Promise<{ ok: boolean; errorMessage?: string }> => {
+  const generateSummary = useCallback(async (): Promise<{ ok: boolean; errorMessage?: string }> => {
     if (!userId) {
       console.error('❌ [Frontend] No profileId for summary generation');
       const authError = 'Please select a profile first';
@@ -203,7 +222,7 @@ export function MedicalSummaryModal({
       console.log('📦 [Frontend] Summary response data:', data);
       
       if (!data.success) {
-        throw new Error(data.error || 'Failed to generate summary');
+        throw new Error(toUserFriendlyError(data.error || 'Failed to generate summary'));
       }
       
       console.log('✅ [Frontend] Summary received!');
@@ -223,15 +242,15 @@ export function MedicalSummaryModal({
       
     } catch (err: unknown) {
       console.error('❌ [Frontend] Summary error:', err);
-      const errorMessage = getErrorMessage(err);
+      const errorMessage = toUserFriendlyError(getErrorMessage(err));
       setError(errorMessage);
       return { ok: false, errorMessage };
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [folderType, onSummaryReady, userId]);
 
-  const handleGenerateSummary = async () => {
+  const handleGenerateSummary = useCallback(async () => {
     console.log('🎬 [Modal] Starting generation process...');
     // Always process first so newly uploaded reports are included in summary.
     const processed = await processFiles();
@@ -241,7 +260,7 @@ export function MedicalSummaryModal({
     }
 
     await generateSummary();
-  };
+  }, [generateSummary, processFiles]);
 
   if (!isOpen) {
     console.log('🎭 [Modal] Not rendering (isOpen=false)');
