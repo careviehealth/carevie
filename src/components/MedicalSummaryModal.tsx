@@ -101,23 +101,6 @@ export function MedicalSummaryModal({
     setError('Please select a profile first');
   }, [propUserId]);
 
-  // Auto-trigger when modal opens AND userId is available
-  useEffect(() => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('🔄 [Modal] Effect check - isOpen:', isOpen, 'hasProcessed:', hasProcessed);
-    }
-    
-    if (isOpen && !hasProcessed && userId) {
-      console.log('🚀 [Modal] Triggering summary generation!');
-      handleGenerateSummary();
-    } else if (isOpen && !userId) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('ℹ️ [Modal] Modal open but no userId available yet');
-      }
-      // Don't set error here, let the first useEffect handle it
-    }
-  }, [handleGenerateSummary, hasProcessed, isOpen, userId]);
-
   // Reset when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -261,6 +244,23 @@ export function MedicalSummaryModal({
 
     await generateSummary();
   }, [generateSummary, processFiles]);
+
+  // Auto-trigger when modal opens AND userId is available
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔄 [Modal] Effect check - isOpen:', isOpen, 'hasProcessed:', hasProcessed);
+    }
+
+    if (isOpen && !hasProcessed && userId) {
+      console.log('🚀 [Modal] Triggering summary generation!');
+      handleGenerateSummary();
+    } else if (isOpen && !userId) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('ℹ️ [Modal] Modal open but no userId available yet');
+      }
+      // Don't set error here, let the first useEffect handle it
+    }
+  }, [handleGenerateSummary, hasProcessed, isOpen, userId]);
 
   if (!isOpen) {
     console.log('🎭 [Modal] Not rendering (isOpen=false)');
