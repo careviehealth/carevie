@@ -8,7 +8,7 @@ import React, {
   useEffect
 } from 'react';
 
-import { Menu, X, Lock, AlertCircle, Users, Brain } from 'lucide-react';
+import { Menu, X, Lock, AlertCircle, Users, Brain, Play } from 'lucide-react';
 import Link from 'next/link';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -83,9 +83,9 @@ interface RotatingCardsCarouselProps { isMobile: boolean; }
 
 const RotatingCardsCarousel = ({ isMobile }: RotatingCardsCarouselProps) => {
   const cards: Card[] = [
-    { id: 1, image: '/images/vytara/homepagess.png' },
-    { id: 2, image: '/images/vytara/vaulpagess.png' },
-    { id: 3, image: '/images/vytara/profilepagess.png' },
+    { id: 1, image: '/images/G1/homepagess.png' },
+    { id: 2, image: '/images/G1/vaulpagess.png' },
+    { id: 3, image: '/images/G1/profilepagess.png' },
   ];
   const [rotation, setRotation] = useState(0);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
@@ -137,6 +137,8 @@ export default function Landing() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [heroExpanded, setHeroExpanded] = useState<number[]>([]);
   const [isMobile, setIsMobile] = useState(false);
+  const [showDemoPlayButton, setShowDemoPlayButton] = useState(true);
+  const demoVideoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     setIsMobile(window.innerWidth < 768);
@@ -161,6 +163,24 @@ export default function Landing() {
     setMenu(false);
     if (id === 'login') return (window.location.href = '/auth/login');
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const playDemoVideo = () => {
+    const video = demoVideoRef.current;
+    if (!video) return;
+    setShowDemoPlayButton(false);
+    const playAttempt = video.play();
+    if (playAttempt && typeof playAttempt.catch === 'function') {
+      playAttempt.catch(() => setShowDemoPlayButton(true));
+    }
+  };
+
+  const resetDemoVideoPreview = () => {
+    const video = demoVideoRef.current;
+    if (video) {
+      video.currentTime = 0.001;
+    }
+    setShowDemoPlayButton(true);
   };
 
   return (
@@ -436,13 +456,51 @@ export default function Landing() {
             <h2 style={{ fontFamily:"'Playfair Display', serif", fontSize:'clamp(1.8rem,3.5vw,2.6rem)', fontWeight:800, maxWidth:500, margin:'0 auto 48px', lineHeight:1.2 }}>
               Watch how G1 works for your family
             </h2>
-            <div style={{ borderRadius:24, overflow:'hidden', boxShadow:'0 30px 80px rgba(13,78,74,0.25)' }}>
+            <div style={{ position:'relative', borderRadius:24, overflow:'hidden', boxShadow:'0 30px 80px rgba(13,78,74,0.25)' }}>
               <video 
-                src="/videos/Demo Video.mp4" 
-                poster="/images/vytara/homepagess.png"
+                ref={demoVideoRef}
+                src="/videos/Demo Video.mp4#t=0.001" 
+                preload="auto"
+                playsInline
+                onPlay={() => setShowDemoPlayButton(false)}
+                onEnded={resetDemoVideoPreview}
                 controls 
                 style={{ width: '100%', display: 'block' }}
               />
+              {showDemoPlayButton && (
+                <button
+                  type="button"
+                  onClick={playDemoVideo}
+                  aria-label="Play demo video"
+                  style={{
+                    position:'absolute',
+                    top:'50%',
+                    left:'50%',
+                    transform:'translate(-50%, -50%)',
+                    width:isMobile ? 72 : 92,
+                    height:isMobile ? 72 : 92,
+                    borderRadius:'50%',
+                    border:'1px solid rgba(255,255,255,0.28)',
+                    background:'rgba(15,26,23,0.78)',
+                    backdropFilter:'blur(14px)',
+                    display:'flex',
+                    alignItems:'center',
+                    justifyContent:'center',
+                    boxShadow:'0 18px 40px rgba(15,26,23,0.35)',
+                    cursor:'pointer',
+                    zIndex:2,
+                    transition:'transform 0.2s ease, background 0.2s ease'
+                  }}
+                >
+                  <Play
+                    size={isMobile ? 28 : 34}
+                    fill="white"
+                    color="white"
+                    strokeWidth={2.2}
+                    style={{ marginLeft: isMobile ? 4 : 5 }}
+                  />
+                </button>
+              )}
             </div>
           </div>
         </section>
