@@ -848,36 +848,37 @@ export default function HealthOnboardingChatbot() {
       </div>
 
       <div style={gridLayoutStyle}>
-        {/* CHAT */}
-        <div style={chatPanelStyle}>
-          <div style={styles.specular} />
-          <div style={styles.innerRim} />
+        {!isMobileLayout && (
+          <div style={chatPanelStyle}>
+            <div style={styles.specular} />
+            <div style={styles.innerRim} />
 
-          <div style={styles.chatHeader}>
-            <div style={styles.chatHeaderLeft}>
-              <div style={styles.dot} />
-              <div style={styles.chatHeaderTitle}>Assistant</div>
-            </div>
-            <div style={{ ...styles.chatHeaderRight, display: isSmallPhone ? "none" : styles.chatHeaderRight.display }}>
-              Secure • Private
-            </div>
-          </div>
-
-          <div style={chatWindowStyle} ref={scrollRef}>
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                style={{
-                  ...messageBubbleStyle,
-                  ...(msg.role === "user" ? styles.userBubble : styles.botBubble),
-                }}
-              >
-                <div style={styles.bubbleMeta}>{msg.role === "user" ? "You" : "G1"}</div>
-                <div>{msg.text}</div>
+            <div style={styles.chatHeader}>
+              <div style={styles.chatHeaderLeft}>
+                <div style={styles.dot} />
+                <div style={styles.chatHeaderTitle}>Assistant</div>
               </div>
-            ))}
+              <div style={{ ...styles.chatHeaderRight, display: isSmallPhone ? "none" : styles.chatHeaderRight.display }}>
+                Secure • Private
+              </div>
+            </div>
+
+            <div style={chatWindowStyle} ref={scrollRef}>
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  style={{
+                    ...messageBubbleStyle,
+                    ...(msg.role === "user" ? styles.userBubble : styles.botBubble),
+                  }}
+                >
+                  <div style={styles.bubbleMeta}>{msg.role === "user" ? "You" : "G1"}</div>
+                  <div>{msg.text}</div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* RIGHT */}
         <div style={rightPanelStyle}>

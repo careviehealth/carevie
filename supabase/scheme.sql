@@ -223,8 +223,10 @@ CREATE TABLE public.user_medications (
 CREATE TABLE public.user_profile_preferences (
   user_id uuid NOT NULL,
   last_selected_profile_id uuid,
+  selected_theme text,
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT user_profile_preferences_pkey PRIMARY KEY (user_id),
+  CONSTRAINT user_profile_preferences_selected_theme_check CHECK (((selected_theme IS NULL) OR (selected_theme = ANY (ARRAY['default'::text, 'charcoal'::text, 'clay'::text, 'olive'::text, 'coffee'::text, 'ocean'::text, 'sunset'::text, 'lemon'::text, 'lavender'::text, 'cherryblue'::text])))),
   CONSTRAINT user_profile_preferences_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
   CONSTRAINT user_profile_preferences_last_selected_profile_id_fkey FOREIGN KEY (last_selected_profile_id) REFERENCES public.profiles(id)
 );

@@ -8,6 +8,7 @@ import {
   getAppliedTheme,
   getCurrentTheme,
   isThemeStorageKey,
+  persistThemeToDatabase,
   seedThemeForUserFromLegacy,
   themes,
 } from '@/lib/themeUtils';
@@ -154,6 +155,13 @@ export default function ThemeSelector({ variant = 'desktop', userId = '' }: Them
   const selectTheme = (themeValue: string) => {
     applyTheme(themeValue, trimmedUserId || undefined);
     setCurrentTheme(themeValue);
+    if (trimmedUserId) {
+      void persistThemeToDatabase(themeValue, trimmedUserId).catch((error) => {
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('Failed to persist theme preference:', error);
+        }
+      });
+    }
     // Dispatch custom event to notify other components of theme change
     window.dispatchEvent(new CustomEvent('themeChange', { detail: themeValue }));
     setIsOpen(false);
