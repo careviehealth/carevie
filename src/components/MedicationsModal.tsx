@@ -10,7 +10,6 @@ import {
   formatMedicationFrequencyLabel,
   formatMedicationMealTimingSummary,
   getMedicationDoseStatesForDate,
-  getDueMedicationReminderSlots,
   normalizeMedicationDosage,
   resolveMedicationTimesPerDay,
   type MedicationLog as SharedMedicationLog,
@@ -245,9 +244,6 @@ export function MedicationsModal({ data, onAdd, onUpdate, onDelete, onLogDose }:
     return now <= end;
   });
 
-  const dueMedicationCount = activeMedications.filter(
-    (medication) => getDueMedicationReminderSlots(medication, now, reminderWindowMs).length > 0
-  ).length;
   const totalScheduledDoses = activeMedications.reduce(
     (total, medication) =>
       total +
@@ -368,14 +364,11 @@ export function MedicationsModal({ data, onAdd, onUpdate, onDelete, onLogDose }:
                   Review your active prescriptions and track each scheduled dose for today.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2 text-sm">
-                <div className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700">
+              <div className="flex flex-wrap items-center gap-2 text-xs sm:justify-end">
+                <div className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700 whitespace-nowrap">
                   {activeMedications.length} active
                 </div>
-                <div className="rounded-full bg-amber-50 px-3 py-1.5 font-medium text-amber-700">
-                  {dueMedicationCount} due now
-                </div>
-                <div className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700">
+                <div className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700 whitespace-nowrap">
                   {totalScheduledDoses} daily doses
                 </div>
               </div>
@@ -538,12 +531,10 @@ export function MedicationsModal({ data, onAdd, onUpdate, onDelete, onLogDose }:
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900">Current medication list</h3>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                    <span>{activeMedications.length} active</span>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
+                    <span className="whitespace-nowrap">{activeMedications.length} active</span>
                     <span className="text-slate-300">•</span>
-                    <span>{dueMedicationCount} due now</span>
-                    <span className="text-slate-300">•</span>
-                    <span>{totalScheduledDoses} daily doses</span>
+                    <span className="whitespace-nowrap">{totalScheduledDoses} daily doses</span>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
