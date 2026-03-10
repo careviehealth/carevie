@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Bell, Calendar, FileText, Pill, X } from "lucide-react";
 import { supabase } from "@/lib/createClient";
@@ -298,6 +299,7 @@ export function NotificationsPanel({
   variant = "desktop",
 }: NotificationsPanelProps) {
   const router = useRouter();
+  const shouldReduceMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<"notifications" | "logs">("notifications");
   const [careCircleInvites, setCareCircleInvites] = useState<CareCircleInvite[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
@@ -1713,6 +1715,20 @@ export function NotificationsPanel({
     variant === "modal"
       ? "w-full max-w-md h-[420px]"
       : "w-full max-w-sm h-[420px]";
+  const tabPanelMotion = shouldReduceMotion
+    ? {
+        initial: { opacity: 1, x: 0 },
+        animate: { opacity: 1, x: 0 },
+        exit: { opacity: 1, x: 0 },
+      }
+    : {
+        initial: { opacity: 0, x: activeTab === "notifications" ? -10 : 10 },
+        animate: { opacity: 1, x: 0 },
+        exit: { opacity: 0, x: activeTab === "notifications" ? 10 : -10 },
+      };
+  const tabPanelTransition = shouldReduceMotion
+    ? { duration: 0 }
+    : { duration: 0.22, ease: [0.22, 1, 0.36, 1] as const };
 
   return (
     <div className={wrapperClassName}>
@@ -1733,14 +1749,24 @@ export function NotificationsPanel({
             <button
               type="button"
               onClick={() => setActiveTab("notifications")}
-              className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+              className={`relative flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${
                 activeTab === "notifications"
-                  ? "bg-white text-slate-900 shadow-sm"
+                  ? "text-slate-900"
                   : "text-slate-500 hover:text-slate-700"
               }`}
               aria-pressed={activeTab === "notifications"}
             >
-              <span className="inline-flex items-center gap-1.5">
+              {activeTab === "notifications" ? (
+                <motion.span
+                  layoutId="notifications-panel-tab-pill"
+                  className="absolute inset-0 rounded-lg bg-white shadow-sm"
+                  transition={{
+                    duration: shouldReduceMotion ? 0 : 0.24,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                />
+              ) : null}
+              <span className="relative z-10 inline-flex items-center gap-1.5">
                 <span>Notifications</span>
                 {hasUnreadNotifications ? (
                   <span className="inline-block h-2 w-2 rounded-full bg-teal-500" />
@@ -1750,14 +1776,24 @@ export function NotificationsPanel({
             <button
               type="button"
               onClick={() => setActiveTab("logs")}
-              className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+              className={`relative flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${
                 activeTab === "logs"
-                  ? "bg-white text-slate-900 shadow-sm"
+                  ? "text-slate-900"
                   : "text-slate-500 hover:text-slate-700"
               }`}
               aria-pressed={activeTab === "logs"}
             >
-              <span className="inline-flex items-center gap-1.5">
+              {activeTab === "logs" ? (
+                <motion.span
+                  layoutId="notifications-panel-tab-pill"
+                  className="absolute inset-0 rounded-lg bg-white shadow-sm"
+                  transition={{
+                    duration: shouldReduceMotion ? 0 : 0.24,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                />
+              ) : null}
+              <span className="relative z-10 inline-flex items-center gap-1.5">
                 <span>Logs</span>
                 {hasUnreadLogs ? (
                   <span className="inline-block h-2 w-2 rounded-full bg-sky-500" />
@@ -1766,468 +1802,492 @@ export function NotificationsPanel({
             </button>
           </div>
         </div>
-        {activeTab === "notifications" ? (
-          isDismissedStateSyncing ? (
-            <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-slate-500">
-              Checking for updates...
-            </div>
-          ) : isLoading && totalNotifications === 0 ? (
-            <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-slate-500">
-              Checking for updates...
-            </div>
-          ) : notificationError && totalNotifications === 0 ? (
-            <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-rose-600">
-              {notificationError}
-            </div>
-          ) : totalNotifications === 0 ? (
-            <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-slate-500">
-              No notifications yet
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-              {upcomingAppointments.map(({ notificationId, appointment, dateTime, profileLabel }) => (
-                <button
-                  key={notificationId}
-                  type="button"
-                  onClick={() => router.push("/app/homepage?open=calendar")}
-                  className="group relative w-full rounded-2xl border border-slate-100 bg-amber-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
-                >
-                  <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-amber-100" />
-                  <span className="absolute right-2 top-2">
-                    <span className="inline-flex rounded-full">
-                      <span
-                        role="button"
-                        aria-label="Dismiss appointment notification"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          dismissAppointment(notificationId);
-                        }}
-                        className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
-                      >
-                        <X size={14} />
-                      </span>
-                    </span>
-                  </span>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">Upcoming appointment</p>
-                      <p className="text-xs text-slate-600">
-                        {profileLabel ? `${profileLabel} · ` : ""}
-                        {appointment.title || appointment.type} ·{" "}
-                        {dateTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                      </p>
-                    </div>
-                    <span className="text-[11px] text-slate-500">{formatTimeUntil(dateTime)}</span>
-                  </div>
-                </button>
-              ))}
-              {selfMealMedicationReminders.map(
-                ({ notificationId, medicationName, dosage, slotContext, slotTime }) => (
-                  <button
-                    key={notificationId}
-                    type="button"
-                    onClick={() => router.push("/app/homepage?open=medications")}
-                    className="group relative w-full rounded-2xl border border-slate-100 bg-teal-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
-                  >
-                    <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-teal-100" />
-                    <span className="absolute right-2 top-2">
-                      <span className="inline-flex rounded-full">
-                        <span
-                          role="button"
-                          aria-label="Dismiss medication meal reminder"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            dismissMedicationReminder(notificationId);
-                          }}
-                          className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
-                        >
-                          <X size={14} />
-                        </span>
-                      </span>
-                    </span>
-                    <div className="flex items-start justify-between gap-3 pr-8">
-                      <div className="flex items-start gap-3">
-                        <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-teal-100 text-teal-700">
-                          <Pill size={14} />
-                        </span>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-800">
-                            Medication due {slotContext}
-                          </p>
-                          <p className="text-xs text-slate-600">
-                            {medicationName}
-                            {dosage ? ` · ${dosage}` : ""}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[11px] text-slate-500">
-                        {slotTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                      </span>
-                    </div>
-                  </button>
-                )
-              )}
-              {visibleFamilyJoinRequests.map((request) => (
-                <button
-                  key={request.id}
-                  type="button"
-                  onClick={() => router.push("/app/carecircle")}
-                  className="group relative w-full rounded-2xl border border-slate-100 bg-indigo-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
-                >
-                  <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-indigo-100" />
-                  <span className="absolute right-2 top-2">
-                    <span className="inline-flex rounded-full">
-                      <span
-                        role="button"
-                        aria-label="Dismiss family join request notification"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          dismissFamilyNotification(request.id);
-                        }}
-                        className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
-                      >
-                        <X size={14} />
-                      </span>
-                    </span>
-                  </span>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">Family join request</p>
-                      <p className="text-xs text-slate-500">{request.requesterName} wants to join</p>
-                    </div>
-                    <span className="text-[11px] text-slate-400">
-                      {formatRelativeTimestamp(request.createdAt)}
-                    </span>
-                  </div>
-                </button>
-              ))}
-              {visibleFamilyAcceptance.map((acceptance) => (
-                <button
-                  key={acceptance.id}
-                  type="button"
-                  onClick={() => router.push("/app/carecircle")}
-                  className="group relative w-full rounded-2xl border border-slate-100 bg-emerald-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
-                >
-                  <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-emerald-100" />
-                  <span className="absolute right-2 top-2">
-                    <span className="inline-flex rounded-full">
-                      <span
-                        role="button"
-                        aria-label="Dismiss family acceptance notification"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          dismissFamilyNotification(acceptance.id);
-                        }}
-                        className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
-                      >
-                        <X size={14} />
-                      </span>
-                    </span>
-                  </span>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">Request approved</p>
-                      <p className="text-xs text-slate-500">
-                        {acceptance.familyName} accepted your care circle invite
-                      </p>
-                    </div>
-                    <span className="text-[11px] text-slate-400">
-                      {acceptance.createdAt ? formatRelativeTimestamp(acceptance.createdAt) : "Just now"}
-                    </span>
-                  </div>
-                </button>
-              ))}
-              {visibleLegacyFamilyAppointments.map(({ id, memberName, appointment, dateTime }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => router.push("/app/homepage?open=calendar")}
-                  className="group relative w-full rounded-2xl border border-slate-100 bg-orange-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
-                >
-                  <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-orange-100" />
-                  <span className="absolute right-2 top-2">
-                    <span className="inline-flex rounded-full">
-                      <span
-                        role="button"
-                        aria-label="Dismiss family appointment notification"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          dismissFamilyNotification(id);
-                        }}
-                        className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
-                      >
-                        <X size={14} />
-                      </span>
-                    </span>
-                  </span>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">Upcoming appointment</p>
-                      <p className="text-xs text-slate-600">
-                        {memberName} · {appointment.title || appointment.type} ·{" "}
-                        {dateTime.toLocaleTimeString([], {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                    </div>
-                    <span className="text-[11px] text-slate-500">{formatTimeUntil(dateTime)}</span>
-                  </div>
-                </button>
-              ))}
-              {visibleLegacyFamilyVaultUpdates.map((file) => (
-                <button
-                  key={file.id}
-                  type="button"
-                  onClick={() => router.push("/app/vaultpage")}
-                  className="group relative w-full rounded-2xl border border-slate-100 bg-blue-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
-                >
-                  <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-blue-100" />
-                  <span className="absolute right-2 top-2">
-                    <span className="inline-flex rounded-full">
-                      <span
-                        role="button"
-                        aria-label="Dismiss vault notification"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          dismissFamilyNotification(file.id);
-                        }}
-                        className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
-                      >
-                        <X size={14} />
-                      </span>
-                    </span>
-                  </span>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">New vault document</p>
-                      <p className="text-xs text-slate-500">
-                        {file.memberName} added {file.fileName} · {vaultFolderLabels[file.folder]}
-                      </p>
-                    </div>
-                    <span className="text-[11px] text-slate-400">
-                      {formatRelativeTimestamp(file.createdAt)}
-                    </span>
-                  </div>
-                </button>
-              ))}
-              {visibleLegacyFamilyMedicationStarts.map((medication) => (
-                <button
-                  key={medication.id}
-                  type="button"
-                  onClick={() => router.push("/app/homepage?open=medications")}
-                  className="group relative w-full rounded-2xl border border-slate-100 bg-green-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
-                >
-                  <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-green-100" />
-                  <span className="absolute right-2 top-2">
-                    <span className="inline-flex rounded-full">
-                      <span
-                        role="button"
-                        aria-label="Dismiss medication notification"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          dismissFamilyNotification(medication.id);
-                        }}
-                        className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
-                      >
-                        <X size={14} />
-                      </span>
-                    </span>
-                  </span>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">New medication started</p>
-                      <p className="text-xs text-slate-500">
-                        {medication.memberName} started {medication.medicationName}
-                      </p>
-                    </div>
-                    <span className="text-[11px] text-slate-400">
-                      {formatStartDate(medication.startDate)}
-                    </span>
-                  </div>
-                </button>
-              ))}
-              {visibleRecentFamilyActivityLogs.map((log) => {
-                const { cardClassName, ringClassName, iconClassName, Icon } = getLogCardTheme(
-                  log.domain
-                );
-                const logText = getLogText(log);
-                const { title, subtitle } = logText;
-                const sharedProfileLabel =
-                  typeof log.profile_label === "string" ? log.profile_label.trim() : "";
-                const subtitleText = sharedProfileLabel
-                  ? `${subtitle} · ${sharedProfileLabel}`
-                  : subtitle;
-                const notificationId = familyActivityNotificationId(log.id);
-                const deepLinkedPath =
-                  typeof log.link_id === "string" && log.link_id.trim()
-                    ? getCareCircleMemberDetailsPath(log.link_id.trim(), log.domain)
-                    : null;
-                const targetPath =
-                  deepLinkedPath ||
-                  getActivityNavigationPath(log, {
-                    preferCareCircle: Boolean(sharedProfileLabel),
-                  });
-                return (
-                  <button
-                    key={notificationId}
-                    type="button"
-                    onClick={() => router.push(targetPath)}
-                    className={cardClassName}
-                  >
-                    <span
-                      className={`pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition ${ringClassName}`}
-                    />
-                    <span className="absolute right-2 top-2">
-                      <span className="inline-flex rounded-full">
-                        <span
-                          role="button"
-                          aria-label="Dismiss family activity notification"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            dismissFamilyNotification(notificationId);
-                          }}
-                          className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
-                        >
-                          <X size={14} />
-                        </span>
-                      </span>
-                    </span>
-                    <div className="flex items-start justify-between gap-3 pr-8">
-                      <div className="flex items-start gap-3">
-                        <span
-                          className={`mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg ${iconClassName}`}
-                        >
-                          <Icon size={14} />
-                        </span>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-800">{title}</p>
-                          <p className="text-xs text-slate-500">{subtitleText}</p>
-                          {renderLogDetails(logText)}
-                        </div>
-                      </div>
-                      <span className="text-[11px] text-slate-400">
-                        {formatRelativeTimestamp(log.created_at)}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-              {visibleCareCircleInvites.map((invite) => (
-                <button
-                  key={invite.id}
-                  type="button"
-                  onClick={() => router.push("/app/carecircle?open=incoming-invites")}
-                  className="group relative w-full rounded-2xl border border-slate-100 bg-slate-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
-                >
-                  <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-slate-100" />
-                  <span className="absolute right-2 top-2">
-                    <span className="inline-flex rounded-full">
-                      <span
-                        role="button"
-                        aria-label="Dismiss care circle invite notification"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          dismissInvite(invite.id);
-                        }}
-                        className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
-                      >
-                        <X size={14} />
-                      </span>
-                    </span>
-                  </span>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">Care circle invite</p>
-                      <p className="text-xs text-slate-500">From {invite.name}</p>
-                    </div>
-                    <span className="text-[11px] text-slate-400">
-                      {formatRelativeTimestamp(invite.createdAt)}
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )
-        ) : !profileId ? (
-          <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-slate-500">
-            Select a profile to view logs.
-          </div>
-        ) : logsLoading && activityLogs.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-slate-500">
-            Loading logs...
-          </div>
-        ) : logsError && activityLogs.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-rose-600">
-            {logsError}
-          </div>
-        ) : activityLogs.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-slate-500">
-            No logs yet
-          </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-            {activityLogs.map((log) => {
-              const { cardClassName, ringClassName, iconClassName, Icon } = getLogCardTheme(
-                log.domain
-              );
-              const logText = getLogText(log);
-              const { title, subtitle } = logText;
-              const targetPath = getActivityNavigationPath(log);
-              return (
-                <button
-                  key={log.id}
-                  type="button"
-                  onClick={() => router.push(targetPath)}
-                  className={cardClassName}
-                >
-                  <span
-                    className={`pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition ${ringClassName}`}
-                  />
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <span
-                        className={`mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg ${iconClassName}`}
-                      >
-                        <Icon size={14} />
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">{title}</p>
-                        <p className="text-xs text-slate-500">{subtitle}</p>
-                        {renderLogDetails(logText)}
-                      </div>
-                    </div>
-                    <span className="text-[11px] text-slate-400">
-                      {formatRelativeTimestamp(log.created_at)}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-            {logsHasMore ? (
-              <button
-                type="button"
-                onClick={loadMoreLogs}
-                disabled={logsLoadingMore}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+        <div className="relative flex-1 overflow-hidden">
+          <AnimatePresence mode="wait" initial={false}>
+            {activeTab === "notifications" ? (
+              <motion.div
+                key="notifications-tab"
+                className="absolute inset-0 flex flex-col"
+                initial={tabPanelMotion.initial}
+                animate={tabPanelMotion.animate}
+                exit={tabPanelMotion.exit}
+                transition={tabPanelTransition}
               >
-                {logsLoadingMore ? "Loading..." : "Load more"}
-              </button>
-            ) : null}
-            {logsError ? (
-              <p className="text-center text-xs text-rose-600">{logsError}</p>
-            ) : null}
-          </div>
-        )}
+                {isDismissedStateSyncing ? (
+                  <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-slate-500">
+                    Checking for updates...
+                  </div>
+                ) : isLoading && totalNotifications === 0 ? (
+                  <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-slate-500">
+                    Checking for updates...
+                  </div>
+                ) : notificationError && totalNotifications === 0 ? (
+                  <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-rose-600">
+                    {notificationError}
+                  </div>
+                ) : totalNotifications === 0 ? (
+                  <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-slate-500">
+                    No notifications yet
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+                    {upcomingAppointments.map(({ notificationId, appointment, dateTime, profileLabel }) => (
+                      <button
+                        key={notificationId}
+                        type="button"
+                        onClick={() => router.push("/app/homepage?open=calendar")}
+                        className="group relative w-full rounded-2xl border border-slate-100 bg-amber-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
+                      >
+                        <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-amber-100" />
+                        <span className="absolute right-2 top-2">
+                          <span className="inline-flex rounded-full">
+                            <span
+                              role="button"
+                              aria-label="Dismiss appointment notification"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                dismissAppointment(notificationId);
+                              }}
+                              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
+                            >
+                              <X size={14} />
+                            </span>
+                          </span>
+                        </span>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">Upcoming appointment</p>
+                            <p className="text-xs text-slate-600">
+                              {profileLabel ? `${profileLabel} · ` : ""}
+                              {appointment.title || appointment.type} ·{" "}
+                              {dateTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                            </p>
+                          </div>
+                          <span className="text-[11px] text-slate-500">{formatTimeUntil(dateTime)}</span>
+                        </div>
+                      </button>
+                    ))}
+                    {selfMealMedicationReminders.map(
+                      ({ notificationId, medicationName, dosage, slotContext, slotTime }) => (
+                        <button
+                          key={notificationId}
+                          type="button"
+                          onClick={() => router.push("/app/homepage?open=medications")}
+                          className="group relative w-full rounded-2xl border border-slate-100 bg-teal-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
+                        >
+                          <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-teal-100" />
+                          <span className="absolute right-2 top-2">
+                            <span className="inline-flex rounded-full">
+                              <span
+                                role="button"
+                                aria-label="Dismiss medication meal reminder"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  dismissMedicationReminder(notificationId);
+                                }}
+                                className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
+                              >
+                                <X size={14} />
+                              </span>
+                            </span>
+                          </span>
+                          <div className="flex items-start justify-between gap-3 pr-8">
+                            <div className="flex items-start gap-3">
+                              <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-teal-100 text-teal-700">
+                                <Pill size={14} />
+                              </span>
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">
+                                  Medication due {slotContext}
+                                </p>
+                                <p className="text-xs text-slate-600">
+                                  {medicationName}
+                                  {dosage ? ` · ${dosage}` : ""}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-[11px] text-slate-500">
+                              {slotTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                            </span>
+                          </div>
+                        </button>
+                      )
+                    )}
+                    {visibleFamilyJoinRequests.map((request) => (
+                      <button
+                        key={request.id}
+                        type="button"
+                        onClick={() => router.push("/app/carecircle")}
+                        className="group relative w-full rounded-2xl border border-slate-100 bg-indigo-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
+                      >
+                        <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-indigo-100" />
+                        <span className="absolute right-2 top-2">
+                          <span className="inline-flex rounded-full">
+                            <span
+                              role="button"
+                              aria-label="Dismiss family join request notification"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                dismissFamilyNotification(request.id);
+                              }}
+                              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
+                            >
+                              <X size={14} />
+                            </span>
+                          </span>
+                        </span>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">Family join request</p>
+                            <p className="text-xs text-slate-500">{request.requesterName} wants to join</p>
+                          </div>
+                          <span className="text-[11px] text-slate-400">
+                            {formatRelativeTimestamp(request.createdAt)}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                    {visibleFamilyAcceptance.map((acceptance) => (
+                      <button
+                        key={acceptance.id}
+                        type="button"
+                        onClick={() => router.push("/app/carecircle")}
+                        className="group relative w-full rounded-2xl border border-slate-100 bg-emerald-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
+                      >
+                        <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-emerald-100" />
+                        <span className="absolute right-2 top-2">
+                          <span className="inline-flex rounded-full">
+                            <span
+                              role="button"
+                              aria-label="Dismiss family acceptance notification"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                dismissFamilyNotification(acceptance.id);
+                              }}
+                              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
+                            >
+                              <X size={14} />
+                            </span>
+                          </span>
+                        </span>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">Request approved</p>
+                            <p className="text-xs text-slate-500">
+                              {acceptance.familyName} accepted your care circle invite
+                            </p>
+                          </div>
+                          <span className="text-[11px] text-slate-400">
+                            {acceptance.createdAt ? formatRelativeTimestamp(acceptance.createdAt) : "Just now"}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                    {visibleLegacyFamilyAppointments.map(({ id, memberName, appointment, dateTime }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => router.push("/app/homepage?open=calendar")}
+                        className="group relative w-full rounded-2xl border border-slate-100 bg-orange-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
+                      >
+                        <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-orange-100" />
+                        <span className="absolute right-2 top-2">
+                          <span className="inline-flex rounded-full">
+                            <span
+                              role="button"
+                              aria-label="Dismiss family appointment notification"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                dismissFamilyNotification(id);
+                              }}
+                              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
+                            >
+                              <X size={14} />
+                            </span>
+                          </span>
+                        </span>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">Upcoming appointment</p>
+                            <p className="text-xs text-slate-600">
+                              {memberName} · {appointment.title || appointment.type} ·{" "}
+                              {dateTime.toLocaleTimeString([], {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                          </div>
+                          <span className="text-[11px] text-slate-500">{formatTimeUntil(dateTime)}</span>
+                        </div>
+                      </button>
+                    ))}
+                    {visibleLegacyFamilyVaultUpdates.map((file) => (
+                      <button
+                        key={file.id}
+                        type="button"
+                        onClick={() => router.push("/app/vaultpage")}
+                        className="group relative w-full rounded-2xl border border-slate-100 bg-blue-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
+                      >
+                        <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-blue-100" />
+                        <span className="absolute right-2 top-2">
+                          <span className="inline-flex rounded-full">
+                            <span
+                              role="button"
+                              aria-label="Dismiss vault notification"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                dismissFamilyNotification(file.id);
+                              }}
+                              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
+                            >
+                              <X size={14} />
+                            </span>
+                          </span>
+                        </span>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">New vault document</p>
+                            <p className="text-xs text-slate-500">
+                              {file.memberName} added {file.fileName} · {vaultFolderLabels[file.folder]}
+                            </p>
+                          </div>
+                          <span className="text-[11px] text-slate-400">
+                            {formatRelativeTimestamp(file.createdAt)}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                    {visibleLegacyFamilyMedicationStarts.map((medication) => (
+                      <button
+                        key={medication.id}
+                        type="button"
+                        onClick={() => router.push("/app/homepage?open=medications")}
+                        className="group relative w-full rounded-2xl border border-slate-100 bg-green-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
+                      >
+                        <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-green-100" />
+                        <span className="absolute right-2 top-2">
+                          <span className="inline-flex rounded-full">
+                            <span
+                              role="button"
+                              aria-label="Dismiss medication notification"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                dismissFamilyNotification(medication.id);
+                              }}
+                              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
+                            >
+                              <X size={14} />
+                            </span>
+                          </span>
+                        </span>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">New medication started</p>
+                            <p className="text-xs text-slate-500">
+                              {medication.memberName} started {medication.medicationName}
+                            </p>
+                          </div>
+                          <span className="text-[11px] text-slate-400">
+                            {formatStartDate(medication.startDate)}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                    {visibleRecentFamilyActivityLogs.map((log) => {
+                      const { cardClassName, ringClassName, iconClassName, Icon } = getLogCardTheme(
+                        log.domain
+                      );
+                      const logText = getLogText(log);
+                      const { title, subtitle } = logText;
+                      const sharedProfileLabel =
+                        typeof log.profile_label === "string" ? log.profile_label.trim() : "";
+                      const subtitleText = sharedProfileLabel
+                        ? `${subtitle} · ${sharedProfileLabel}`
+                        : subtitle;
+                      const notificationId = familyActivityNotificationId(log.id);
+                      const deepLinkedPath =
+                        typeof log.link_id === "string" && log.link_id.trim()
+                          ? getCareCircleMemberDetailsPath(log.link_id.trim(), log.domain)
+                          : null;
+                      const targetPath =
+                        deepLinkedPath ||
+                        getActivityNavigationPath(log, {
+                          preferCareCircle: Boolean(sharedProfileLabel),
+                        });
+                      return (
+                        <button
+                          key={notificationId}
+                          type="button"
+                          onClick={() => router.push(targetPath)}
+                          className={cardClassName}
+                        >
+                          <span
+                            className={`pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition ${ringClassName}`}
+                          />
+                          <span className="absolute right-2 top-2">
+                            <span className="inline-flex rounded-full">
+                              <span
+                                role="button"
+                                aria-label="Dismiss family activity notification"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  dismissFamilyNotification(notificationId);
+                                }}
+                                className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
+                              >
+                                <X size={14} />
+                              </span>
+                            </span>
+                          </span>
+                          <div className="flex items-start justify-between gap-3 pr-8">
+                            <div className="flex items-start gap-3">
+                              <span
+                                className={`mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg ${iconClassName}`}
+                              >
+                                <Icon size={14} />
+                              </span>
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">{title}</p>
+                                <p className="text-xs text-slate-500">{subtitleText}</p>
+                                {renderLogDetails(logText)}
+                              </div>
+                            </div>
+                            <span className="text-[11px] text-slate-400">
+                              {formatRelativeTimestamp(log.created_at)}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {visibleCareCircleInvites.map((invite) => (
+                      <button
+                        key={invite.id}
+                        type="button"
+                        onClick={() => router.push("/app/carecircle?open=incoming-invites")}
+                        className="group relative w-full rounded-2xl border border-slate-100 bg-slate-50/80 p-3 text-left transition hover:bg-white hover:shadow-sm"
+                      >
+                        <span className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition group-hover:ring-slate-100" />
+                        <span className="absolute right-2 top-2">
+                          <span className="inline-flex rounded-full">
+                            <span
+                              role="button"
+                              aria-label="Dismiss care circle invite notification"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                dismissInvite(invite.id);
+                              }}
+                              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white hover:text-slate-600 group-hover:opacity-100"
+                            >
+                              <X size={14} />
+                            </span>
+                          </span>
+                        </span>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">Care circle invite</p>
+                            <p className="text-xs text-slate-500">From {invite.name}</p>
+                          </div>
+                          <span className="text-[11px] text-slate-400">
+                            {formatRelativeTimestamp(invite.createdAt)}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="logs-tab"
+                className="absolute inset-0 flex flex-col"
+                initial={tabPanelMotion.initial}
+                animate={tabPanelMotion.animate}
+                exit={tabPanelMotion.exit}
+                transition={tabPanelTransition}
+              >
+                {!profileId ? (
+                  <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-slate-500">
+                    Select a profile to view logs.
+                  </div>
+                ) : logsLoading && activityLogs.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-slate-500">
+                    Loading logs...
+                  </div>
+                ) : logsError && activityLogs.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-rose-600">
+                    {logsError}
+                  </div>
+                ) : activityLogs.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center px-6 py-4 text-sm text-slate-500">
+                    No logs yet
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+                    {activityLogs.map((log) => {
+                      const { cardClassName, ringClassName, iconClassName, Icon } = getLogCardTheme(
+                        log.domain
+                      );
+                      const logText = getLogText(log);
+                      const { title, subtitle } = logText;
+                      const targetPath = getActivityNavigationPath(log);
+                      return (
+                        <button
+                          key={log.id}
+                          type="button"
+                          onClick={() => router.push(targetPath)}
+                          className={cardClassName}
+                        >
+                          <span
+                            className={`pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-transparent transition ${ringClassName}`}
+                          />
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3">
+                              <span
+                                className={`mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg ${iconClassName}`}
+                              >
+                                <Icon size={14} />
+                              </span>
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">{title}</p>
+                                <p className="text-xs text-slate-500">{subtitle}</p>
+                                {renderLogDetails(logText)}
+                              </div>
+                            </div>
+                            <span className="text-[11px] text-slate-400">
+                              {formatRelativeTimestamp(log.created_at)}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {logsHasMore ? (
+                      <button
+                        type="button"
+                        onClick={loadMoreLogs}
+                        disabled={logsLoadingMore}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {logsLoadingMore ? "Loading..." : "Load more"}
+                      </button>
+                    ) : null}
+                    {logsError ? (
+                      <p className="text-center text-xs text-rose-600">{logsError}</p>
+                    ) : null}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/createClient";
 import { AppointmentsModal } from "@/components/AppointmentsModal";
@@ -10,6 +11,12 @@ import { MedicationsModal, type Medication } from "@/components/MedicationsModal
 import { MedicalSummaryModal } from "@/components/MedicalSummaryModal";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { useAppProfile } from "@/components/AppProfileProvider";
+import {
+  modalOverlayMotion,
+  modalOverlayTransition,
+  modalSurfaceMotion,
+  modalSurfaceTransition,
+} from "@/components/modalMotion";
 import {
   deriveMedicationMealTiming,
   normalizeMedicationDosage,
@@ -1391,57 +1398,63 @@ function HomePageContent() {
         </div>
 
         {/* MODALS */}
-        {isNotificationsOpen && (
-          <Modal onClose={() => setIsNotificationsOpen(false)}>
-            <NotificationsPanel
-              userId={userId}
-              profileId={profileId}
+        <AnimatePresence>
+          {isNotificationsOpen ? (
+            <Modal onClose={() => setIsNotificationsOpen(false)}>
+              <NotificationsPanel
+                userId={userId}
+                profileId={profileId}
+                appointments={appointments}
+                medications={medications}
+                variant="modal"
+              />
+            </Modal>
+          ) : null}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {activeSection === "calendar" ? (
+            <AppointmentsModal
               appointments={appointments}
-              medications={medications}
-              variant="modal"
+              onClose={() => setActiveSection(null)}
+              onAddAppointment={handleAddAppointment}
+              onDeleteAppointment={handleDeleteAppointment}
             />
-          </Modal>
-        )}
+          ) : null}
+        </AnimatePresence>
 
-        {activeSection === "calendar" && (
-          <AppointmentsModal
-            appointments={appointments}
-            onClose={() => setActiveSection(null)}
-            onAddAppointment={handleAddAppointment}
-            onDeleteAppointment={handleDeleteAppointment}
-          />
-        )}
+        <AnimatePresence>
+          {activeSection && activeSection !== "calendar" ? (
+            <Modal onClose={() => setActiveSection(null)}>
+              {activeSection === "emergency" && (
+                <EmergencyContactsModal
+                  data={emergencyContacts}
+                  onAdd={addEmergencyContact}
+                  onDelete={deleteEmergencyContact}
+                />
+              )}
 
-        {activeSection && activeSection !== "calendar" && (
-          <Modal onClose={() => setActiveSection(null)}>
-            {activeSection === "emergency" && (
-              <EmergencyContactsModal
-                data={emergencyContacts}
-                onAdd={addEmergencyContact}
-                onDelete={deleteEmergencyContact}
-              />
-            )}
+              {activeSection === "doctors" && (
+                <MedicalTeamModal
+                  data={medicalTeam}
+                  onAdd={addDoctor}
+                  onUpdate={updateDoctor}
+                  onDelete={deleteDoctor}
+                />
+              )}
 
-            {activeSection === "doctors" && (
-              <MedicalTeamModal
-                data={medicalTeam}
-                onAdd={addDoctor}
-                onUpdate={updateDoctor}
-                onDelete={deleteDoctor}
-              />
-            )}
-
-            {activeSection === "medications" && (
-              <MedicationsModal
-                data={medications}
-                onAdd={addMedication}
-                onUpdate={updateMedication}
-                onDelete={deleteMedication}
-                onLogDose={handleLogDose}
-              />
-            )}
-          </Modal>
-        )}
+              {activeSection === "medications" && (
+                <MedicationsModal
+                  data={medications}
+                  onAdd={addMedication}
+                  onUpdate={updateMedication}
+                  onDelete={deleteMedication}
+                  onLogDose={handleLogDose}
+                />
+              )}
+            </Modal>
+          ) : null}
+        </AnimatePresence>
 
         {/* MEDICAL SUMMARY MODAL */}
         <MedicalSummaryModal
@@ -1493,13 +1506,17 @@ function Modal({
   onClose: () => void;
 }) {
   return (
-    <div
+    <motion.div
       onClick={onClose}
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      {...modalOverlayMotion}
+      transition={modalOverlayTransition}
     >
-      <div
+      <motion.div
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-3xl p-8 max-w-xl w-full shadow-2xl relative max-h-[90vh] overflow-y-auto"
+        {...modalSurfaceMotion}
+        transition={modalSurfaceTransition}
       >
         <button
           onClick={onClose}
@@ -1508,8 +1525,8 @@ function Modal({
           <X />
         </button>
         {children}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

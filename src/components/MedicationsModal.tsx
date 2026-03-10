@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   MEDICATION_MEAL_OPTIONS,
   countMedicationMealTiming,
@@ -17,6 +18,12 @@ import {
   type MedicationReminderSlot,
   type MedicationRecord as SharedMedication,
 } from "@/lib/medications";
+import {
+  modalOverlayMotion,
+  modalOverlayTransition,
+  modalSurfaceMotion,
+  modalSurfaceTransition,
+} from "@/components/modalMotion";
 
 export type MedicationLog = SharedMedicationLog;
 export type Medication = SharedMedication & { id: string };
@@ -515,18 +522,23 @@ export function MedicationsModal({ data, onAdd, onUpdate, onDelete, onLogDose }:
         </div>
       )}
 
-      {showListView && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/35 p-4"
-          onClick={() => setShowListView(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Medication list view"
-        >
-          <div
-            className="flex w-full max-w-[920px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
+      <AnimatePresence>
+        {showListView ? (
+          <motion.div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/35 p-4"
+            onClick={() => setShowListView(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Medication list view"
+            {...modalOverlayMotion}
+            transition={modalOverlayTransition}
           >
+            <motion.div
+              className="flex w-full max-w-[920px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+              {...modalSurfaceMotion}
+              transition={modalSurfaceTransition}
+            >
             <div className="border-b border-slate-200 px-5 py-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -610,9 +622,10 @@ export function MedicationsModal({ data, onAdd, onUpdate, onDelete, onLogDose }:
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </>
   );
 }

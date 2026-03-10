@@ -8,20 +8,38 @@ import React, {
   useEffect
 } from 'react';
 
-import { Menu, X, Lock, AlertCircle, Users, Brain, Play } from 'lucide-react';
+import { Menu, X, Play } from 'lucide-react';
 import Link from 'next/link';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 gsap.registerPlugin(ScrollTrigger);
 
+const shouldReduceMotion = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const navItems = [
+  ['Watch Demo', 'demo'],
+  ['Mission', 'mission'],
+  ['Features', 'features'],
+  ['Contact', 'footer'],
+] as const;
+
+const legalLinks = [
+  ['Privacy Policy', '/legal/privacy-policy'],
+  ['Terms of Service', '/legal/terms-of-service'],
+  ['Cookie Policy', '/legal/cookie-policy'],
+  ['Health Data Privacy', '/legal/health-data-privacy'],
+] as const;
+
 function Background() {
   return (
     <div className="fixed inset-0 z-0 pointer-events-none" style={{ background: '#fafaf9' }}>
-      <div style={{ position:'absolute', width:700, height:700, borderRadius:'50%', top:-200, left:-200,
+      <div className="background-orb background-orb-a" style={{ position:'absolute', width:700, height:700, borderRadius:'50%', top:-200, left:-200,
         background:'radial-gradient(circle, rgba(13,148,136,0.13) 0%, transparent 70%)' }} />
-      <div style={{ position:'absolute', width:500, height:500, borderRadius:'50%', top:'20%', right:-100,
+      <div className="background-orb background-orb-b" style={{ position:'absolute', width:500, height:500, borderRadius:'50%', top:'20%', right:-100,
         background:'radial-gradient(circle, rgba(13,148,136,0.09) 0%, transparent 70%)' }} />
-      <div style={{ position:'absolute', width:600, height:600, borderRadius:'50%', bottom:'-10%', left:'25%',
+      <div className="background-orb background-orb-c" style={{ position:'absolute', width:600, height:600, borderRadius:'50%', bottom:'-10%', left:'25%',
         background:'radial-gradient(circle, rgba(19,78,74,0.10) 0%, transparent 70%)' }} />
     </div>
   );
@@ -37,7 +55,7 @@ const ScrollFloat = ({ children }: { children: React.ReactNode }) => {
   }, [children]);
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || shouldReduceMotion()) return;
     const ctx = gsap.context(() => {
       const chars = el.querySelectorAll('span');
       gsap.fromTo(chars,
@@ -61,7 +79,7 @@ const FeaturesHeading = ({ children }: { children: React.ReactNode }) => {
   const ref = useRef<HTMLHeadingElement | null>(null);
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || shouldReduceMotion()) return;
     gsap.set(el, { opacity: 0, x: -80 });
     const ctx = gsap.context(() => {
       gsap.to(el, { opacity: 1, x: 0, duration: 0.9, ease: 'power3.out',
@@ -78,90 +96,77 @@ const FeaturesHeading = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-interface Card { id: number; image: string; }
-interface RotatingCardsCarouselProps { isMobile: boolean; }
-
-const RotatingCardsCarousel = ({ isMobile }: RotatingCardsCarouselProps) => {
-  const cards: Card[] = [
-    { id: 1, image: '/images/G1/homepagess.png' },
-    { id: 2, image: '/images/G1/vaulpagess.png' },
-    { id: 3, image: '/images/G1/profilepagess.png' },
-  ];
-  const [rotation, setRotation] = useState(0);
-  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
-  useEffect(() => {
-    if (selectedCard !== null) return;
-    const interval = setInterval(() => { setRotation((prev) => (prev + 1) % 3); }, 2000);
-    return () => clearInterval(interval);
-  }, [selectedCard]);
-  const getCardPosition = (index: number) => { const adjustedIndex = (index - rotation + 3) % 3; return (adjustedIndex + 1) % 3; };
-  const getZIndex  = (pos: number) => pos === 0 ? 30 : pos === 1 ? 20 : 10;
-  const getScale   = (pos: number) => pos === 0 ? 1 : 0.65;
-  const getOpacity = (pos: number) => pos === 0 ? 1 : 0.7;
-  const getYOffset = (pos: number) => pos === 0 ? 0 : pos === 1 ? -70 : 70;
-  return (
-    <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
-      {!selectedCard && (
-        <div className="relative w-full h-full flex items-center justify-center">
-          {cards.map((card, index) => {
-            const position = getCardPosition(index);
-            return (
-              <div key={card.id}
-                className={`absolute w-64 h-48 md:w-[40rem] md:h-[21rem] transition-all duration-700 ease-out ${!isMobile ? 'cursor-pointer' : ''}`}
-                style={{ zIndex: getZIndex(position), transform: `translateY(${getYOffset(position)}px) scale(${getScale(position)})`,
-                  opacity: getOpacity(position), left: '50%', marginLeft: '-128px', marginTop: '-96px',
-                  pointerEvents: isMobile ? 'none' : (position === 0 ? 'auto' : 'none') }}
-                onClick={!isMobile ? () => setSelectedCard(card) : undefined}>
-                <img src={card.image} className="w-full h-full object-cover rounded-2xl shadow-2xl hover:shadow-3xl transition-shadow duration-300" alt={`Card ${card.id}`} />
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {selectedCard && (
-        <div className="fixed top-1/2 left-[66.67%] transform -translate-x-1/2 -translate-y-1/2 w-[50rem] h-[30rem] bg-black bg-opacity-50 rounded-3xl flex items-center justify-center z-50">
-          <div className="relative w-[50rem] h-[30rem] rounded-3xl">
-            <img src={selectedCard.image} className="w-full h-full object-cover rounded-3xl shadow-2xl" alt={`Enlarged Card ${selectedCard.id}`} />
-            <button onClick={() => setSelectedCard(null)} className="absolute -top-4 -right-4 bg-white rounded-full p-2 shadow-lg hover:bg-gray-100 transition-colors duration-200 z-60">
-              <X size={24} className="text-gray-900" />
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
 export default function Landing() {
   const [menu, setMenu] = useState(false);
-  const [expanded, setExpanded] = useState<number | null>(null);
-  const [heroExpanded, setHeroExpanded] = useState<number[]>([]);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 768
+  );
   const [showDemoPlayButton, setShowDemoPlayButton] = useState(true);
+  const pageRef = useRef<HTMLDivElement | null>(null);
   const demoVideoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
-    setIsMobile(window.innerWidth < 768);
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const root = pageRef.current;
+    if (!root || shouldReduceMotion()) return;
+
     const ctx = gsap.context(() => {
-      gsap.from('.mission-top-left', { x: -60, opacity: 0, duration: 0.7, ease: 'power3.out',
-        scrollTrigger: { trigger: '.mission-top-left', start: 'top 85%', end: 'bottom 70%', scrub: false, toggleActions: 'play none none reverse' } });
-      gsap.from('.mission-right', { x: 60, opacity: 0, duration: 0.8, ease: 'power3.out',
-        scrollTrigger: { trigger: '.mission-right', start: 'top 85%', end: 'bottom 70%', scrub: false, toggleActions: 'play none none reverse' } });
-      gsap.from('.mission-bottom-left', { x: -60, opacity: 0, duration: 0.7, ease: 'power3.out',
-        scrollTrigger: { trigger: '.mission-bottom-left', start: 'top 85%', end: 'bottom 70%', scrub: false, toggleActions: 'play none none reverse' } });
-    });
+      const heroTimeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
+
+      heroTimeline
+        .from('.nav-shell', { y: -18, opacity: 0, duration: 0.75 })
+        .from('.hero-copy > *', { y: 32, opacity: 0, duration: 0.8, stagger: 0.12 }, '-=0.42')
+        .from('.hero-visual-shell', { y: 40, opacity: 0, scale: 0.98, duration: 1 }, '-=0.55')
+        .from('.hero-pill', { opacity: 0, duration: 0.45, stagger: 0.08 }, '-=0.66');
+
+      gsap.utils.toArray<HTMLElement>('.reveal-section').forEach((section) => {
+        gsap.from(section, {
+          y: 42,
+          opacity: 0,
+          duration: 0.85,
+          ease: 'power3.out',
+          scrollTrigger: {
+            trigger: section,
+            start: 'top 84%',
+            toggleActions: 'play none none reverse',
+          },
+        });
+      });
+
+      gsap.utils.toArray<HTMLElement>('.stagger-group').forEach((group) => {
+        const items = group.querySelectorAll('.stagger-item');
+        if (!items.length) return;
+
+        gsap.from(items, {
+          y: 28,
+          opacity: 0,
+          duration: 0.72,
+          stagger: 0.1,
+          ease: 'power3.out',
+          scrollTrigger: {
+            trigger: group,
+            start: 'top 84%',
+            toggleActions: 'play none none reverse',
+          },
+        });
+      });
+    }, root);
+
+    ScrollTrigger.refresh();
     return () => ctx.revert();
   }, []);
 
   const nav = (id: string) => {
     setMenu(false);
-    if (id === 'login') return (window.location.href = '/auth/login');
+    if (id === 'login') {
+      window.location.assign('/auth/login');
+      return;
+    }
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
   };
 
@@ -184,26 +189,106 @@ export default function Landing() {
   };
 
   return (
-    <div className="relative" style={{ fontFamily:"'DM Sans', sans-serif", background:'#fafaf9', color:'#0f1a17', overflowX:'hidden' }}>
+    <div ref={pageRef} className="relative" style={{ fontFamily:"'DM Sans', sans-serif", background:'#fafaf9', color:'#0f1a17', overflowX:'hidden' }}>
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Sans:wght@300;400;500;600&display=swap');
-        @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:0.3} }
-        @keyframes floatCard { 0%,100%{transform:translateY(0px) rotate(-1deg)} 50%{transform:translateY(-10px) rotate(1deg)} }
-        @keyframes floatCardB { 0%,100%{transform:translateY(0px) rotate(2deg)} 50%{transform:translateY(-14px) rotate(-1deg)} }
-        @keyframes floatCardC { 0%,100%{transform:translateY(0px) rotate(-0.5deg)} 50%{transform:translateY(-8px) rotate(0.5deg)} }
-        .anim-badge  { animation: fadeUp 0.6s 0.0s ease both; }
-        .anim-h1     { animation: fadeUp 0.6s 0.1s ease both; }
-        .anim-sub    { animation: fadeUp 0.6s 0.2s ease both; }
-        .anim-cta    { animation: fadeUp 0.6s 0.3s ease both; }
-        .anim-cards  { animation: fadeUp 0.6s 0.45s ease both; }
-        .btn-primary-hover:hover  { transform:translateY(-2px); box-shadow:0 8px 30px rgba(13,148,136,0.45) !important; }
-        .pain-card-hover:hover    { transform:translateY(-6px); box-shadow:0 20px 50px rgba(0,0,0,0.13) !important; }
-        .feat-card-hover:hover    { transform:translateY(-6px); box-shadow:0 20px 50px rgba(0,0,0,0.13) !important; }
-        .mission-card-hover:hover { background:rgba(255,255,255,0.12) !important; transform:translateX(5px); }
-        .nav-link-hover:hover     { color:#0d9488 !important; }
-        .footer-link-hover:hover  { color:#99f6e4 !important; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        @keyframes menuReveal {
+          from { opacity:0; transform:translateY(-14px) scaleY(0.98); }
+          to { opacity:1; transform:translateY(0) scaleY(1); }
+        }
+        @keyframes haloPulse {
+          0%,100% { box-shadow:0 18px 40px rgba(15,26,23,0.35), 0 0 0 0 rgba(255,255,255,0.16); }
+          50% { box-shadow:0 24px 52px rgba(15,26,23,0.42), 0 0 0 16px rgba(255,255,255,0); }
+        }
+        @keyframes orbDriftA {
+          0%,100% { transform:translate3d(0,0,0) scale(1); }
+          50% { transform:translate3d(18px,-24px,0) scale(1.04); }
+        }
+        @keyframes orbDriftB {
+          0%,100% { transform:translate3d(0,0,0) scale(1); }
+          50% { transform:translate3d(-20px,16px,0) scale(1.05); }
+        }
+        @keyframes orbDriftC {
+          0%,100% { transform:translate3d(0,0,0) scale(1); }
+          50% { transform:translate3d(14px,-18px,0) scale(1.03); }
+        }
+        .background-orb { filter: blur(18px); will-change: transform; }
+        .background-orb-a { animation: orbDriftA 18s ease-in-out infinite; }
+        .background-orb-b { animation: orbDriftB 22s ease-in-out infinite; }
+        .background-orb-c { animation: orbDriftC 20s ease-in-out infinite; }
+        .nav-shell { box-shadow:0 12px 30px rgba(15,26,23,0.06); }
+        .nav-brand { transition:transform 220ms ease, filter 220ms ease; }
+        .nav-brand:hover { transform:translateY(-1px); filter:saturate(1.08); }
+        .nav-link-hover,
+        .footer-link-hover { transition:color 0.2s ease, transform 0.2s ease; }
+        .nav-link-hover:hover { color:#0d9488 !important; transform:translateY(-1px); }
+        .footer-link-hover:hover { color:#99f6e4 !important; transform:translateX(2px); }
+        .menu-panel {
+          animation:menuReveal 0.34s cubic-bezier(0.22,1,0.36,1) both;
+          transform-origin:top center;
+          backdrop-filter:blur(18px);
+        }
+        .menu-link {
+          animation:menuReveal 0.38s cubic-bezier(0.22,1,0.36,1) both;
+          transition:background 0.2s ease, padding-left 0.22s ease, color 0.2s ease;
+        }
+        .menu-link:hover { background:rgba(20,184,166,0.08) !important; padding-left:1.8rem; color:#0f766e; }
+        .btn-primary-hover:hover { transform:translateY(-3px); box-shadow:0 16px 36px rgba(13,148,136,0.38) !important; }
+        .cta-secondary { transition:transform 0.25s ease, color 0.25s ease; }
+        .cta-secondary:hover { transform:translateY(-2px); color:#0f766e !important; }
+        .cta-secondary-icon { transition:transform 0.28s ease, background 0.28s ease, box-shadow 0.28s ease; }
+        .cta-secondary:hover .cta-secondary-icon {
+          transform:scale(1.08);
+          background:rgba(13,148,136,0.24) !important;
+          box-shadow:0 12px 30px rgba(13,148,136,0.22);
+        }
+        .hero-float-card { transition:box-shadow 0.35s ease, border-color 0.35s ease, background 0.35s ease; }
+        .hero-float-card:hover {
+          box-shadow:0 28px 72px rgba(13,78,74,0.22) !important;
+          border-color:rgba(13,148,136,0.28) !important;
+        }
+        .hero-row { transition:transform 0.22s ease, background 0.22s ease, border-color 0.22s ease; }
+        .hero-row:hover {
+          transform:translateX(4px);
+          background:#f0fdfa !important;
+          border-color:rgba(13,148,136,0.18) !important;
+        }
+        .card-hover-lift {
+          transition:transform 0.32s cubic-bezier(0.22,1,0.36,1), box-shadow 0.32s ease, border-color 0.32s ease;
+        }
+        .card-hover-lift:hover {
+          transform:translateY(-10px);
+          box-shadow:0 26px 56px rgba(15,23,42,0.12) !important;
+          border-color:rgba(13,148,136,0.22) !important;
+        }
+        .mission-card-hover { transition:background 0.28s ease, transform 0.28s ease; }
+        .mission-card-hover:hover {
+          background:rgba(255,255,255,0.1) !important;
+          transform:translateY(-6px);
+        }
+        .video-shell { transition:transform 0.38s ease, box-shadow 0.38s ease; }
+        .video-shell::after {
+          content:'';
+          position:absolute;
+          inset:0;
+          background:linear-gradient(135deg, rgba(13,148,136,0.16), transparent 35%, rgba(15,26,23,0.18));
+          opacity:0.15;
+          pointer-events:none;
+          transition:opacity 0.3s ease;
+        }
+        .video-shell:hover { transform:translateY(-6px); box-shadow:0 34px 90px rgba(13,78,74,0.28) !important; }
+        .video-shell:hover::after { opacity:0.22; }
+        .play-button {
+          animation:haloPulse 2.4s ease-in-out infinite;
+          transition:transform 0.24s ease, background 0.24s ease, border-color 0.24s ease;
+        }
+        .play-button:hover {
+          transform:translate(-50%, -50%) scale(1.05) !important;
+          background:rgba(15,26,23,0.86) !important;
+          border-color:rgba(255,255,255,0.46) !important;
+        }
         /* individual pill floats — pure Y, no rotation, staggered so no two adjacent pills ever meet */
         @keyframes fp1 { 0%,100%{transform:translateY(0px)}   50%{transform:translateY(-8px)} }
         @keyframes fp2 { 0%,100%{transform:translateY(-5px)}  50%{transform:translateY(5px)} }
@@ -219,9 +304,32 @@ export default function Landing() {
         .float-p4    { animation: fp4 5.7s ease-in-out 0.4s infinite; }
         .float-p5    { animation: fp5 6.4s ease-in-out 1.2s infinite; }
         .float-p6    { animation: fp6 5.0s ease-in-out 2.0s infinite; }
-        .float-a { animation: fp1 5.2s ease-in-out 0.0s infinite; }
-        .float-b { animation: fp2 6.1s ease-in-out 0.9s infinite; }
-        .float-c { animation: fp3 4.8s ease-in-out 1.6s infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .background-orb,
+          .menu-panel,
+          .menu-link,
+          .play-button,
+          .float-main,
+          .float-p1,
+          .float-p2,
+          .float-p3,
+          .float-p4,
+          .float-p5,
+          .float-p6 { animation:none !important; }
+          .nav-brand,
+          .nav-link-hover,
+          .footer-link-hover,
+          .menu-link,
+          .btn-primary-hover,
+          .cta-secondary,
+          .cta-secondary-icon,
+          .hero-float-card,
+          .hero-row,
+          .card-hover-lift,
+          .mission-card-hover,
+          .video-shell,
+          .play-button { transition:none !important; }
+        }
         @media (max-width: 767px) {
           .hero-layout { flex-direction: column !important; }
           .hero-visual { display: none !important; }
@@ -255,14 +363,14 @@ export default function Landing() {
       <div className="relative z-10">
 
         {/* NAV */}
-        <nav style={{ position:'sticky', top:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'space-between',
+        <nav className="nav-shell" style={{ position:'sticky', top:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'space-between',
           padding:'14px 20px', background:'rgba(250,250,249,0.88)', backdropFilter:'blur(16px)', borderBottom:'1px solid rgba(13,148,136,0.12)' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10, fontFamily:"'Playfair Display', serif", fontSize:'1.4rem', fontWeight:700, color:'#0f1a17' }}>
+          <div className="nav-brand" style={{ display:'flex', alignItems:'center', gap:10, fontFamily:"'Playfair Display', serif", fontSize:'1.4rem', fontWeight:700, color:'#0f1a17' }}>
             <div style={{ width:34, height:34, borderRadius:8, background:'linear-gradient(135deg,#0d9488,#134e4a)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'0.78rem', fontWeight:700, boxShadow:'0 4px 14px rgba(13,148,136,0.4)' }}>G1</div>
             G1 Health
           </div>
           <div className="hidden md:flex" style={{ gap:36 }}>
-            {[['Watch Demo','demo'],['Mission','mission'],['Features','features'],['Contact','footer']].map(([t,id]) => (
+            {navItems.map(([t, id]) => (
               <button key={id} onClick={() => nav(id)} className="nav-link-hover"
                 style={{ background:'none', border:'none', cursor:'pointer', color:'#374151', fontSize:'0.9rem', fontWeight:500, transition:'color 0.2s' }}>{t}</button>
             ))}
@@ -281,11 +389,11 @@ export default function Landing() {
         </nav>
 
         {menu && (
-          <div className="bg-white shadow-md md:hidden" style={{ position:'relative', zIndex:49, borderTop:'1px solid #f3f4f6' }}>
-            {[['Watch Demo','demo'],['Mission','mission'],['Features','features'],['Contact','footer']].map(([t,id],index,array) => (
+          <div className="menu-panel bg-white shadow-md md:hidden" style={{ position:'relative', zIndex:49, borderTop:'1px solid #f3f4f6', background:'rgba(255,255,255,0.88)' }}>
+            {navItems.map(([t, id], index, array) => (
               <div key={id}>
-                <button onClick={() => nav(id)} className="block px-6 py-4 text-left w-full"
-                  style={{ background:'none', border:'none', cursor:'pointer', color:'#134E4A', fontWeight:500, fontSize:'1rem' }}>{t}</button>
+                <button onClick={() => nav(id)} className="menu-link block px-6 py-4 text-left w-full"
+                  style={{ background:'none', border:'none', cursor:'pointer', color:'#134E4A', fontWeight:500, fontSize:'1rem', animationDelay:`${index * 0.05}s` }}>{t}</button>
                 {index < array.length - 1 && <hr style={{ borderColor:'#f3f4f6' }} />}
               </div>
             ))}
@@ -302,37 +410,37 @@ export default function Landing() {
           <div className="hero-layout" style={{ maxWidth:1200, margin:'0 auto', width:'100%', display:'flex', alignItems:'center', gap:64, position:'relative', zIndex:1 }}>
 
             {/* LEFT: Text */}
-            <div className="hero-text" style={{ flex:'0 0 50%' }}>
-              <div className="anim-badge" style={{ display:'inline-flex', alignItems:'center', gap:8, background:'rgba(13,148,136,0.10)', border:'1px solid rgba(13,148,136,0.25)', borderRadius:100, padding:'7px 18px', fontSize:'0.8rem', fontWeight:600, color:'#0f766e', marginBottom:28, letterSpacing:'0.05em', textTransform:'uppercase' }}>
+            <div className="hero-text hero-copy" style={{ flex:'0 0 50%' }}>
+              <div style={{ display:'inline-flex', alignItems:'center', gap:8, background:'rgba(13,148,136,0.10)', border:'1px solid rgba(13,148,136,0.25)', borderRadius:100, padding:'7px 18px', fontSize:'0.8rem', fontWeight:600, color:'#0f766e', marginBottom:28, letterSpacing:'0.05em', textTransform:'uppercase' }}>
                 <span style={{ width:6, height:6, borderRadius:'50%', background:'#0d9488', animation:'pulse 2s infinite' }} />
                 🩺 AI-Powered Health Companion
               </div>
-              <h1 className="anim-h1" style={{ fontFamily:"'Playfair Display', serif", fontSize:'clamp(2.8rem,4.5vw,4.4rem)', fontWeight:900, lineHeight:1.08, marginBottom:0 }}>
+              <h1 style={{ fontFamily:"'Playfair Display', serif", fontSize:'clamp(2.8rem,4.5vw,4.4rem)', fontWeight:900, lineHeight:1.08, marginBottom:0 }}>
                 The <em style={{ fontStyle:'italic', color:'#0d9488' }}>complete</em> AI platform for your health
               </h1>
-              <p className="anim-sub" style={{ fontSize:'1.1rem', color:'#6b7280', maxWidth:440, lineHeight:1.7, margin:'24px 0 0', fontWeight:400 }}>
+              <p style={{ fontSize:'1.1rem', color:'#6b7280', maxWidth:440, lineHeight:1.7, margin:'24px 0 0', fontWeight:400 }}>
                 One platform to manage records, medications, family health, and emergencies — for your whole family.
               </p>
-              <div className="anim-cta" style={{ display:'flex', gap:16, alignItems:'center', marginTop:36, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', gap:16, alignItems:'center', marginTop:36, flexWrap:'wrap' }}>
                 <button onClick={() => nav('login')} className="btn-primary-hover"
                   style={{ background:'linear-gradient(135deg,#0d9488,#134e4a)', color:'white', border:'none', cursor:'pointer',
                     padding:'13px 32px', borderRadius:100, fontSize:'1rem', fontWeight:600,
                     fontFamily:"'DM Sans', sans-serif", boxShadow:'0 4px 20px rgba(13,148,136,0.35)', transition:'all 0.2s' }}>
                   Get Started
                 </button>
-                <button onClick={() => nav('demo')}
+                <button onClick={() => nav('demo')} className="cta-secondary"
                 style={{ display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', color:'#134e4a', fontWeight:700, fontSize:'0.95rem', fontFamily:"'DM Sans', sans-serif", transition:'all 0.2s' }}>
-                <span style={{ width:38, height:38, borderRadius:'50%', background:'rgba(13,148,136,0.18)', border:'1.5px solid rgba(13,148,136,0.5)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.9rem', color:'#0d9488' }}>▶</span>
+                <span className="cta-secondary-icon" style={{ width:38, height:38, borderRadius:'50%', background:'rgba(13,148,136,0.18)', border:'1.5px solid rgba(13,148,136,0.5)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.9rem', color:'#0d9488' }}>▶</span>
                Watch Demo
                </button>
               </div>
             </div>
 
             {/* RIGHT: Floating UI mockup cards — all absolutely positioned to fill full height */}
-            <div className="hero-visual anim-cards" style={{ flex:'0 0 46%', position:'relative', height:600 }}>
+            <div className="hero-visual hero-visual-shell" style={{ flex:'0 0 46%', position:'relative', height:600 }}>
 
               {/* Main card — top */}
-              <div className="float-main" style={{ position:'absolute', top:0, left:'10%', right:0, borderRadius:20, background:'white', boxShadow:'0 24px 64px rgba(13,78,74,0.18)', overflow:'hidden', border:'1px solid rgba(13,148,136,0.1)' }}>
+              <div className="float-main hero-float-card" style={{ position:'absolute', top:0, left:'10%', right:0, borderRadius:20, background:'white', boxShadow:'0 24px 64px rgba(13,78,74,0.18)', overflow:'hidden', border:'1px solid rgba(13,148,136,0.1)' }}>
                 <div style={{ background:'linear-gradient(135deg,#134e4a,#0d9488)', padding:'14px 20px', display:'flex', alignItems:'center', gap:10 }}>
                   <div style={{ width:8, height:8, borderRadius:'50%', background:'rgba(255,255,255,0.4)' }} />
                   <div style={{ width:8, height:8, borderRadius:'50%', background:'rgba(255,255,255,0.4)' }} />
@@ -350,7 +458,7 @@ export default function Landing() {
                     { name:'Dr. Sharma Prescription', date:'Jan 2025', tag:'Rx', color:'#dbeafe', tc:'#1e40af' },
                     { name:'Apollo Insurance Card', date:'Dec 2024', tag:'Insurance', color:'#fef9c3', tc:'#854d0e' },
                   ].map(({ name, date, tag, color, tc }) => (
-                    <div key={name} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 12px', borderRadius:10, background:'#fafaf9', marginBottom:6, border:'1px solid #f3f4f6' }}>
+                    <div key={name} className="hero-row" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 12px', borderRadius:10, background:'#fafaf9', marginBottom:6, border:'1px solid #f3f4f6' }}>
                       <div style={{ display:'flex', gap:10, alignItems:'center' }}>
                         <span style={{ fontSize:'1rem' }}>📄</span>
                         <div>
@@ -365,7 +473,7 @@ export default function Landing() {
               </div>
 
               {/* Floating pill — AI Summary — left, mid */}
-              <div className="float-p1" style={{ position:'absolute', top:280, left:0, borderRadius:16, background:'white', padding:'13px 16px', boxShadow:'0 12px 32px rgba(0,0,0,0.10)', display:'flex', alignItems:'center', gap:10, border:'1px solid rgba(13,148,136,0.12)', minWidth:210 }}>
+              <div className="float-p1 hero-pill hero-float-card" style={{ position:'absolute', top:280, left:0, borderRadius:16, background:'white', padding:'13px 16px', boxShadow:'0 12px 32px rgba(0,0,0,0.10)', display:'flex', alignItems:'center', gap:10, border:'1px solid rgba(13,148,136,0.12)', minWidth:210 }}>
                 <div style={{ width:34, height:34, borderRadius:9, background:'rgba(13,148,136,0.1)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1rem', flexShrink:0 }}>🧠</div>
                 <div>
                   <p style={{ fontSize:'0.65rem', color:'#3e4146', margin:0 }}>AI Summary ready</p>
@@ -374,7 +482,7 @@ export default function Landing() {
               </div>
 
               {/* Floating pill — Care Circle — right, mid */}
-              <div className="float-p2" style={{ position:'absolute', top:280, right:4, borderRadius:16, background:'#0d9488', padding:'13px 17px', boxShadow:'0 12px 32px rgba(13,148,136,0.3)', display:'flex', alignItems:'center', gap:10, minWidth:195 }}>
+              <div className="float-p2 hero-pill hero-float-card" style={{ position:'absolute', top:280, right:4, borderRadius:16, background:'#0d9488', padding:'13px 17px', boxShadow:'0 12px 32px rgba(13,148,136,0.3)', display:'flex', alignItems:'center', gap:10, minWidth:195 }}>
                 <div style={{ width:34, height:34, borderRadius:9, background:'rgba(255,255,255,0.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1rem', flexShrink:0 }}>👨‍👩‍👧</div>
                 <div>
                   <p style={{ fontSize:'0.65rem', color:'rgba(255, 255, 255, 0.86)', margin:0 }}>Care Circle</p>
@@ -383,7 +491,7 @@ export default function Landing() {
               </div>
 
               {/* Floating pill — Appointment — center-left, lower-mid */}
-              <div className="float-p3" style={{ position:'absolute', top:375, left:0, borderRadius:16, background:'#134e4a', padding:'13px 16px', boxShadow:'0 12px 32px rgba(13,78,74,0.28)', display:'flex', alignItems:'center', gap:10, minWidth:205 }}>
+              <div className="float-p3 hero-pill hero-float-card" style={{ position:'absolute', top:375, left:0, borderRadius:16, background:'#134e4a', padding:'13px 16px', boxShadow:'0 12px 32px rgba(13,78,74,0.28)', display:'flex', alignItems:'center', gap:10, minWidth:205 }}>
                 <div style={{ width:34, height:34, borderRadius:9, background:'rgba(255,255,255,0.12)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1rem', flexShrink:0 }}>📅</div>
                 <div>
                   <p style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.5)', margin:0 }}>Next Appointment</p>
@@ -392,7 +500,7 @@ export default function Landing() {
               </div>
 
               {/* Floating pill — Health Score — right, lower-mid */}
-              <div className="float-p4" style={{ position:'absolute', top:375, right:4, borderRadius:16, background:'white', padding:'12px 16px', boxShadow:'0 12px 32px rgba(0,0,0,0.10)', display:'flex', alignItems:'center', gap:10, border:'1px solid rgba(13,148,136,0.12)', minWidth:185 }}>
+              <div className="float-p4 hero-pill hero-float-card" style={{ position:'absolute', top:375, right:4, borderRadius:16, background:'white', padding:'12px 16px', boxShadow:'0 12px 32px rgba(0,0,0,0.10)', display:'flex', alignItems:'center', gap:10, border:'1px solid rgba(13,148,136,0.12)', minWidth:185 }}>
                 <div style={{ width:34, height:34, borderRadius:9, background:'rgba(13,148,136,0.1)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1rem', flexShrink:0 }}>❤️</div>
                 <div>
                   <p style={{ fontSize:'0.65rem', color:'#3e4146', margin:0 }}>Health Score</p>
@@ -401,7 +509,7 @@ export default function Landing() {
               </div>
 
               {/* Floating pill — Emergency — left, lower */}
-              <div className="float-p5" style={{ position:'absolute', top:470, left:0, borderRadius:16, background:'#0d9488', padding:'14px 18px', boxShadow:'0 16px 40px rgba(13,148,136,0.3)', display:'flex', alignItems:'center', gap:12, minWidth:200 }}>
+              <div className="float-p5 hero-pill hero-float-card" style={{ position:'absolute', top:470, left:0, borderRadius:16, background:'#0d9488', padding:'14px 18px', boxShadow:'0 16px 40px rgba(13,148,136,0.3)', display:'flex', alignItems:'center', gap:12, minWidth:200 }}>
                 <div style={{ width:36, height:36, borderRadius:10, background:'rgba(255,255,255,0.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.1rem' }}>🚨</div>
                 <div>
                   <p style={{ fontSize:'0.7rem', color:'rgba(255,255,255,0.86)', margin:0 }}>Emergency SOS</p>
@@ -410,7 +518,7 @@ export default function Landing() {
               </div>
 
               {/* Floating pill — Medication — right, bottom */}
-              <div className="float-p6" style={{ position:'absolute', top:470, right:4, borderRadius:16, background:'#134e4a', padding:'12px 16px', boxShadow:'0 12px 32px rgba(13,78,74,0.28)', display:'flex', alignItems:'center', gap:10, minWidth:190 }}>
+              <div className="float-p6 hero-pill hero-float-card" style={{ position:'absolute', top:470, right:4, borderRadius:16, background:'#134e4a', padding:'12px 16px', boxShadow:'0 12px 32px rgba(13,78,74,0.28)', display:'flex', alignItems:'center', gap:10, minWidth:190 }}>
                 <div style={{ width:32, height:32, borderRadius:8, background:'rgba(255,255,255,0.12)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1rem' }}>💊</div>
                 <div>
                   <p style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.5)', margin:0 }}>Medication reminder</p>
@@ -425,18 +533,18 @@ export default function Landing() {
 
         {/* ══ PAIN POINTS ══ */}
         <section className="pain-section" style={{ padding:'72px 24px' }}>
-          <div style={{ maxWidth:1200, margin:'0 auto' }}>
+          <div className="reveal-section" style={{ maxWidth:1200, margin:'0 auto' }}>
             <p className="pain-eyebrow" style={{ fontSize:'0.75rem', fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color:'#0d9488', marginBottom:12, textAlign:'center' }}>Why G1 Exists</p>
             <h2 className="pain-heading" style={{ fontFamily:"'Playfair Display', serif", fontSize:'clamp(2rem,4vw,3.2rem)', fontWeight:800, lineHeight:1.12, textAlign:'center', marginBottom:24 }}>
               Healthcare is fragmented.<br /><em style={{ fontStyle:'italic', color:'#0d9488' }}>G1</em> brings it together.
             </h2>
-            <div className="pain-grid-mobile" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14 }}>
+            <div className="pain-grid-mobile stagger-group" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14 }}>
               {[
                 { icon:'🗂️', title:'Scattered records', text:'All medical documents stored and accessible in one secure place — prescriptions, reports, discharge summaries.', bg:'#0f766e', titleColor:'white', textColor:'rgba(255,255,255,0.75)', border:'none', iconBg:'rgba(255,255,255,0.15)' },
                 { icon:'🚨', title:'Emergency preparedness', text:'One tap shares your full medical profile with your Care Circle. Allergies, medications, and contacts — instantly.', bg:'#134e4a', titleColor:'white', textColor:'rgba(255,255,255,0.75)', border:'none', iconBg:'rgba(255,255,255,0.15)' },
                 { icon:'👨‍👩‍👧', title:'Family health management', text:'One account manages health profiles for the whole family — children, elderly parents, and yourself.', bg:'#0d9488', titleColor:'white', textColor:'rgba(255,255,255,0.75)', border:'none', iconBg:'rgba(255,255,255,0.15)' },
               ].map(({ icon, title, text, bg, titleColor, textColor, border, iconBg }) => (
-                <div key={title} className="pain-card-hover"
+                <div key={title} className="stagger-item card-hover-lift"
                   style={{ borderRadius:16, padding:'28px 22px', background:bg, border, position:'relative', overflow:'hidden', transition:'transform 0.25s, box-shadow 0.25s' }}>
                   <div style={{ width:44, height:44, borderRadius:12, background:iconBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.3rem', marginBottom:14 }}>{icon}</div>
                   <h3 style={{ fontSize:'1rem', fontWeight:700, color:titleColor, marginBottom:8 }}>{title}</h3>
@@ -451,12 +559,12 @@ export default function Landing() {
 
         {/* ══ VIDEO ══ */}
         <section id="demo" style={{ padding:'40px 24px 80px', textAlign:'center' }}>
-          <div style={{ maxWidth:900, margin:'0 auto' }}>
+          <div className="reveal-section" style={{ maxWidth:900, margin:'0 auto' }}>
             <p style={{ fontSize:'0.75rem', fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color:'#0d9488', marginBottom:16 }}>See It In Action</p>
             <h2 style={{ fontFamily:"'Playfair Display', serif", fontSize:'clamp(1.8rem,3.5vw,2.6rem)', fontWeight:800, maxWidth:500, margin:'0 auto 48px', lineHeight:1.2 }}>
               Watch how G1 works for your family
             </h2>
-            <div style={{ position:'relative', borderRadius:24, overflow:'hidden', boxShadow:'0 30px 80px rgba(13,78,74,0.25)' }}>
+            <div className="video-shell" style={{ position:'relative', borderRadius:24, overflow:'hidden', boxShadow:'0 30px 80px rgba(13,78,74,0.25)' }}>
               <video 
                 ref={demoVideoRef}
                 src="/videos/Demo Video.mp4#t=0.001" 
@@ -471,6 +579,7 @@ export default function Landing() {
                 <button
                   type="button"
                   onClick={playDemoVideo}
+                  className="play-button"
                   aria-label="Play demo video"
                   style={{
                     position:'absolute',
@@ -511,7 +620,7 @@ export default function Landing() {
           <div style={{ position:'absolute', top:-200, left:-200, width:600, height:600, borderRadius:'50%', border:'1px solid rgba(13,148,136,0.12)', pointerEvents:'none' }} />
           <div style={{ position:'absolute', bottom:-100, right:-100, width:500, height:500, borderRadius:'50%', background:'radial-gradient(circle,rgba(13,148,136,0.15),transparent 70%)', pointerEvents:'none' }} />
           <div style={{ maxWidth:1200, margin:'0 auto', position:'relative', zIndex:1 }}>
-            <div className="mission-top-left">
+            <div className="mission-top-left reveal-section">
               <p style={{ fontSize:'0.75rem', fontWeight:700, letterSpacing:'0.15em', textTransform:'uppercase', color:'#0d9488', marginBottom:24 }}>Our Mission</p>
               <div className="mission-statement" style={{ display:'flex', alignItems:'flex-start', gap:48, flexWrap:'wrap', marginBottom:48 }}>
                 <div style={{ flex:'1 1 280px', minWidth:0 }}>
@@ -519,25 +628,25 @@ export default function Landing() {
                 </div>
                 <div style={{ flex:'1 1 340px', minWidth:0, paddingTop:8 }}>
                   <p style={{ fontSize:'1.05rem', color:'rgba(255,255,255,0.65)', lineHeight:1.85, marginBottom:28 }}>
-                    Medical records are scattered. Families are unprepared for emergencies. Most people don't understand their own health reports.
+                    Medical records are scattered. Families are unprepared for emergencies. Most people don&apos;t understand their own health reports.
                   </p>
                   <p style={{ fontSize:'1.05rem', color:'rgba(255,255,255,0.65)', lineHeight:1.85, marginBottom:28 }}>
                     G1 fixes all three — one platform to store records, manage family health, stay prepared, and stay connected.
                   </p>
                   <div style={{ borderLeft:'3px solid #0d9488', paddingLeft:20 }}>
-                    <p style={{ fontSize:'0.88rem', color:'rgba(255,255,255,0.3)', lineHeight:1.7, fontStyle:'italic' }}>"We're building the health platform we wish our families had."</p>
+                    <p style={{ fontSize:'0.88rem', color:'rgba(255,255,255,0.3)', lineHeight:1.7, fontStyle:'italic' }}>&quot;We&apos;re building the health platform we wish our families had.&quot;</p>
                     <p style={{ fontSize:'0.78rem', color:'#0d9488', fontWeight:600, marginTop:8 }}>— G1 Team, Mumbai</p>
                   </div>
                 </div>
               </div>
             </div>
-            <div className="mission-right mission-pillars" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:2 }}>
+            <div className="mission-right mission-pillars stagger-group" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:2 }}>
               {[
                 { num:'01', icon:'🧠', title:'Clarity',   sub:'Understand your health',    text:'AI turns medical reports and prescriptions into plain language — no jargon, no confusion.', accent:'#0d9488' },
                 { num:'02', icon:'⚡', title:'Readiness', sub:'Prepared for emergencies',   text:'Your profile is always ready to share. One tap reaches your Care Circle and emergency services.', accent:'#14b8a6' },
                 { num:'03', icon:'🤝', title:'Together',  sub:'One account, whole family',  text:'Manage profiles for children, elderly parents, and yourself — all from a single G1 account.', accent:'#5eead4' },
               ].map(({ num, icon, title, sub, text, accent }, i) => (
-                <div key={num} style={{ padding:'36px 32px', borderTop:`3px solid ${accent}`, background: i===1 ? 'rgba(13,148,136,0.06)' : 'transparent' }}>
+                <div key={num} className="stagger-item mission-card-hover" style={{ padding:'36px 32px', borderTop:`3px solid ${accent}`, background: i===1 ? 'rgba(13,148,136,0.06)' : 'transparent' }}>
                   <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
                     <span style={{ fontFamily:"'Playfair Display', serif", fontSize:'2.4rem', fontWeight:900, color:accent, opacity:0.2, lineHeight:1 }}>{num}</span>
                     <span style={{ fontSize:'1.5rem' }}>{icon}</span>
@@ -561,19 +670,19 @@ export default function Landing() {
             </div>
 
             {/* GROUP 1 */}
-            <div style={{ marginBottom:48 }}>
+            <div className="reveal-section" style={{ marginBottom:48 }}>
               <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:24 }}>
                 <div style={{ height:1, flex:1, background:'linear-gradient(90deg,#0d9488,transparent)' }} />
                 <p style={{ fontSize:'0.7rem', fontWeight:700, letterSpacing:'0.14em', textTransform:'uppercase', color:'#0d9488', whiteSpace:'nowrap' }}>Smart Health Management</p>
                 <div style={{ height:1, flex:1, background:'linear-gradient(270deg,#0d9488,transparent)' }} />
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16 }} className="feat-3col">
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16 }} className="feat-3col stagger-group">
                 {[
                   { emoji:'📅', tag:'Appointments', title:'Appointment Tracking', bullets:['View all upcoming appointments','Get reminders before each visit'] },
                   { emoji:'💊', tag:'Medications', title:'Medication Management', bullets:['Set daily dose reminders','Track all ongoing medications','Get alerted when a course ends'] },
                   { emoji:'🚨', tag:'Emergency SOS', title:'Emergency SOS', bullets:['Save emergency contacts','One tap sends your medical profile to contacts & services'] },
                 ].map(({ emoji, tag, title, bullets }) => (
-                  <div key={title} style={{ borderRadius:20, overflow:'hidden', background:'white', border:'1px solid #e5e7eb', boxShadow:'0 2px 12px rgba(0,0,0,0.04)' }}>
+                  <div key={title} className="stagger-item card-hover-lift" style={{ borderRadius:20, overflow:'hidden', background:'white', border:'1px solid #e5e7eb', boxShadow:'0 2px 12px rgba(0,0,0,0.04)' }}>
                     <div style={{ height:88, background:'linear-gradient(135deg,#0d9488,#134e4a)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'2.4rem' }}>{emoji}</div>
                     <div style={{ padding:'20px 24px' }}>
                       <span style={{ fontSize:'0.62rem', fontWeight:700, letterSpacing:'0.09em', textTransform:'uppercase', color:'#0f766e', background:'rgba(13,148,136,0.1)', padding:'2px 9px', borderRadius:100 }}>{tag}</span>
@@ -591,20 +700,20 @@ export default function Landing() {
             </div>
 
             {/* GROUP 2 */}
-            <div style={{ marginBottom:48 }}>
+            <div className="reveal-section" style={{ marginBottom:48 }}>
               <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:24 }}>
                 <div style={{ height:1, flex:1, background:'linear-gradient(90deg,#14b8a6,transparent)' }} />
                 <p style={{ fontSize:'0.7rem', fontWeight:700, letterSpacing:'0.14em', textTransform:'uppercase', color:'#14b8a6', whiteSpace:'nowrap' }}>Medical Records & AI</p>
                 <div style={{ height:1, flex:1, background:'linear-gradient(270deg,#14b8a6,transparent)' }} />
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }} className="feat-2col">
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }} className="feat-2col stagger-group">
                 {[
                   { emoji:'🗂️', tag:'Medical Vault', title:'Medical Vault', dark:true,
                     bullets:['Store lab reports, prescriptions, insurance & bills','Organised by category — access anything instantly','Your full history, always available'] },
                   { emoji:'📄', tag:'AI Summarizer', title:'AI Summarizer', dark:true,
                     bullets:['Upload a document — get an instant plain-language summary','See key highlights and trends','Understand complex reports without medical expertise'] },
                 ].map(({ emoji, tag, title, dark, bullets }) => (
-                  <div key={title} style={{ borderRadius:20, overflow:'hidden',
+                  <div key={title} className="stagger-item card-hover-lift" style={{ borderRadius:20, overflow:'hidden',
                     background: dark ? '#f0fdfa' : 'white',
                     border: dark ? 'none' : '1px solid #e5e7eb',
                     boxShadow: dark ? '0 4px 24px rgba(13,78,74,0.1)' : '0 2px 12px rgba(0,0,0,0.04)',
@@ -626,7 +735,7 @@ export default function Landing() {
             </div>
 
             {/* GROUP 3 */}
-            <div style={{ marginBottom:48 }}>
+            <div className="reveal-section" style={{ marginBottom:48 }}>
               <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:24 }}>
                 <div style={{ height:1, flex:1, background:'linear-gradient(90deg,#0d9488,transparent)' }} />
                 <p style={{ fontSize:'0.7rem', fontWeight:700, letterSpacing:'0.14em', textTransform:'uppercase', color:'#0d9488', whiteSpace:'nowrap' }}>Multi-Profile System</p>
@@ -648,7 +757,7 @@ export default function Landing() {
                     { icon:'🔄', text:'Switch between profiles in one tap' },
                     { icon:'📋', text:'Manage their appointments, medications & documents separately' },
                   ].map(({ icon, text }) => (
-                    <div key={text} style={{ display:'flex', gap:12, alignItems:'center', padding:'12px 16px', borderRadius:12, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)' }}>
+                    <div key={text} className="mission-card-hover" style={{ display:'flex', gap:12, alignItems:'center', padding:'12px 16px', borderRadius:12, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)' }}>
                       <span style={{ fontSize:'1rem', flexShrink:0 }}>{icon}</span>
                       <p style={{ fontSize:'0.84rem', color:'rgba(255,255,255,0.6)', lineHeight:1.5, margin:0 }}>{text}</p>
                     </div>
@@ -658,7 +767,7 @@ export default function Landing() {
             </div>
 
             {/* GROUP 4 */}
-            <div>
+            <div className="reveal-section">
               <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:24 }}>
                 <div style={{ height:1, flex:1, background:'linear-gradient(90deg,#0d9488,transparent)' }} />
                 <p style={{ fontSize:'0.7rem', fontWeight:700, letterSpacing:'0.14em', textTransform:'uppercase', color:'#0d9488', whiteSpace:'nowrap' }}>Our MOAT — Care Circle</p>
@@ -669,8 +778,8 @@ export default function Landing() {
                   <h3 style={{ fontFamily:"'Playfair Display', serif", fontSize:'clamp(1.3rem,2.5vw,1.8rem)', fontWeight:800, color:'white', marginBottom:8, lineHeight:1.2 }}>Care Circle</h3>
                   <p style={{ fontSize:'0.9rem', color:'rgba(255,255,255,0.65)', lineHeight:1.65, maxWidth:560 }}>Connect trusted family and friends. Give each person the right level of access to your health data.</p>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', background:'white' }} className="feat-carecircle-grid">
-                  <div style={{ padding:'28px 32px', borderRight:'1px solid #f3f4f6' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', background:'white' }} className="feat-carecircle-grid stagger-group">
+                  <div className="stagger-item" style={{ padding:'28px 32px', borderRight:'1px solid #f3f4f6' }}>
                     <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:10 }}>
                       <span style={{ fontSize:'1.1rem' }}>🤝</span>
                       <p style={{ fontWeight:700, color:'#0f1a17', fontSize:'0.88rem', margin:0 }}>Friends — Emergency Card</p>
@@ -685,7 +794,7 @@ export default function Landing() {
                       ))}
                     </div>
                   </div>
-                  <div style={{ padding:'28px 32px' }}>
+                  <div className="stagger-item" style={{ padding:'28px 32px' }}>
                     <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:10 }}>
                       <span style={{ fontSize:'1.1rem' }}>👨‍👩‍👧</span>
                       <p style={{ fontWeight:700, color:'#0f1a17', fontSize:'0.88rem', margin:0 }}>Family — Full Access</p>
@@ -713,15 +822,15 @@ export default function Landing() {
         {/* ══ FOOTER ══ */}
         <footer id="footer" style={{ background:'#0f1a17', color:'white', padding:'64px 24px 32px' }}>
           <div style={{ maxWidth:1200, margin:'0 auto' }}>
-            <div className="hidden md:grid" style={{ gridTemplateColumns:'2fr 1fr 1fr', gap:48, marginBottom:48 }}>
-              <div>
+            <div className="hidden md:grid stagger-group" style={{ gridTemplateColumns:'2fr 1fr 1fr', gap:48, marginBottom:48 }}>
+              <div className="stagger-item">
                 <div style={{ display:'flex', alignItems:'center', gap:10, fontFamily:"'Playfair Display', serif", fontSize:'1.3rem', fontWeight:700, marginBottom:14 }}>
                   <div style={{ width:32, height:32, borderRadius:8, background:'linear-gradient(135deg,#0d9488,#134e4a)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'0.75rem', fontWeight:700 }}>G1</div>
                   G1 Health
                 </div>
                 <p style={{ color:'rgba(255,255,255,0.5)', fontSize:'0.9rem', lineHeight:1.7, maxWidth:260 }}>Healthcare, beautifully reimagined. Your health. Your family. Your control.</p>
               </div>
-              <div>
+              <div className="stagger-item">
                 <h4 style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:'rgba(255,255,255,0.4)', marginBottom:16 }}>Contact Us</h4>
                 <div style={{ color:'rgba(255,255,255,0.65)', fontSize:'0.9rem', lineHeight:2 }}>
                   <p>Email : hello@G1.com</p>
@@ -729,15 +838,15 @@ export default function Landing() {
                   <p>Address : 327, 3rd Floor,<br />Ajmera Sikova,<br />ICRC, Ghatkopar West,<br />Mumbai 400086</p>
                 </div>
               </div>
-              <div>
+              <div className="stagger-item">
                 <h4 style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:'rgba(255,255,255,0.4)', marginBottom:16 }}>Legal</h4>
-                {[['Privacy Policy','/legal/privacy-policy'],['Terms of Service','/legal/terms-of-service'],['Cookie Policy','/legal/cookie-policy'],['Health Data Privacy','/legal/health-data-privacy']].map(([t,h]) => (
+                {legalLinks.map(([t, h]) => (
                   <Link key={t} href={h} className="footer-link-hover" style={{ display:'block', color:'rgba(255,255,255,0.65)', textDecoration:'none', fontSize:'0.9rem', marginBottom:10, transition:'color 0.2s' }}>{t}</Link>
                 ))}
               </div>
             </div>
 
-            <div className="md:hidden">
+            <div className="md:hidden reveal-section">
               <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:16 }}>
                 <div style={{ width:24, height:24, background:'linear-gradient(135deg,#0d9488,#134e4a)', borderRadius:6 }} />
                 <p style={{ fontFamily:"'Playfair Display', serif", fontWeight:700, color:'#14b8a6', fontSize:'1.1rem' }}>G1</p>
@@ -752,7 +861,7 @@ export default function Landing() {
                 </div>
                 <div style={{ flex:1 }}>
                   <h3 style={{ fontWeight:600, fontSize:'0.7rem', marginBottom:4, color:'rgba(255,255,255,0.5)' }}>Legal</h3>
-                  {[['Privacy Policy','/legal/privacy-policy'],['Terms of Service','/legal/terms-of-service'],['Cookie Policy','/legal/cookie-policy'],['Health Data Privacy','/legal/health-data-privacy']].map(([t,h]) => (
+                  {legalLinks.map(([t, h]) => (
                     <Link key={t} href={h} style={{ display:'block', color:'rgba(255,255,255,0.5)', textDecoration:'none', fontSize:'0.7rem', marginBottom:6 }}>{t}</Link>
                   ))}
                 </div>

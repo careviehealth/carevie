@@ -1,7 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { X, Loader2, FileText, AlertCircle } from 'lucide-react';
+import {
+  modalOverlayMotion,
+  modalOverlayTransition,
+  modalSurfaceMotion,
+  modalSurfaceTransition,
+} from '@/components/modalMotion';
 
 interface SummaryResponse {
   success: boolean;
@@ -262,22 +269,21 @@ export function MedicalSummaryModal({
     }
   }, [handleGenerateSummary, hasProcessed, isOpen, userId]);
 
-  if (!isOpen) {
-    console.log('🎭 [Modal] Not rendering (isOpen=false)');
-    return null;
-  }
-
-  console.log('🎭 [Modal] RENDERING MODAL');
-
   return (
-    <div 
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
-      onClick={onClose}
-    >
-      <div 
-        className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AnimatePresence>
+      {isOpen ? (
+        <motion.div 
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
+          onClick={onClose}
+          {...modalOverlayMotion}
+          transition={modalOverlayTransition}
+        >
+          <motion.div 
+            className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+            {...modalSurfaceMotion}
+            transition={modalSurfaceTransition}
+          >
         {/* Header */}
         <div className="p-6 border-b bg-gradient-to-r from-emerald-50 to-teal-50">
           <div className="flex justify-between items-center">
@@ -391,7 +397,9 @@ export function MedicalSummaryModal({
             </div>
           </div>
         )}
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }

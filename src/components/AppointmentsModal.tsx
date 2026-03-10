@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { X, ChevronLeft, ChevronRight, Trash2, Calendar as CalendarIcon, List, Clock, MapPin } from 'lucide-react';
+import {
+  modalOverlayMotion,
+  modalOverlayTransition,
+  modalSurfaceMotion,
+  modalSurfaceTransition,
+} from '@/components/modalMotion';
 
 type Appointment = {
   id: string;
@@ -327,8 +334,17 @@ export function AppointmentsModal({
     canUsePortal ? createPortal(content, document.body) : content;
 
   return (
-    <div className="vytara-theme-content fixed inset-0 flex items-center justify-center p-3 sm:p-4 z-50 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden border border-slate-200 flex flex-col">
+    <>
+      <motion.div
+        className="vytara-theme-content fixed inset-0 flex items-center justify-center p-3 sm:p-4 z-50 bg-black/40 backdrop-blur-sm"
+        {...modalOverlayMotion}
+        transition={modalOverlayTransition}
+      >
+        <motion.div
+          className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden border border-slate-200 flex flex-col"
+          {...modalSurfaceMotion}
+          transition={modalSurfaceTransition}
+        >
         {/* Header */}
         <div className="bg-white p-4 sm:p-6 border-b border-slate-200 flex justify-between items-center rounded-t-2xl sm:rounded-t-3xl flex-shrink-0">
           <h2 className="text-lg sm:text-2xl font-bold text-slate-900">Appointments</h2>
@@ -535,12 +551,23 @@ export function AppointmentsModal({
             </>
           )}
         </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Add/Edit Event Modal */}
-      {showEventModal && renderLayer(
-        <div className="vytara-theme-content fixed inset-0 flex items-center justify-center p-3 sm:p-4 z-[60] bg-black/50 backdrop-blur-sm overflow-y-auto">
-          <div className="relative overflow-hidden rounded-2xl sm:rounded-[28px] max-w-md w-full my-4 sm:my-8 border border-slate-200 bg-white shadow-2xl">
+      {renderLayer(
+        <AnimatePresence>
+          {showEventModal ? (
+            <motion.div
+              className="vytara-theme-content fixed inset-0 flex items-center justify-center p-3 sm:p-4 z-[60] bg-black/50 backdrop-blur-sm overflow-y-auto"
+              {...modalOverlayMotion}
+              transition={modalOverlayTransition}
+            >
+              <motion.div
+                className="relative overflow-hidden rounded-2xl sm:rounded-[28px] max-w-md w-full my-4 sm:my-8 border border-slate-200 bg-white shadow-2xl"
+                {...modalSurfaceMotion}
+                transition={modalSurfaceTransition}
+              >
             <div className="relative z-10">
               <div className="p-4 sm:p-6 border-b border-slate-200 bg-white flex justify-between items-center">
                 <h3 className="text-lg sm:text-xl font-bold text-slate-900">
@@ -747,14 +774,26 @@ export function AppointmentsModal({
                 </div>
               </form>
             </div>
-          </div>
-        </div>
+              </motion.div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       )}
 
       {/* Delete Confirmation Modal */}
-      {showDeleteConfirmation && renderLayer(
-        <div className="vytara-theme-content fixed inset-0 flex items-center justify-center p-3 sm:p-4 z-[70] bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-sm w-full border border-slate-200">
+      {renderLayer(
+        <AnimatePresence>
+          {showDeleteConfirmation ? (
+            <motion.div
+              className="vytara-theme-content fixed inset-0 flex items-center justify-center p-3 sm:p-4 z-[70] bg-black/50 backdrop-blur-sm"
+              {...modalOverlayMotion}
+              transition={modalOverlayTransition}
+            >
+              <motion.div
+                className="bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-sm w-full border border-slate-200"
+                {...modalSurfaceMotion}
+                transition={modalSurfaceTransition}
+              >
             <div className="p-4 sm:p-6 border-b border-slate-200">
               <h3 className="text-lg sm:text-xl font-bold text-slate-900">Confirm Deletion</h3>
             </div>
@@ -777,9 +816,11 @@ export function AppointmentsModal({
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+              </motion.div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       )}
-    </div>
+    </>
   );
 }
