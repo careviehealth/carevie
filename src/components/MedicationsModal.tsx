@@ -16,6 +16,11 @@ export type Medication = {
   purpose: string;
   frequency: string;
   timesPerDay?: number;
+  mealTiming?: {
+    breakfast?: "before" | "after";
+    lunch?: "before" | "after";
+    dinner?: "before" | "after";
+  };
   startDate?: string;
   endDate?: string;
   logs?: MedicationLog[];
@@ -41,23 +46,14 @@ export function MedicationsModal({ data, onAdd, onUpdate, onDelete, onLogDose }:
   const [name, setName] = useState("");
   const [dosage, setDosage] = useState("");
   const [purpose, setPurpose] = useState("");
-  const [frequency, setFrequency] = useState("");
-  const [timesPerDay, setTimesPerDay] = useState("1");
+  const [mealTiming, setMealTiming] = useState<Medication["mealTiming"]>({});
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const frequencyOptions = [
-    { label: "Once daily", value: "once_daily", times: 1 },
-    { label: "Twice daily", value: "twice_daily", times: 2 },
-    { label: "Three times daily", value: "three_times_daily", times: 3 },
-    { label: "Four times daily", value: "four_times_daily", times: 4 },
-    { label: "Every 4 hours", value: "every_4_hours", times: 6 },
-    { label: "Every 6 hours", value: "every_6_hours", times: 4 },
-    { label: "Every 8 hours", value: "every_8_hours", times: 3 },
-    { label: "Every 12 hours", value: "every_12_hours", times: 2 },
-    { label: "As needed", value: "as_needed", times: 0 },
-    { label: "With meals", value: "with_meals", times: 3 },
-    { label: "Before bed", value: "before_bed", times: 1 },
+  const mealOptions: Array<{ key: "breakfast" | "lunch" | "dinner"; label: string }> = [
+    { key: "breakfast", label: "Breakfast" },
+    { key: "lunch", label: "Lunch" },
+    { key: "dinner", label: "Dinner" },
   ];
 
   // Auto-set start date to today for new medications
@@ -102,8 +98,7 @@ export function MedicationsModal({ data, onAdd, onUpdate, onDelete, onLogDose }:
     setName("");
     setDosage("");
     setPurpose("");
-    setFrequency("");
-    setTimesPerDay("1");
+    setMealTiming({});
     setStartDate("");
     setEndDate("");
     setEditingId(null);
@@ -113,15 +108,7 @@ export function MedicationsModal({ data, onAdd, onUpdate, onDelete, onLogDose }:
     setName(medication.name);
     setDosage(medication.dosage);
     setPurpose(medication.purpose);
-
-    const matchingOption = frequencyOptions.find((opt) => opt.value === medication.frequency);
-    if (matchingOption) {
-      setFrequency(matchingOption.value);
-      setTimesPerDay(matchingOption.times.toString());
-    } else {
-      setFrequency(medication.frequency);
-      setTimesPerDay((medication.timesPerDay || 1).toString());
-    }
+    setMealTiming(medication.mealTiming || {});
 
     setStartDate(medication.startDate || "");
     setEndDate(medication.endDate || "");
@@ -129,32 +116,54 @@ export function MedicationsModal({ data, onAdd, onUpdate, onDelete, onLogDose }:
     setShowForm(true);
   };
 
-  const handleFrequencyChange = (value: string) => {
-    setFrequency(value);
-    const selected = frequencyOptions.find((opt) => opt.value === value);
-    if (selected) {
-      setTimesPerDay(selected.times.toString());
-    }
+  const getMealTimingSummary = (timing: Medication["mealTiming"]) => {
+    if (!timing) return "";
+
+    const parts = mealOptions
+      .filter((meal) => timing[meal.key])
+      .map((meal) => `${meal.label} ${timing[meal.key]}`);
+
+    return parts.join(", ");
+  };
+
+  const handleMealSelection = (meal: "breakfast" | "lunch" | "dinner", checked: boolean) => {
+    setMealTiming((prev) => {
+      if (!checked) {
+        const updated = { ...prev };
+        delete updated[meal];
+        return updated;
+      }
+      return { ...prev, [meal]: prev?.[meal] || "before" };
+    });
+  };
+
+  const handleMealTimingChange = (
+    meal: "breakfast" | "lunch" | "dinner",
+    value: "before" | "after"
+  ) => {
+    setMealTiming((prev) => ({ ...prev, [meal]: value }));
   };
 
   const handleSave = async () => {
-    if (!name.trim() || !dosage.trim() || !frequency.trim()) {
-      alert("Please fill Name, Dosage, and Frequency.");
+    const selectedMealCount = Object.keys(mealTiming || {}).length;
+
+    if (!name.trim() || !dosage.trim() || selectedMealCount === 0) {
+      alert("Please fill Medication Name, Dosage, and select at least one meal timing.");
       return;
     }
 
     setSaving(true);
     try {
-      const selectedFreq = frequencyOptions.find((opt) => opt.value === frequency);
-      const finalTimesPerDay = selectedFreq ? selectedFreq.times : parseInt(timesPerDay) || 1;
+      const frequencySummary = getMealTimingSummary(mealTiming);
 
       const medicationData: Medication = {
         id: editingId || crypto.randomUUID(),
         name: name.trim(),
         dosage: dosage.trim(),
         purpose: purpose.trim(),
-        frequency: frequency.trim(),
-        timesPerDay: finalTimesPerDay,
+        frequency: frequencySummary,
+        timesPerDay: selectedMealCount,
+        mealTiming,
         startDate: startDate || new Date().toISOString().split("T")[0],
         endDate: endDate || undefined,
         logs: editingId ? data.find((m) => m.id === editingId)?.logs || [] : [],
@@ -260,7 +269,7 @@ export function MedicationsModal({ data, onAdd, onUpdate, onDelete, onLogDose }:
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* ... all form fields remain the same as before ... */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Name</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Medication Name</label>
               <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm focus:border-teal-500 outline-none bg-white" placeholder="e.g., Paracetamol" />
             </div>
             <div>
@@ -271,18 +280,39 @@ export function MedicationsModal({ data, onAdd, onUpdate, onDelete, onLogDose }:
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Purpose (optional)</label>
               <input value={purpose} onChange={(e) => setPurpose(e.target.value)} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm focus:border-teal-500 outline-none bg-white" placeholder="e.g., Pain relief" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Frequency</label>
-              <select value={frequency} onChange={(e) => handleFrequencyChange(e.target.value)} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm focus:border-teal-500 outline-none bg-white">
-                <option value="">Select frequency</option>
-                {frequencyOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Times per Day</label>
-              <input type="number" min="0" max="10" value={timesPerDay} onChange={(e) => setTimesPerDay(e.target.value)} disabled={frequencyOptions.some(opt => opt.value === frequency)} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm focus:border-teal-500 outline-none bg-white disabled:bg-slate-100" placeholder="1" />
+            <div className="md:col-span-2 rounded-xl border border-slate-200 bg-white p-4">
+              <label className="block text-sm font-medium text-slate-700 mb-3">Meal Timing</label>
+              <div className="space-y-3">
+                {mealOptions.map((meal) => {
+                  const isSelected = Boolean(mealTiming?.[meal.key]);
+                  return (
+                    <div key={meal.key} className="flex items-center justify-between gap-4">
+                      <label className="flex items-center gap-2 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => handleMealSelection(meal.key, e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                        />
+                        {meal.label}
+                      </label>
+
+                      {isSelected && (
+                        <select
+                          value={mealTiming?.[meal.key]}
+                          onChange={(e) =>
+                            handleMealTimingChange(meal.key, e.target.value as "before" | "after")
+                          }
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-teal-500 outline-none"
+                        >
+                          <option value="before">Before</option>
+                          <option value="after">After</option>
+                        </select>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Start Date</label>
