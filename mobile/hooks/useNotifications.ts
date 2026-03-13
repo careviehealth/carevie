@@ -4,11 +4,19 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { careCircleApi, type SharedActivityLogRow } from '@/api/modules/carecircle';
 import type { Appointment } from '@/components/AppointmentsModal';
+import {
+  formatMedicationDosage,
+  getDueMedicationReminderSlots,
+  normalizeMedicationRecord,
+  type MedicationRecord,
+  type MedicationReminderSlot,
+} from '@/lib/medications';
 import { supabase } from '@/lib/supabase';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const ACCEPTANCE_WINDOW_DAYS = 30;
 const NOTIFICATION_REFRESH_MS = 60_000;
+const MEAL_REMINDER_WINDOW_MS = 90 * 60 * 1000;
 const LOGS_PAGE_SIZE = 20;
 const seenNotificationsKey = (userId: string, profileId?: string) =>
   `vytara:seen-notifications:${userId}:${profileId ?? 'account'}`;
@@ -33,9 +41,21 @@ export type CareCircleAcceptance = {
 };
 
 export type UpcomingAppointment = {
+  notificationId: string;
+  profileId: string;
+  profileLabel: string | null;
   appointment: Appointment;
   dateTime: Date;
   diffMs: number;
+};
+
+export type MedicationReminderNotification = {
+  notificationId: string;
+  medicationId: string;
+  medicationName: string;
+  dosage: string;
+  slotContext: string;
+  slotTime: Date;
 };
 
 export type FamilyActivityNotification = {
@@ -43,7 +63,27 @@ export type FamilyActivityNotification = {
   log: SharedActivityLogRow;
 };
 
-const notificationIdForAppointment = (id: string) => `appointment:${id}`;
+type AccountAppointmentNotification = Omit<UpcomingAppointment, 'diffMs'>;
+
+type AppointmentsRow = {
+  profile_id: string;
+  appointments: unknown;
+};
+
+type ProfileLabelRow = {
+  id: string;
+  display_name: string | null;
+  name: string | null;
+};
+
+const notificationIdForAppointment = (ownerProfileId: string, appointmentId: string) =>
+  `appointment:self:${ownerProfileId}:${appointmentId}`;
+const notificationIdForMedicationReminder = (
+  ownerProfileId: string,
+  medicationId: string,
+  dateKey: string,
+  slotKey: MedicationReminderSlot['key']
+) => `medication:self:meal:${ownerProfileId}:${medicationId}:${dateKey}:${slotKey}`;
 const notificationIdForInvite = (id: string) => `invite:${id}`;
 const notificationIdForAcceptance = (id: string) => `invite-accepted:${id}`;
 
@@ -53,14 +93,67 @@ const parseAppointmentDateTime = (appointment: Appointment) => {
   return parsed;
 };
 
-const getUpcomingAppointments = (appointments: Appointment[], now: Date) => {
+const parseJsonArray = (value: unknown, fallbackKey: string): unknown[] => {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object' && Array.isArray((value as Record<string, unknown>)[fallbackKey])) {
+    return (value as Record<string, unknown>)[fallbackKey] as unknown[];
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (Array.isArray(parsed)) return parsed;
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        Array.isArray((parsed as Record<string, unknown>)[fallbackKey])
+      ) {
+        return (parsed as Record<string, unknown>)[fallbackKey] as unknown[];
+      }
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
+const createFallbackMedicationId = (entry: Record<string, unknown>, index: number) => {
+  const raw = [
+    typeof entry.name === 'string' ? entry.name.trim() : '',
+    typeof entry.startDate === 'string' ? entry.startDate.trim() : '',
+    String(index),
+  ]
+    .filter(Boolean)
+    .join('-')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return raw || `medication-${index + 1}`;
+};
+
+const normalizeMedicationEntries = (value: unknown): Array<MedicationRecord & { id: string }> =>
+  parseJsonArray(value, 'medications')
+    .map((entry, index) => {
+      const record = (entry ?? {}) as Record<string, unknown>;
+      const fallbackId = createFallbackMedicationId(record, index);
+      return normalizeMedicationRecord(
+        {
+          ...record,
+          id:
+            typeof record.id === 'string' && record.id.trim()
+              ? record.id.trim()
+              : fallbackId,
+        },
+        () => fallbackId
+      );
+    })
+    .filter((entry) => entry.id && entry.name.trim());
+
+const getUpcomingAppointments = (appointments: AccountAppointmentNotification[], now: Date) => {
   return appointments
     .map((appointment) => {
-      const dateTime = parseAppointmentDateTime(appointment);
-      if (!dateTime) return null;
-      const diffMs = dateTime.getTime() - now.getTime();
+      const diffMs = appointment.dateTime.getTime() - now.getTime();
       if (diffMs <= 0 || diffMs > ONE_DAY_MS) return null;
-      return { appointment, dateTime, diffMs };
+      return { ...appointment, diffMs };
     })
     .filter((item): item is UpcomingAppointment => Boolean(item))
     .sort((a, b) => a.diffMs - b.diffMs);
@@ -104,7 +197,10 @@ const notificationIdForFamilyActivity = (logId: string) => `family-activity:${lo
 
 export function useNotifications(userId?: string, profileId?: string) {
   const [now, setNow] = useState(() => new Date());
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [allProfileAppointments, setAllProfileAppointments] = useState<AccountAppointmentNotification[]>([]);
+  const [selectedProfileMedications, setSelectedProfileMedications] = useState<
+    Array<MedicationRecord & { id: string }>
+  >([]);
   const [careCircleInvites, setCareCircleInvites] = useState<CareCircleInvite[]>([]);
   const [careCircleAcceptances, setCareCircleAcceptances] = useState<CareCircleAcceptance[]>([]);
   const [familyActivityLogs, setFamilyActivityLogs] = useState<SharedActivityLogRow[]>([]);
@@ -273,26 +369,105 @@ export function useNotifications(userId?: string, profileId?: string) {
     setNotificationsError(null);
 
     let hadError = false;
-    let nextAppointments: Appointment[] | null = null;
+    let nextAppointments: AccountAppointmentNotification[] | null = null;
+    let nextMedications: Array<MedicationRecord & { id: string }> | null = null;
     let nextInvites: CareCircleInvite[] | null = null;
     let nextAcceptances: CareCircleAcceptance[] | null = null;
     let nextFamilyActivity: SharedActivityLogRow[] | null = null;
 
-    const { data, error } = await supabase
-      .from('user_appointments')
-      .select('appointments')
+    try {
+      const { data, error } = await supabase
+        .from('user_appointments')
+        .select('profile_id, appointments')
+        .eq('user_id', userId);
+
+      if (error) {
+        throw error;
+      }
+
+      const rows = ((data ?? []) as AppointmentsRow[]).filter(
+        (row): row is AppointmentsRow => Boolean(row?.profile_id)
+      );
+      const profileIds = Array.from(new Set(rows.map((row) => row.profile_id)));
+      const profileLabelById = new Map<string, string | null>();
+
+      if (profileIds.length > 0) {
+        const { data: profileRows, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, display_name, name')
+          .in('id', profileIds);
+
+        if (!profileError) {
+          (profileRows ?? []).forEach((profile) => {
+            const typed = profile as ProfileLabelRow;
+            profileLabelById.set(
+              typed.id,
+              typed.display_name?.trim() || typed.name?.trim() || null
+            );
+          });
+        }
+      }
+
+      const appointmentsByNotificationId = new Map<string, AccountAppointmentNotification>();
+
+      rows.forEach((row) => {
+        const appointmentRows = parseJsonArray(row.appointments, 'appointments');
+        appointmentRows.forEach((entry) => {
+          if (!entry || typeof entry !== 'object') return;
+          const appointment = entry as Record<string, unknown>;
+          const date =
+            typeof appointment.date === 'string' ? appointment.date.trim() : '';
+          const time =
+            typeof appointment.time === 'string' ? appointment.time.trim() : '';
+          if (!date || !time) return;
+
+          const appointmentId =
+            typeof appointment.id === 'string' && appointment.id.trim()
+              ? appointment.id.trim()
+              : `${date}-${time}-${appointment.title || appointment.type || 'appointment'}`;
+
+          const normalizedAppointment: Appointment = {
+            id: appointmentId,
+            date,
+            time,
+            title: typeof appointment.title === 'string' ? appointment.title : '',
+            type: typeof appointment.type === 'string' ? appointment.type : 'Appointment',
+          };
+          const dateTime = parseAppointmentDateTime(normalizedAppointment);
+          if (!dateTime) return;
+
+          const notificationId = notificationIdForAppointment(row.profile_id, appointmentId);
+          appointmentsByNotificationId.set(notificationId, {
+            notificationId,
+            profileId: row.profile_id,
+            profileLabel: profileLabelById.get(row.profile_id) ?? null,
+            appointment: normalizedAppointment,
+            dateTime,
+          });
+        });
+      });
+
+      nextAppointments = Array.from(appointmentsByNotificationId.values());
+    } catch (error) {
+      console.error('Appointment notifications fetch error:', error);
+      hadError = true;
+    }
+
+    const { data: medicationData, error: medicationError } = await supabase
+      .from('user_medications')
+      .select('medications')
       .eq('profile_id', profileId)
       .maybeSingle();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        nextAppointments = [];
+    if (medicationError) {
+      if (medicationError.code === 'PGRST116') {
+        nextMedications = [];
       } else {
-        console.error('Appointment notifications fetch error:', error);
+        console.error('Medication notifications fetch error:', medicationError);
         hadError = true;
       }
     } else {
-      nextAppointments = (data?.appointments ?? []) as Appointment[];
+      nextMedications = normalizeMedicationEntries(medicationData?.medications);
     }
 
     try {
@@ -332,7 +507,8 @@ export function useNotifications(userId?: string, profileId?: string) {
       nextFamilyActivity = [];
     }
 
-    if (nextAppointments) setAppointments(nextAppointments);
+    if (nextAppointments) setAllProfileAppointments(nextAppointments);
+    if (nextMedications) setSelectedProfileMedications(nextMedications);
     if (nextInvites) setCareCircleInvites(nextInvites);
     if (nextAcceptances) setCareCircleAcceptances(nextAcceptances);
     if (nextFamilyActivity) setFamilyActivityLogs(nextFamilyActivity);
@@ -403,7 +579,8 @@ export function useNotifications(userId?: string, profileId?: string) {
 
   useEffect(() => {
     if (!userId || !profileId) {
-      setAppointments([]);
+      setAllProfileAppointments([]);
+      setSelectedProfileMedications([]);
       setCareCircleInvites([]);
       setCareCircleAcceptances([]);
       setFamilyActivityLogs([]);
@@ -447,7 +624,12 @@ export function useNotifications(userId?: string, profileId?: string) {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'user_appointments', filter: `profile_id=eq.${profileId}` },
+        { event: '*', schema: 'public', table: 'user_appointments', filter: `user_id=eq.${userId}` },
+        scheduleRefresh
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'user_medications', filter: `profile_id=eq.${profileId}` },
         scheduleRefresh
       )
       .subscribe();
@@ -477,9 +659,47 @@ export function useNotifications(userId?: string, profileId?: string) {
   );
 
   const upcomingAppointments = useMemo(
-    () => getUpcomingAppointments(appointments, now),
-    [appointments, now]
+    () => getUpcomingAppointments(allProfileAppointments, now),
+    [allProfileAppointments, now]
   );
+
+  const medicationReminderNotifications = useMemo(() => {
+    const ownerProfileId = profileId?.trim();
+    if (!ownerProfileId) return [];
+
+    const todayDateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+      now.getDate()
+    ).padStart(2, '0')}`;
+
+    return selectedProfileMedications
+      .flatMap<MedicationReminderNotification>((medication) => {
+        const medicationName = medication.name.trim();
+        if (!medication.id || !medicationName) return [];
+
+        return getDueMedicationReminderSlots(medication, now, MEAL_REMINDER_WINDOW_MS).flatMap(
+          (slot) => {
+            const notificationId = notificationIdForMedicationReminder(
+              ownerProfileId,
+              medication.id,
+              todayDateKey,
+              slot.key
+            );
+            if (dismissedNotificationIds.has(notificationId)) return [];
+            return [
+              {
+                notificationId,
+                medicationId: medication.id,
+                medicationName,
+                dosage: formatMedicationDosage(medication.dosage),
+                slotContext: slot.context,
+                slotTime: slot.slotTime,
+              },
+            ];
+          }
+        );
+      })
+      .sort((a, b) => a.slotTime.getTime() - b.slotTime.getTime());
+  }, [dismissedNotificationIds, now, profileId, selectedProfileMedications]);
 
   const pendingInvites = useMemo(() => {
     return [...careCircleInvites].sort(
@@ -509,7 +729,8 @@ export function useNotifications(userId?: string, profileId?: string) {
 
     const syncDismissed = async () => {
       const allIds = [
-        ...upcomingAppointments.map(({ appointment }) => notificationIdForAppointment(appointment.id)),
+        ...upcomingAppointments.map(({ notificationId }) => notificationId),
+        ...medicationReminderNotifications.map(({ notificationId }) => notificationId),
         ...pendingInvites.map((inv) => notificationIdForInvite(inv.id)),
         ...acceptedInvites.map((inv) => notificationIdForAcceptance(inv.id)),
         ...familyActivityLogs.map((log) => notificationIdForFamilyActivity(log.id)),
@@ -536,16 +757,17 @@ export function useNotifications(userId?: string, profileId?: string) {
 
     void syncDismissed();
     return () => { isActive = false; };
-  }, [userId, upcomingAppointments, pendingInvites, acceptedInvites, familyActivityLogs]);
+  }, [userId, upcomingAppointments, medicationReminderNotifications, pendingInvites, acceptedInvites, familyActivityLogs]);
 
   const notificationIds = useMemo(() => {
     return [
-      ...upcomingAppointments.map(({ appointment }) => notificationIdForAppointment(appointment.id)),
+      ...upcomingAppointments.map(({ notificationId }) => notificationId),
+      ...medicationReminderNotifications.map(({ notificationId }) => notificationId),
       ...pendingInvites.map((invite) => notificationIdForInvite(invite.id)),
       ...acceptedInvites.map((invite) => notificationIdForAcceptance(invite.id)),
       ...visibleFamilyActivity.map((log) => notificationIdForFamilyActivity(log.id)),
     ];
-  }, [upcomingAppointments, pendingInvites, acceptedInvites, visibleFamilyActivity]);
+  }, [upcomingAppointments, medicationReminderNotifications, pendingInvites, acceptedInvites, visibleFamilyActivity]);
 
   useEffect(() => {
     if (!hasHydratedSeen) return;
@@ -573,9 +795,9 @@ export function useNotifications(userId?: string, profileId?: string) {
   const unreadAppointments = useMemo(
     () =>
       upcomingAppointments.filter(
-        ({ appointment }) =>
-          !seenNotificationIds.has(notificationIdForAppointment(appointment.id)) &&
-          !dismissedNotificationIds.has(notificationIdForAppointment(appointment.id))
+        ({ notificationId }) =>
+          !seenNotificationIds.has(notificationId) &&
+          !dismissedNotificationIds.has(notificationId)
       ),
     [upcomingAppointments, seenNotificationIds, dismissedNotificationIds]
   );
@@ -583,11 +805,31 @@ export function useNotifications(userId?: string, profileId?: string) {
   const readAppointments = useMemo(
     () =>
       upcomingAppointments.filter(
-        ({ appointment }) =>
-          seenNotificationIds.has(notificationIdForAppointment(appointment.id)) &&
-          !dismissedNotificationIds.has(notificationIdForAppointment(appointment.id))
+        ({ notificationId }) =>
+          seenNotificationIds.has(notificationId) &&
+          !dismissedNotificationIds.has(notificationId)
       ),
     [upcomingAppointments, seenNotificationIds, dismissedNotificationIds]
+  );
+
+  const unreadMedicationReminders = useMemo(
+    () =>
+      medicationReminderNotifications.filter(
+        ({ notificationId }) =>
+          !seenNotificationIds.has(notificationId) &&
+          !dismissedNotificationIds.has(notificationId)
+      ),
+    [medicationReminderNotifications, seenNotificationIds, dismissedNotificationIds]
+  );
+
+  const readMedicationReminders = useMemo(
+    () =>
+      medicationReminderNotifications.filter(
+        ({ notificationId }) =>
+          seenNotificationIds.has(notificationId) &&
+          !dismissedNotificationIds.has(notificationId)
+      ),
+    [medicationReminderNotifications, seenNotificationIds, dismissedNotificationIds]
   );
 
   const unreadInvites = useMemo(
@@ -682,6 +924,8 @@ export function useNotifications(userId?: string, profileId?: string) {
     notificationsError,
     unreadAppointments,
     readAppointments,
+    unreadMedicationReminders,
+    readMedicationReminders,
     unreadInvites,
     readInvites,
     unreadAcceptances,

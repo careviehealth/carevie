@@ -21,6 +21,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect } from '@react-navigation/native';
+import { Calendar } from 'react-native-calendars';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Pdf from 'react-native-pdf';
 import Animated, {
@@ -39,9 +40,11 @@ import { Text } from '@/components/Themed';
 import { Screen } from '@/components/Screen';
 import { SkeletonListItem } from '@/components/Skeleton';
 import { EmptyStatePreset, EmptyState } from '@/components/EmptyState';
+import { useAppTheme } from '@/hooks/useAppTheme';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { toast } from '@/lib/toast';
+import { TourAnchor, useOnboardingTour } from '@/providers/OnboardingTourProvider';
 import {
   careCircleApi,
   type CareCircleRole,
@@ -60,6 +63,20 @@ import {
   PHONE_MAX_DIGITS,
   type CountryOption,
 } from '@/lib/countries';
+import {
+  MEDICATION_MEAL_OPTIONS,
+  countMedicationMealTiming,
+  deriveMedicationMealTiming,
+  formatMedicationDosage,
+  formatMedicationFrequencyLabel,
+  formatMedicationMealTimingSummary,
+  normalizeMedicationDosage,
+  normalizeMedicationRecord,
+  resolveMedicationFrequency,
+  resolveMedicationTimesPerDay,
+  type MedicationMealKey,
+  type MedicationMealTiming,
+} from '@/lib/medications';
 import { supabase } from '@/lib/supabase';
 
 type CircleView = 'my-circle' | 'circles-in';
@@ -125,8 +142,8 @@ type MedicationEditorDraft = {
   name: string;
   dosage: string;
   frequency: string;
+  mealTiming: MedicationMealTiming;
   purpose: string;
-  timesPerDay: string;
   startDate: string;
   endDate: string;
   logs: MemberDetailsMedication['logs'];
@@ -170,26 +187,12 @@ const emptyMedicationEditorDraft: MedicationEditorDraft = {
   name: '',
   dosage: '',
   frequency: '',
+  mealTiming: {},
   purpose: '',
-  timesPerDay: '',
   startDate: '',
   endDate: '',
   logs: [],
 };
-
-const medicationFrequencyOptions = [
-  { label: 'Once daily', value: 'once_daily', times: 1 },
-  { label: 'Twice daily', value: 'twice_daily', times: 2 },
-  { label: 'Three times daily', value: 'three_times_daily', times: 3 },
-  { label: 'Four times daily', value: 'four_times_daily', times: 4 },
-  { label: 'Every 4 hours', value: 'every_4_hours', times: 6 },
-  { label: 'Every 6 hours', value: 'every_6_hours', times: 4 },
-  { label: 'Every 8 hours', value: 'every_8_hours', times: 3 },
-  { label: 'Every 12 hours', value: 'every_12_hours', times: 2 },
-  { label: 'As needed', value: 'as_needed', times: 0 },
-  { label: 'With meals', value: 'with_meals', times: 3 },
-  { label: 'Before bed', value: 'before_bed', times: 1 },
-] as const;
 
 const appointmentTypeFields: Record<string, AppointmentTypeField[]> = {
   'Doctor Visit': [
@@ -326,6 +329,40 @@ const emptyAppointmentTimeParts: AppointmentTimeParts = {
 
 const generateLocalId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
+const formatEditorDateLabel = (value?: string) => {
+  if (!value) return 'Select date';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Select date';
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
+
+const normalizeMemberMedication = (value: unknown): MemberDetailsMedication | null => {
+  const normalized = normalizeMedicationRecord(value, generateLocalId);
+  if (!normalized.name || !normalized.dosage || !normalized.frequency) {
+    return null;
+  }
+  return {
+    ...normalized,
+    timesPerDay: normalized.timesPerDay ?? undefined,
+  };
+};
+
+const normalizeMemberMedicationList = (value: unknown): MemberDetailsMedication[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => normalizeMemberMedication(entry))
+    .filter((entry): entry is MemberDetailsMedication => entry !== null);
+};
+
+const normalizeMemberDetailsPayload = (value: MemberDetailsPayload): MemberDetailsPayload => ({
+  ...value,
+  medications: normalizeMemberMedicationList(value.medications),
+});
+
 const normalizeTime24h = (value: string): string | null => {
   const trimmed = value.trim();
   const match = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
@@ -461,6 +498,8 @@ const SkeletonMemberCard = ({ index }: { index: number }) => (
 export default function CareCircleScreen() {
   const { user } = useAuth();
   const { selectedProfile } = useProfile();
+  const { colors: themeColors } = useAppTheme();
+  const { currentStepId, isRunning } = useOnboardingTour();
   const profileId = selectedProfile?.id ?? '';
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -515,7 +554,8 @@ export default function CareCircleScreen() {
   const [medicationEditorDraft, setMedicationEditorDraft] = useState<MedicationEditorDraft>(
     emptyMedicationEditorDraft
   );
-  const [medicationFrequencyPickerOpen, setMedicationFrequencyPickerOpen] = useState(false);
+  const [medicationStartPickerOpen, setMedicationStartPickerOpen] = useState(false);
+  const [medicationEndPickerOpen, setMedicationEndPickerOpen] = useState(false);
   const [medicationEditorSaving, setMedicationEditorSaving] = useState(false);
   const [medicationEditorError, setMedicationEditorError] = useState<string | null>(null);
   const [vaultFiles, setVaultFiles] = useState<MemberVaultFile[]>([]);
@@ -546,20 +586,10 @@ export default function CareCircleScreen() {
   const countryPickerListMaxHeight = Math.min(height * 0.55, 420);
   const isSelectedProfilePrimary = selectedProfile?.is_primary ?? false;
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], []);
-  const selectedMedicationFrequency = useMemo(
-    () =>
-      medicationFrequencyOptions.find((option) => option.value === medicationEditorDraft.frequency) ??
-      null,
-    [medicationEditorDraft.frequency]
+  const normalizedMedicationEditorMealTiming = useMemo(
+    () => deriveMedicationMealTiming(medicationEditorDraft.mealTiming, medicationEditorDraft.frequency),
+    [medicationEditorDraft.frequency, medicationEditorDraft.mealTiming]
   );
-  const isMedicationTimesPerDayLocked = selectedMedicationFrequency !== null;
-  const getMedicationFrequencyLabel = useCallback((value: string | null | undefined) => {
-    const normalized = (value ?? '').trim();
-    if (!normalized) return '—';
-    return (
-      medicationFrequencyOptions.find((option) => option.value === normalized)?.label ?? normalized
-    );
-  }, []);
   const activeAppointmentTypeFields = useMemo(
     () => getAppointmentTypeFields(appointmentEditorDraft.type),
     [appointmentEditorDraft.type]
@@ -948,7 +978,7 @@ export default function CareCircleScreen() {
       setVaultPreviewError(null);
       try {
         const data = await careCircleApi.getMemberDetails(member.id);
-        setMemberDetails(data);
+        setMemberDetails(normalizeMemberDetailsPayload(data));
       } catch (err: any) {
         setMemberDetailsError(err?.message || 'Failed to load member details.');
       } finally {
@@ -1204,7 +1234,9 @@ export default function CareCircleScreen() {
   }, []);
 
   const updateMemberMedications = useCallback((medications: MemberDetailsMedication[]) => {
-    setMemberDetails((prev) => (prev ? { ...prev, medications } : prev));
+    setMemberDetails((prev) =>
+      prev ? { ...prev, medications: normalizeMemberMedicationList(medications) } : prev
+    );
   }, []);
 
   const openAddAppointmentEditor = useCallback(() => {
@@ -1434,7 +1466,8 @@ export default function CareCircleScreen() {
       ...emptyMedicationEditorDraft,
       startDate: todayIso,
     });
-    setMedicationFrequencyPickerOpen(false);
+    setMedicationStartPickerOpen(false);
+    setMedicationEndPickerOpen(false);
     setMedicationEditorError(null);
     setMedicationEditorOpen(true);
   }, [canManageSelectedMemberMedicalData, todayIso]);
@@ -1442,26 +1475,24 @@ export default function CareCircleScreen() {
   const openEditMedicationEditor = useCallback(
     (medication: MemberDetailsMedication) => {
       if (!canManageSelectedMemberMedicalData) return;
-      const matchingOption = medicationFrequencyOptions.find(
-        (option) => option.value === (medication.frequency || '')
+      const normalizedMealTiming = deriveMedicationMealTiming(
+        medication.mealTiming,
+        medication.frequency
       );
       setMedicationEditorMode('edit');
       setMedicationEditorDraft({
         id: medication.id,
         name: medication.name || '',
-        dosage: medication.dosage || '',
-        frequency: medication.frequency || '',
+        dosage: formatMedicationDosage(medication.dosage),
+        frequency: resolveMedicationFrequency(medication.frequency, normalizedMealTiming),
+        mealTiming: normalizedMealTiming,
         purpose: medication.purpose || '',
-        timesPerDay: matchingOption
-          ? String(matchingOption.times)
-          : medication.timesPerDay === undefined || medication.timesPerDay === null
-            ? ''
-            : String(medication.timesPerDay),
         startDate: medication.startDate || '',
         endDate: medication.endDate || '',
         logs: medication.logs ?? [],
       });
-      setMedicationFrequencyPickerOpen(false);
+      setMedicationStartPickerOpen(false);
+      setMedicationEndPickerOpen(false);
       setMedicationEditorError(null);
       setMedicationEditorOpen(true);
     },
@@ -1470,21 +1501,50 @@ export default function CareCircleScreen() {
 
   const closeMedicationEditor = useCallback(() => {
     setMedicationEditorOpen(false);
-    setMedicationFrequencyPickerOpen(false);
+    setMedicationStartPickerOpen(false);
+    setMedicationEndPickerOpen(false);
     setMedicationEditorSaving(false);
     setMedicationEditorError(null);
     setMedicationEditorDraft(emptyMedicationEditorDraft);
   }, []);
 
-  const handleMedicationFrequencySelect = useCallback((value: string) => {
-    const selected = medicationFrequencyOptions.find((option) => option.value === value);
-    setMedicationEditorDraft((prev) => ({
-      ...prev,
-      frequency: value,
-      timesPerDay: selected ? String(selected.times) : prev.timesPerDay,
-    }));
-    setMedicationFrequencyPickerOpen(false);
-  }, []);
+  const handleMedicationMealSelection = useCallback(
+    (meal: MedicationMealKey, selected: boolean) => {
+      setMedicationEditorDraft((prev) => {
+        const nextMealTiming = {
+          ...deriveMedicationMealTiming(prev.mealTiming, prev.frequency),
+        };
+        if (!selected) {
+          delete nextMealTiming[meal];
+        } else {
+          nextMealTiming[meal] = nextMealTiming[meal] || 'before';
+        }
+        return {
+          ...prev,
+          mealTiming: nextMealTiming,
+          frequency: formatMedicationMealTimingSummary(nextMealTiming),
+        };
+      });
+    },
+    []
+  );
+
+  const handleMedicationMealTimingChange = useCallback(
+    (meal: MedicationMealKey, value: 'before' | 'after') => {
+      setMedicationEditorDraft((prev) => {
+        const nextMealTiming = {
+          ...deriveMedicationMealTiming(prev.mealTiming, prev.frequency),
+          [meal]: value,
+        };
+        return {
+          ...prev,
+          mealTiming: nextMealTiming,
+          frequency: formatMedicationMealTimingSummary(nextMealTiming),
+        };
+      });
+    },
+    []
+  );
 
   const handleAddMemberMedication = useCallback(
     async (medication: MemberDetailsMedication) => {
@@ -1578,15 +1638,26 @@ export default function CareCircleScreen() {
 
   const submitMedicationEditor = useCallback(async () => {
     const name = medicationEditorDraft.name.trim();
-    const dosage = medicationEditorDraft.dosage.trim();
-    const frequency = medicationEditorDraft.frequency.trim();
+    const dosage = normalizeMedicationDosage(medicationEditorDraft.dosage);
+    const mealTiming = deriveMedicationMealTiming(
+      medicationEditorDraft.mealTiming,
+      medicationEditorDraft.frequency
+    );
+    const frequency = resolveMedicationFrequency(medicationEditorDraft.frequency, mealTiming);
     const purpose = medicationEditorDraft.purpose.trim();
     const startDate = medicationEditorDraft.startDate.trim();
     const endDate = medicationEditorDraft.endDate.trim();
-    const timesRaw = medicationEditorDraft.timesPerDay.trim();
+    const mealTimingCount = countMedicationMealTiming(mealTiming);
+    const timesPerDay = resolveMedicationTimesPerDay(
+      frequency,
+      mealTimingCount,
+      mealTiming
+    );
 
-    if (!name || !dosage || !frequency) {
-      setMedicationEditorError('Name, dosage, and frequency are required.');
+    if (!name || !dosage || mealTimingCount === 0) {
+      setMedicationEditorError(
+        'Name, dosage, and at least one meal timing are required.'
+      );
       return;
     }
     if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
@@ -1598,18 +1669,6 @@ export default function CareCircleScreen() {
       return;
     }
 
-    const selectedFrequency = medicationFrequencyOptions.find((option) => option.value === frequency);
-    const parsedTimes = Number.parseInt(timesRaw, 10);
-    const resolvedTimesPerDay = selectedFrequency
-      ? selectedFrequency.times
-      : Number.isFinite(parsedTimes)
-        ? parsedTimes
-        : undefined;
-    if (resolvedTimesPerDay === undefined || resolvedTimesPerDay < 0) {
-      setMedicationEditorError('Times/day must be a non-negative number.');
-      return;
-    }
-
     setMedicationEditorSaving(true);
     setMedicationEditorError(null);
     try {
@@ -1618,8 +1677,9 @@ export default function CareCircleScreen() {
         name,
         dosage,
         frequency,
+        mealTiming: Object.keys(mealTiming).length > 0 ? mealTiming : undefined,
         purpose: purpose || undefined,
-        timesPerDay: resolvedTimesPerDay,
+        timesPerDay,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         logs: medicationEditorDraft.logs ?? [],
@@ -1674,7 +1734,8 @@ export default function CareCircleScreen() {
     setAppointmentTypePickerOpen(false);
     setAppointmentTimeParts({ ...emptyAppointmentTimeParts });
     setMedicationEditorOpen(false);
-    setMedicationFrequencyPickerOpen(false);
+    setMedicationStartPickerOpen(false);
+    setMedicationEndPickerOpen(false);
     setAppointmentEditorError(null);
     setMedicationEditorError(null);
     setAppointmentEditorDraft(emptyAppointmentEditorDraft);
@@ -1769,6 +1830,15 @@ export default function CareCircleScreen() {
     return incomingLinks.filter((link) => link.status === 'accepted');
   }, [incomingLinks]);
 
+  const tourViewAccessLinkId = useMemo(() => {
+    return (
+      circlesIn.find((member) => {
+        const memberRole = normalizeCareCircleRole(member.role);
+        return isElevatedCareCircleRole(memberRole) || (member.ownerProfileIsPrimary ?? false);
+      })?.id ?? null
+    );
+  }, [circlesIn]);
+
   const primaryProfileNameByMemberId = useMemo(() => {
     const map = new Map<string, string>();
     circlesIn.forEach((member) => {
@@ -1783,6 +1853,16 @@ export default function CareCircleScreen() {
     return incomingLinks.filter((link) => link.status === 'pending');
   }, [incomingLinks]);
   const hasPendingRequests = pendingRequests.length > 0;
+
+  useEffect(() => {
+    if (!isRunning) return;
+    if (currentStepId === 'care-invite-member' && circleView !== 'my-circle') {
+      setCircleView('my-circle');
+    }
+    if (currentStepId === 'care-view-access' && circleView !== 'circles-in') {
+      setCircleView('circles-in');
+    }
+  }, [circleView, currentStepId, isRunning]);
 
   const emergencyOwnerLabel = useMemo(() => {
     if (!emergencyCardOwner?.name) return 'Emergency Card';
@@ -1862,16 +1942,57 @@ export default function CareCircleScreen() {
       >
         <Animated.View entering={FadeInDown.springify()} style={styles.headerRow}>
           <Text style={styles.title}>Care Circle</Text>
-          <AnimatedButton onPress={() => setInviteModalOpen(true)} style={styles.inviteButton}>
-            <View style={styles.inviteButtonIcon}>
-              <MaterialCommunityIcons name="account-plus" size={16} color="#2f565f" />
-            </View>
-            <Text style={styles.inviteText}>Invite member</Text>
-          </AnimatedButton>
+          <TourAnchor tourId="care-invite-member">
+            <AnimatedButton
+              onPress={() => setInviteModalOpen(true)}
+              style={[
+                styles.inviteButton,
+                {
+                  borderColor: themeColors.accentStrong,
+                  backgroundColor: themeColors.surface,
+                  shadowColor: themeColors.shadow,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.inviteButtonIcon,
+                  { backgroundColor: themeColors.accentSoft },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="account-plus"
+                  size={16}
+                  color={themeColors.accentStrong}
+                />
+              </View>
+              <Text style={[styles.inviteText, { color: themeColors.accentStrong }]}>
+                Invite member
+              </Text>
+            </AnimatedButton>
+          </TourAnchor>
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.segmentedControl}>
-          <Animated.View style={[styles.segmentIndicator, segmentIndicatorStyle]} />
+        <Animated.View
+          entering={FadeInDown.delay(100).springify()}
+          style={[
+            styles.segmentedControl,
+            {
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.border,
+              shadowColor: themeColors.shadow,
+            },
+          ]}
+        >
+          <Animated.View
+            style={[
+              styles.segmentIndicator,
+              {
+                backgroundColor: themeColors.headerChipBackground,
+              },
+              segmentIndicatorStyle,
+            ]}
+          />
           <Pressable
             style={[styles.segment, { zIndex: 1 }]}
             onPress={() => setCircleView('my-circle')}
@@ -1880,7 +2001,9 @@ export default function CareCircleScreen() {
               numberOfLines={1}
               style={[
                 styles.segmentText,
+                { color: themeColors.textSecondary },
                 circleView === 'my-circle' && styles.segmentTextActive,
+                circleView === 'my-circle' && { color: themeColors.headerChipText },
               ]}
             >
               My Circle
@@ -1895,13 +2018,23 @@ export default function CareCircleScreen() {
                 numberOfLines={1}
                 style={[
                   styles.segmentText,
+                  { color: themeColors.textSecondary },
                   circleView === 'circles-in' && styles.segmentTextActive,
+                  circleView === 'circles-in' && { color: themeColors.headerChipText },
                 ]}
               >
                 Circles I'm In
               </Text>
               {hasPendingRequests ? (
-                <View style={styles.segmentBadge}>
+                <View
+                  style={[
+                    styles.segmentBadge,
+                    {
+                      backgroundColor: themeColors.warning,
+                      borderColor: themeColors.surface,
+                    },
+                  ]}
+                >
                   <Text style={styles.segmentBadgeText}>{pendingRequests.length}</Text>
                 </View>
               ) : null}
@@ -1909,10 +2042,17 @@ export default function CareCircleScreen() {
           </Pressable>
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(150).springify()} style={styles.emergencyCardWrapper}>
+        <Animated.View
+          entering={FadeInDown.delay(150).springify()}
+          style={[styles.emergencyCardWrapper, { shadowColor: themeColors.shadow }]}
+        >
           <AnimatedButton onPress={handleViewOwnEmergencyCard}>
             <LinearGradient
-              colors={['#2f565f', '#4a7a7d', '#6aa6a8']}
+              colors={[
+                themeColors.headerGradientStart,
+                themeColors.headerGradientEnd,
+                themeColors.accent,
+              ]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.emergencyCard}
@@ -1934,18 +2074,23 @@ export default function CareCircleScreen() {
               style={[
                 styles.pendingButton,
                 currentPending.length > 0 && styles.pendingButtonWithBadge,
+                {
+                  borderColor: currentPending.length > 0 ? themeColors.accentStrong : themeColors.border,
+                  backgroundColor:
+                    currentPending.length > 0 ? themeColors.accentSoft : themeColors.surfaceMuted,
+                },
               ]}
             >
               <MaterialCommunityIcons
                 name={circleView === 'my-circle' ? 'send-clock-outline' : 'inbox-arrow-down-outline'}
                 size={16}
-                color="#2f565f"
+                color={themeColors.accentStrong}
               />
-              <Text style={styles.pendingButtonText}>
+              <Text style={[styles.pendingButtonText, { color: themeColors.accentStrong }]}>
                 {circleView === 'my-circle' ? 'Pending invites' : 'Pending requests'}
               </Text>
               {currentPending.length > 0 ? (
-                <View style={styles.pendingBadge}>
+                <View style={[styles.pendingBadge, { backgroundColor: themeColors.accentStrong }]}>
                   <Text style={styles.pendingBadgeText}>{currentPending.length}</Text>
                 </View>
               ) : null}
@@ -1965,17 +2110,23 @@ export default function CareCircleScreen() {
                 const memberRole = normalizeCareCircleRole(member.role);
                 const isFamily = isElevatedCareCircleRole(memberRole);
                 const canView = isFamily || (member.ownerProfileIsPrimary ?? false);
+                const isTourViewAccessTarget =
+                  circleView === 'circles-in' && member.id === tourViewAccessLinkId;
                 const primaryName = primaryProfileNameByMemberId.get(member.memberId);
 
                 return (
                   <View key={member.id} style={styles.memberCard}>
                     <LinearGradient
-                      colors={['#e4eef0', '#d6e6e6']}
+                      colors={[themeColors.accentSoft, themeColors.surfaceMuted]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.memberAvatar}
                     >
-                      <Text style={styles.memberAvatarText}>{getInitials(member.displayName)}</Text>
+                      <Text
+                        style={[styles.memberAvatarText, { color: themeColors.accentStrong }]}
+                      >
+                        {getInitials(member.displayName)}
+                      </Text>
                     </LinearGradient>
                     <View style={styles.memberInfo}>
                       <Text style={styles.memberName} numberOfLines={1} ellipsizeMode="tail">
@@ -2025,19 +2176,37 @@ export default function CareCircleScreen() {
                       </AnimatedButton>
                     )}
                     {circleView === 'circles-in' && (
-                      <AnimatedButton
-                        onPress={() =>
-                          isFamily
-                            ? handleViewMemberDetails(member)
-                            : handleViewMemberEmergencyCard(member)
-                        }
-                        disabled={!canView}
-                        style={[styles.viewButton, !canView && styles.buttonDisabled]}
-                      >
-                        <Text style={styles.viewButtonText}>
-                          {isFamily ? 'View details' : 'View card'}
-                        </Text>
-                      </AnimatedButton>
+                      isTourViewAccessTarget ? (
+                        <TourAnchor tourId="care-view-access">
+                          <AnimatedButton
+                            onPress={() =>
+                              isFamily
+                                ? handleViewMemberDetails(member)
+                                : handleViewMemberEmergencyCard(member)
+                            }
+                            disabled={!canView}
+                            style={[styles.viewButton, !canView && styles.buttonDisabled]}
+                          >
+                            <Text style={styles.viewButtonText}>
+                              {isFamily ? 'View details' : 'View card'}
+                            </Text>
+                          </AnimatedButton>
+                        </TourAnchor>
+                      ) : (
+                        <AnimatedButton
+                          onPress={() =>
+                            isFamily
+                              ? handleViewMemberDetails(member)
+                              : handleViewMemberEmergencyCard(member)
+                          }
+                          disabled={!canView}
+                          style={[styles.viewButton, !canView && styles.buttonDisabled]}
+                        >
+                          <Text style={styles.viewButtonText}>
+                            {isFamily ? 'View details' : 'View card'}
+                          </Text>
+                        </AnimatedButton>
+                      )
                     )}
                   </View>
                 );
@@ -2096,12 +2265,12 @@ export default function CareCircleScreen() {
                   <View key={pending.id} style={styles.pendingCard}>
                     <View style={styles.pendingHeaderRow}>
                       <LinearGradient
-                        colors={['#f5e6d3', '#e8d4b8']}
+                        colors={[themeColors.accentSoft, themeColors.surfaceMuted]}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                         style={styles.pendingAvatar}
                       >
-                        <Text style={[styles.memberAvatarText, { color: '#8b6f47' }]}>
+                        <Text style={[styles.memberAvatarText, { color: themeColors.accentStrong }]}>
                           {getInitials(pending.displayName)}
                         </Text>
                       </LinearGradient>
@@ -2237,7 +2406,9 @@ export default function CareCircleScreen() {
                     <View style={styles.countryModalHeader}>
                       <Text style={styles.countryModalTitle}>Select country</Text>
                       <Pressable onPress={() => setInviteCountryPickerVisible(false)} hitSlop={12}>
-                        <Text style={styles.countryModalDone}>Done</Text>
+                        <Text style={[styles.countryModalDone, { color: themeColors.accentStrong }]}>
+                          Done
+                        </Text>
                       </Pressable>
                     </View>
                     <View style={[styles.countryListContainer, { maxHeight: countryPickerListMaxHeight }]}>
@@ -3101,12 +3272,22 @@ export default function CareCircleScreen() {
                           </View>
                           <View style={styles.detailRow}>
                             <Text style={styles.detailLabel}>Dosage</Text>
-                            <Text style={styles.detailValue}>{med.dosage || '—'}</Text>
+                            <Text style={styles.detailValue}>
+                              {formatMedicationDosage(med.dosage) || '—'}
+                            </Text>
                           </View>
                           <View style={styles.detailRow}>
-                            <Text style={styles.detailLabel}>Frequency</Text>
-                            <Text style={styles.detailValue}>{getMedicationFrequencyLabel(med.frequency)}</Text>
+                            <Text style={styles.detailLabel}>Schedule</Text>
+                            <Text style={styles.detailValue}>
+                              {formatMedicationFrequencyLabel(med.frequency, med.mealTiming) || '—'}
+                            </Text>
                           </View>
+                          {med.timesPerDay !== undefined && med.timesPerDay !== null ? (
+                            <View style={styles.detailRow}>
+                              <Text style={styles.detailLabel}>Times/day</Text>
+                              <Text style={styles.detailValue}>{String(med.timesPerDay)}</Text>
+                            </View>
+                          ) : null}
                           {med.purpose ? (
                             <View style={styles.detailRow}>
                               <Text style={styles.detailLabel}>Purpose</Text>
@@ -3154,13 +3335,23 @@ export default function CareCircleScreen() {
                           onPress={() => setVaultCategory(cat)}
                           style={[
                             styles.vaultCategoryChip,
+                            {
+                              borderColor: themeColors.border,
+                              backgroundColor: themeColors.surface,
+                            },
                             vaultCategory === cat && styles.vaultCategoryChipActive,
+                            vaultCategory === cat && {
+                              backgroundColor: themeColors.headerChipBackground,
+                              borderColor: themeColors.headerChipBorder,
+                            },
                           ]}
                         >
                           <Text
                             style={[
                               styles.vaultCategoryChipText,
+                              { color: themeColors.textSecondary },
                               vaultCategory === cat && styles.vaultCategoryChipTextActive,
+                              vaultCategory === cat && { color: themeColors.headerChipText },
                             ]}
                           >
                             {vaultCategoryLabels[cat]}
@@ -3517,7 +3708,10 @@ export default function CareCircleScreen() {
                       onChangeText={(value) =>
                         setMedicationEditorDraft((prev) => ({ ...prev, name: value }))
                       }
-                      onFocus={() => setMedicationFrequencyPickerOpen(false)}
+                      onFocus={() => {
+                        setMedicationStartPickerOpen(false);
+                        setMedicationEndPickerOpen(false);
+                      }}
                       placeholder="Medication name"
                       placeholderTextColor="#94a3b8"
                       style={styles.sheetInput}
@@ -3529,69 +3723,99 @@ export default function CareCircleScreen() {
                       onChangeText={(value) =>
                         setMedicationEditorDraft((prev) => ({ ...prev, dosage: value }))
                       }
-                      onFocus={() => setMedicationFrequencyPickerOpen(false)}
+                      onFocus={() => {
+                        setMedicationStartPickerOpen(false);
+                        setMedicationEndPickerOpen(false);
+                      }}
                       placeholder="e.g. 500mg"
                       placeholderTextColor="#94a3b8"
                       style={styles.sheetInput}
                     />
 
-                    <Text style={styles.formLabel}>Frequency</Text>
-                    <View style={styles.frequencyPickerContainer}>
-                      <Pressable
-                        onPress={() => setMedicationFrequencyPickerOpen((prev) => !prev)}
-                        style={[
-                          styles.dropdownField,
-                          medicationFrequencyPickerOpen && styles.dropdownFieldActive,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.dropdownFieldText,
-                            !medicationEditorDraft.frequency && styles.dropdownPlaceholderText,
-                          ]}
-                        >
-                          {selectedMedicationFrequency?.label ||
-                            medicationEditorDraft.frequency ||
-                            'Select frequency'}
-                        </Text>
-                        <MaterialCommunityIcons
-                          name={medicationFrequencyPickerOpen ? 'chevron-up' : 'chevron-down'}
-                          size={18}
-                          color="#64748b"
-                        />
-                      </Pressable>
-                      {medicationFrequencyPickerOpen ? (
-                        <View style={styles.dropdownMenu}>
-                          <ScrollView
-                            style={styles.dropdownMenuScroll}
-                            nestedScrollEnabled
-                            showsVerticalScrollIndicator={false}
+                    <Text style={styles.formLabel}>Meal timing</Text>
+                    <View style={styles.medicationMealCard}>
+                      {MEDICATION_MEAL_OPTIONS.map((meal) => {
+                        const selected = Boolean(normalizedMedicationEditorMealTiming[meal.key]);
+                        const timingValue = normalizedMedicationEditorMealTiming[meal.key] || 'before';
+                        return (
+                          <View
+                            key={meal.key}
+                            style={[
+                              styles.medicationMealOptionCard,
+                              selected && styles.medicationMealOptionCardActive,
+                            ]}
                           >
-                            {medicationFrequencyOptions.map((option) => {
-                              const isSelected = option.value === medicationEditorDraft.frequency;
-                              return (
+                            <Pressable
+                              onPress={() => handleMedicationMealSelection(meal.key, !selected)}
+                              style={styles.medicationMealHeader}
+                            >
+                              <View
+                                style={[
+                                  styles.medicationMealCheckbox,
+                                  selected && styles.medicationMealCheckboxActive,
+                                ]}
+                              >
+                                {selected ? (
+                                  <MaterialCommunityIcons name="check" size={14} color="#ffffff" />
+                                ) : null}
+                              </View>
+                              <View style={styles.medicationMealHeaderCopy}>
+                                <Text style={styles.medicationMealTitle}>{meal.label}</Text>
+                                <Text style={styles.medicationMealHint}>
+                                  {selected
+                                    ? 'Choose when it should be taken around this meal.'
+                                    : 'Tap to add this meal slot.'}
+                                </Text>
+                              </View>
+                            </Pressable>
+
+                            {selected ? (
+                              <View style={styles.medicationMealTimingRow}>
                                 <Pressable
-                                  key={option.value}
-                                  onPress={() => handleMedicationFrequencySelect(option.value)}
+                                  onPress={() => handleMedicationMealTimingChange(meal.key, 'before')}
                                   style={[
-                                    styles.dropdownOption,
-                                    isSelected && styles.dropdownOptionActive,
+                                    styles.medicationMealTimingButton,
+                                    timingValue === 'before' &&
+                                      styles.medicationMealTimingButtonActive,
                                   ]}
                                 >
                                   <Text
                                     style={[
-                                      styles.dropdownOptionText,
-                                      isSelected && styles.dropdownOptionTextActive,
+                                      styles.medicationMealTimingButtonText,
+                                      timingValue === 'before' &&
+                                        styles.medicationMealTimingButtonTextActive,
                                     ]}
                                   >
-                                    {option.label}
+                                    Before meal
                                   </Text>
                                 </Pressable>
-                              );
-                            })}
-                          </ScrollView>
-                        </View>
-                      ) : null}
+                                <Pressable
+                                  onPress={() => handleMedicationMealTimingChange(meal.key, 'after')}
+                                  style={[
+                                    styles.medicationMealTimingButton,
+                                    timingValue === 'after' &&
+                                      styles.medicationMealTimingButtonActive,
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.medicationMealTimingButtonText,
+                                      timingValue === 'after' &&
+                                        styles.medicationMealTimingButtonTextActive,
+                                    ]}
+                                  >
+                                    After meal
+                                  </Text>
+                                </Pressable>
+                              </View>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+                      <Text style={styles.medicationMealHelperText}>
+                        Select every meal tied to this medication. The schedule will be saved from
+                        these meal slots.
+                      </Text>
                     </View>
 
                     <Text style={styles.formLabel}>Purpose (optional)</Text>
@@ -3600,49 +3824,125 @@ export default function CareCircleScreen() {
                       onChangeText={(value) =>
                         setMedicationEditorDraft((prev) => ({ ...prev, purpose: value }))
                       }
-                      onFocus={() => setMedicationFrequencyPickerOpen(false)}
+                      onFocus={() => {
+                        setMedicationStartPickerOpen(false);
+                        setMedicationEndPickerOpen(false);
+                      }}
                       placeholder="Purpose"
                       placeholderTextColor="#94a3b8"
                       style={styles.sheetInput}
                     />
 
-                    <Text style={styles.formLabel}>Times/day</Text>
-                    <TextInput
-                      value={medicationEditorDraft.timesPerDay}
-                      onChangeText={(value) =>
-                        setMedicationEditorDraft((prev) => ({ ...prev, timesPerDay: value }))
-                      }
-                      onFocus={() => setMedicationFrequencyPickerOpen(false)}
-                      keyboardType="number-pad"
-                      placeholder="1"
-                      placeholderTextColor="#94a3b8"
-                      editable={!isMedicationTimesPerDayLocked}
-                      style={[styles.sheetInput, isMedicationTimesPerDayLocked && styles.sheetInputDisabled]}
-                    />
-
-                    <Text style={styles.formLabel}>Start date (YYYY-MM-DD)</Text>
-                    <TextInput
-                      value={medicationEditorDraft.startDate}
-                      onChangeText={(value) =>
-                        setMedicationEditorDraft((prev) => ({ ...prev, startDate: value }))
-                      }
-                      onFocus={() => setMedicationFrequencyPickerOpen(false)}
-                      placeholder="2026-02-23"
-                      placeholderTextColor="#94a3b8"
-                      style={styles.sheetInput}
-                    />
+                    <Text style={styles.formLabel}>Start date</Text>
+                    <Pressable
+                      onPress={() => {
+                        setMedicationStartPickerOpen((prev) => !prev);
+                        setMedicationEndPickerOpen(false);
+                      }}
+                      style={[
+                        styles.medicationDateSelector,
+                        medicationStartPickerOpen && styles.dropdownFieldActive,
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name="calendar-month-outline"
+                        size={18}
+                        color="#2f565f"
+                      />
+                      <Text style={styles.medicationDateSelectorText}>
+                        {formatEditorDateLabel(medicationEditorDraft.startDate)}
+                      </Text>
+                    </Pressable>
+                    {medicationStartPickerOpen ? (
+                      <Calendar
+                        onDayPress={(day) => {
+                          setMedicationEditorDraft((prev) => ({
+                            ...prev,
+                            startDate: day.dateString,
+                          }));
+                          setMedicationStartPickerOpen(false);
+                        }}
+                        markedDates={
+                          medicationEditorDraft.startDate
+                            ? {
+                                [medicationEditorDraft.startDate]: {
+                                  selected: true,
+                                  selectedColor: '#2f565f',
+                                },
+                              }
+                            : undefined
+                        }
+                        theme={{
+                          todayTextColor: '#2f565f',
+                          selectedDayBackgroundColor: '#2f565f',
+                          arrowColor: '#2f565f',
+                          textDayFontWeight: '500',
+                          textMonthFontWeight: '700',
+                        }}
+                      />
+                    ) : null}
 
                     <Text style={styles.formLabel}>End date (optional)</Text>
-                    <TextInput
-                      value={medicationEditorDraft.endDate}
-                      onChangeText={(value) =>
-                        setMedicationEditorDraft((prev) => ({ ...prev, endDate: value }))
-                      }
-                      onFocus={() => setMedicationFrequencyPickerOpen(false)}
-                      placeholder="2026-03-23"
-                      placeholderTextColor="#94a3b8"
-                      style={styles.sheetInput}
-                    />
+                    <View style={styles.medicationDateRow}>
+                      <Pressable
+                        onPress={() => {
+                          setMedicationEndPickerOpen((prev) => !prev);
+                          setMedicationStartPickerOpen(false);
+                        }}
+                        style={[
+                          styles.medicationDateSelector,
+                          styles.medicationDateSelectorFlex,
+                          medicationEndPickerOpen && styles.dropdownFieldActive,
+                        ]}
+                      >
+                        <MaterialCommunityIcons
+                          name="calendar-month-outline"
+                          size={18}
+                          color="#2f565f"
+                        />
+                        <Text style={styles.medicationDateSelectorText}>
+                          {formatEditorDateLabel(medicationEditorDraft.endDate)}
+                        </Text>
+                      </Pressable>
+                      {medicationEditorDraft.endDate ? (
+                        <Pressable
+                          onPress={() =>
+                            setMedicationEditorDraft((prev) => ({ ...prev, endDate: '' }))
+                          }
+                          style={styles.medicationDateClearButton}
+                        >
+                          <Text style={styles.medicationDateClearText}>Clear</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    {medicationEndPickerOpen ? (
+                      <Calendar
+                        onDayPress={(day) => {
+                          setMedicationEditorDraft((prev) => ({
+                            ...prev,
+                            endDate: day.dateString,
+                          }));
+                          setMedicationEndPickerOpen(false);
+                        }}
+                        markedDates={
+                          medicationEditorDraft.endDate
+                            ? {
+                                [medicationEditorDraft.endDate]: {
+                                  selected: true,
+                                  selectedColor: '#2f565f',
+                                },
+                              }
+                            : undefined
+                        }
+                        theme={{
+                          todayTextColor: '#2f565f',
+                          selectedDayBackgroundColor: '#2f565f',
+                          arrowColor: '#2f565f',
+                          textDayFontWeight: '500',
+                          textMonthFontWeight: '700',
+                        }}
+                      />
+                    ) : null}
 
                     {medicationEditorError ? (
                       <Text style={styles.formError}>{medicationEditorError}</Text>
@@ -3703,13 +4003,23 @@ export default function CareCircleScreen() {
                           onPress={() => setVaultUploadFolder(folder)}
                           style={[
                             styles.vaultFolderOption,
+                            {
+                              borderColor: themeColors.border,
+                              backgroundColor: themeColors.surface,
+                            },
                             vaultUploadFolder === folder && styles.vaultFolderOptionActive,
+                            vaultUploadFolder === folder && {
+                              backgroundColor: themeColors.headerChipBackground,
+                              borderColor: themeColors.headerChipBorder,
+                            },
                           ]}
                         >
                           <Text
                             style={[
                               styles.vaultFolderOptionText,
+                              { color: themeColors.textSecondary },
                               vaultUploadFolder === folder && styles.vaultFolderOptionTextActive,
+                              vaultUploadFolder === folder && { color: themeColors.headerChipText },
                             ]}
                           >
                             {vaultCategoryLabels[folder]}
@@ -4335,7 +4645,7 @@ const styles = StyleSheet.create({
   countryModalDone: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#0f766e',
+    color: '#334155',
   },
   countryListContainer: {
     flex: 1,
@@ -4524,6 +4834,124 @@ const styles = StyleSheet.create({
   sheetInputDisabled: {
     backgroundColor: '#f1f5f9',
     color: '#64748b',
+  },
+  medicationMealCard: {
+    borderWidth: 1,
+    borderColor: '#d8e3e6',
+    borderRadius: 18,
+    backgroundColor: '#f8fbfb',
+    padding: 12,
+    gap: 10,
+  },
+  medicationMealOptionCard: {
+    borderWidth: 1,
+    borderColor: '#d8e3e6',
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    padding: 12,
+    gap: 10,
+  },
+  medicationMealOptionCardActive: {
+    borderColor: '#2f565f',
+    backgroundColor: '#eef7f7',
+  },
+  medicationMealHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  medicationMealCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  medicationMealCheckboxActive: {
+    borderColor: '#2f565f',
+    backgroundColor: '#2f565f',
+  },
+  medicationMealHeaderCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  medicationMealTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  medicationMealHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#64748b',
+  },
+  medicationMealTimingRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  medicationMealTimingButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  medicationMealTimingButtonActive: {
+    backgroundColor: '#2f565f',
+    borderColor: '#2f565f',
+  },
+  medicationMealTimingButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  medicationMealTimingButtonTextActive: {
+    color: '#ffffff',
+  },
+  medicationMealHelperText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#64748b',
+  },
+  medicationDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  medicationDateSelector: {
+    borderWidth: 1.5,
+    borderColor: '#d7e0e4',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#fafcfc',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  medicationDateSelectorFlex: {
+    flex: 1,
+  },
+  medicationDateSelectorText: {
+    flex: 1,
+    fontSize: 15,
+    color: '#0f1a1c',
+  },
+  medicationDateClearButton: {
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+  },
+  medicationDateClearText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2f565f',
   },
   frequencyPickerContainer: {
     gap: 8,

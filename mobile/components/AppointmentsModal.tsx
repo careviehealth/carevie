@@ -18,6 +18,8 @@ import { BlurView } from 'expo-blur';
 import { MotiView } from 'moti';
 import { toast } from '@/lib/toast';
 import { EmptyState, EmptyStatePreset } from '@/components/EmptyState';
+import { type AppThemeColors } from '@/constants/appThemes';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 export type Appointment = {
   id: string;
@@ -148,6 +150,8 @@ export function AppointmentsModal({
   onDeleteAppointment,
 }: Props) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { colors: themeColors } = useAppTheme();
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
   const isCompact = windowWidth < 360;
   const sheetMaxHeight = Math.min(windowHeight - 24, 760);
   const eventSheetMaxHeight = Math.min(windowHeight - 20, 820);
@@ -341,203 +345,225 @@ export function AppointmentsModal({
               transition={{ type: 'spring', damping: 20, stiffness: 200 }}
             >
               <View style={[styles.sheet, { maxHeight: sheetMaxHeight }]}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Appointments</Text>
-              <Pressable onPress={onClose} style={styles.closeButton}>
-                <MaterialCommunityIcons name="close" size={20} color="#1f2f33" />
-              </Pressable>
-            </View>
-
-            <View style={styles.segmented}>
-              <Pressable
-                onPress={() => setViewMode('list')}
-                style={[
-                  styles.segmentButton,
-                  viewMode === 'list' && styles.segmentButtonActive,
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name="view-list"
-                  size={16}
-                  color={viewMode === 'list' ? '#0f766e' : '#6b7f86'}
-                />
-                <Text
-                  style={[
-                    styles.segmentLabel,
-                    isCompact && styles.segmentLabelCompact,
-                    viewMode === 'list' && styles.segmentLabelActive,
-                  ]}
-                >
-                  List
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setViewMode('calendar')}
-                style={[
-                  styles.segmentButton,
-                  viewMode === 'calendar' && styles.segmentButtonActive,
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name="calendar-month-outline"
-                  size={16}
-                  color={viewMode === 'calendar' ? '#0f766e' : '#6b7f86'}
-                />
-                <Text
-                  style={[
-                    styles.segmentLabel,
-                    isCompact && styles.segmentLabelCompact,
-                    viewMode === 'calendar' && styles.segmentLabelActive,
-                  ]}
-                >
-                  Calendar
-                </Text>
-              </Pressable>
-            </View>
-
-            <ScrollView
-              style={styles.sheetBody}
-              contentContainerStyle={styles.sheetContent}
-              showsVerticalScrollIndicator={false}
-            >
-              {viewMode === 'list' ? (
-                <>
-                  {upcomingAppointments.length === 0 ? (
-                    <EmptyStatePreset preset="appointments" />
-                  ) : (
-                    upcomingAppointments.map((apt) => (
-                      <Pressable
-                        key={apt.id}
-                        style={({ pressed }) => [
-                          styles.appointmentCard,
-                          pressed && styles.appointmentCardPressed,
-                        ]}
-                        onPress={() => openEditModal(apt)}
-                      >
-                        <View style={styles.cardHeader}>
-                          <View style={styles.typeBadge}>
-                            <Text style={styles.typeBadgeText}>{apt.type}</Text>
-                          </View>
-                          <Pressable
-                            onPress={() => handleDeleteEvent(apt.id)}
-                            hitSlop={10}
-                          >
-                            <MaterialCommunityIcons name="trash-can-outline" size={18} color="#b42318" />
-                          </Pressable>
-                        </View>
-                        <Text style={styles.appointmentTitle}>{apt.title}</Text>
-                        <View style={styles.detailRow}>
-                          <MaterialCommunityIcons name="calendar-month" size={16} color="#0f766e" />
-                          <Text style={styles.detailText}>{formatDateLabel(apt.date)}</Text>
-                        </View>
-                        <View style={styles.detailRow}>
-                          <MaterialCommunityIcons name="clock-outline" size={16} color="#0f766e" />
-                          <Text style={styles.detailText}>{formatTimeLabel(apt.time)}</Text>
-                        </View>
-                      </Pressable>
-                    ))
-                  )}
-                  <Pressable style={styles.addButton} onPress={() => openAddModal()}>
-                    <MaterialCommunityIcons name="plus" size={18} color="#0f766e" />
-                    <Text style={styles.addButtonText}>Add New Appointment</Text>
+                <View style={styles.sheetHeader}>
+                  <Text style={styles.sheetTitle}>Appointments</Text>
+                  <Pressable onPress={onClose} style={styles.closeButton}>
+                    <MaterialCommunityIcons name="close" size={20} color={themeColors.textPrimary} />
                   </Pressable>
-                </>
-              ) : (
-                <>
-                  <Calendar
-                    onDayPress={handleDateSelect}
-                    theme={{
-                      todayTextColor: '#0f766e',
-                      arrowColor: '#0f766e',
-                      textDayFontWeight: '500',
-                      textMonthFontWeight: '700',
-                      textDayHeaderFontWeight: '600',
-                    }}
-                    dayComponent={({ date, state }) => {
-                      if (!date) return <View style={styles.dayCell} />;
-                      const dateString = date.dateString;
-                      const isOutsideMonth = state === 'disabled';
-                      const isPast = isPastDate(dateString);
-                      const isSelected = dateString === selectedDate;
-                      const hasAppointments = appointmentDates.has(dateString);
-                      return (
+                </View>
+
+                <View style={styles.segmented}>
+                  <Pressable
+                    onPress={() => setViewMode('list')}
+                    style={[
+                      styles.segmentButton,
+                      viewMode === 'list' && styles.segmentButtonActive,
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name="view-list"
+                      size={16}
+                      color={viewMode === 'list' ? themeColors.accentStrong : themeColors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.segmentLabel,
+                        isCompact && styles.segmentLabelCompact,
+                        viewMode === 'list' && styles.segmentLabelActive,
+                      ]}
+                    >
+                      List
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setViewMode('calendar')}
+                    style={[
+                      styles.segmentButton,
+                      viewMode === 'calendar' && styles.segmentButtonActive,
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name="calendar-month-outline"
+                      size={16}
+                      color={
+                        viewMode === 'calendar' ? themeColors.accentStrong : themeColors.textSecondary
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.segmentLabel,
+                        isCompact && styles.segmentLabelCompact,
+                        viewMode === 'calendar' && styles.segmentLabelActive,
+                      ]}
+                    >
+                      Calendar
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  style={styles.sheetBody}
+                  contentContainerStyle={styles.sheetContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {viewMode === 'list' ? (
+                    <>
+                      {upcomingAppointments.length === 0 ? (
+                        <EmptyStatePreset preset="appointments" />
+                      ) : (
+                        upcomingAppointments.map((apt) => (
+                          <Pressable
+                            key={apt.id}
+                            style={({ pressed }) => [
+                              styles.appointmentCard,
+                              pressed && styles.appointmentCardPressed,
+                            ]}
+                            onPress={() => openEditModal(apt)}
+                          >
+                            <View style={styles.cardHeader}>
+                              <View style={styles.typeBadge}>
+                                <Text style={styles.typeBadgeText}>{apt.type}</Text>
+                              </View>
+                              <Pressable
+                                onPress={() => handleDeleteEvent(apt.id)}
+                                hitSlop={10}
+                              >
+                                <MaterialCommunityIcons
+                                  name="trash-can-outline"
+                                  size={18}
+                                  color={themeColors.dangerText}
+                                />
+                              </Pressable>
+                            </View>
+                            <Text style={styles.appointmentTitle}>{apt.title}</Text>
+                            <View style={styles.detailRow}>
+                              <MaterialCommunityIcons
+                                name="calendar-month"
+                                size={16}
+                                color={themeColors.accentStrong}
+                              />
+                              <Text style={styles.detailText}>{formatDateLabel(apt.date)}</Text>
+                            </View>
+                            <View style={styles.detailRow}>
+                              <MaterialCommunityIcons
+                                name="clock-outline"
+                                size={16}
+                                color={themeColors.accentStrong}
+                              />
+                              <Text style={styles.detailText}>{formatTimeLabel(apt.time)}</Text>
+                            </View>
+                          </Pressable>
+                        ))
+                      )}
+                      <Pressable style={styles.addButton} onPress={() => openAddModal()}>
+                        <MaterialCommunityIcons
+                          name="plus"
+                          size={18}
+                          color={themeColors.accentStrong}
+                        />
+                        <Text style={styles.addButtonText}>Add New Appointment</Text>
+                      </Pressable>
+                    </>
+                  ) : (
+                    <>
+                      <Calendar
+                        onDayPress={handleDateSelect}
+                        theme={{
+                          todayTextColor: themeColors.accentStrong,
+                          arrowColor: themeColors.accentStrong,
+                          textDayFontWeight: '500',
+                          textMonthFontWeight: '700',
+                          textDayHeaderFontWeight: '600',
+                        }}
+                        dayComponent={({ date, state }) => {
+                          if (!date) return <View style={styles.dayCell} />;
+                          const dateString = date.dateString;
+                          const isOutsideMonth = state === 'disabled';
+                          const isPast = isPastDate(dateString);
+                          const isSelected = dateString === selectedDate;
+                          const hasAppointments = appointmentDates.has(dateString);
+                          return (
+                            <Pressable
+                              onPress={() => handleDateSelect(date)}
+                              disabled={isOutsideMonth}
+                              style={[
+                                styles.dayCell,
+                                isSelected && styles.dayCellSelected,
+                                isOutsideMonth && styles.dayCellOutside,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.dayText,
+                                  isPast && styles.dayTextPast,
+                                  isSelected && styles.dayTextSelected,
+                                  isOutsideMonth && styles.dayTextOutside,
+                                ]}
+                              >
+                                {date.day}
+                              </Text>
+                              {hasAppointments ? (
+                                <View style={[styles.dayDot, isPast && styles.dayDotPast]} />
+                              ) : null}
+                            </Pressable>
+                          );
+                        }}
+                      />
+                      <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>
+                          {formatDateLabel(selectedDate)}
+                        </Text>
                         <Pressable
-                          onPress={() => handleDateSelect(date)}
-                          disabled={isOutsideMonth}
-                          style={[
-                            styles.dayCell,
-                            isSelected && styles.dayCellSelected,
-                            isOutsideMonth && styles.dayCellOutside,
-                          ]}
+                          onPress={() => openAddModal(selectedDate)}
+                          disabled={isSelectedDateInPast}
                         >
                           <Text
                             style={[
-                              styles.dayText,
-                              isPast && styles.dayTextPast,
-                              isSelected && styles.dayTextSelected,
-                              isOutsideMonth && styles.dayTextOutside,
+                              styles.sectionAction,
+                              isSelectedDateInPast && styles.sectionActionDisabled,
                             ]}
                           >
-                            {date.day}
+                            Add
                           </Text>
-                          {hasAppointments ? (
-                            <View style={[styles.dayDot, isPast && styles.dayDotPast]} />
-                          ) : null}
                         </Pressable>
-                      );
-                    }}
-                  />
-                  <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>
-                      {formatDateLabel(selectedDate)}
-                    </Text>
-                    <Pressable
-                      onPress={() => openAddModal(selectedDate)}
-                      disabled={isSelectedDateInPast}
-                    >
-                      <Text
-                        style={[
-                          styles.sectionAction,
-                          isSelectedDateInPast && styles.sectionActionDisabled,
-                        ]}
-                      >
-                        Add
-                      </Text>
-                    </Pressable>
-                  </View>
-                  {isSelectedDateInPast ? (
-                    <Text style={styles.pastNote}>Past dates are view-only.</Text>
-                  ) : null}
-                  {selectedDayAppointments.length === 0 ? (
-                    <EmptyState icon="calendar-blank-outline" title="No appointments for this date" />
-                  ) : (
-                    selectedDayAppointments.map((apt) => (
-                      <Pressable
-                        key={apt.id}
-                        style={({ pressed }) => [
-                          styles.appointmentCard,
-                          pressed && styles.appointmentCardPressed,
-                        ]}
-                        onPress={() => openEditModal(apt)}
-                      >
-                        <Text style={styles.appointmentTitle}>{apt.title}</Text>
-                        <View style={styles.detailRow}>
-                          <MaterialCommunityIcons name="clock-outline" size={16} color="#0f766e" />
-                          <Text style={styles.detailText}>{formatTimeLabel(apt.time)}</Text>
-                        </View>
-                        <View style={styles.typeBadgeCompact}>
-                          <Text style={styles.typeBadgeText}>{apt.type}</Text>
-                        </View>
-                      </Pressable>
-                    ))
+                      </View>
+                      {isSelectedDateInPast ? (
+                        <Text style={styles.pastNote}>Past dates are view-only.</Text>
+                      ) : null}
+                      {selectedDayAppointments.length === 0 ? (
+                        <EmptyState icon="calendar-blank-outline" title="No appointments for this date" />
+                      ) : (
+                        selectedDayAppointments.map((apt) => (
+                          <Pressable
+                            key={apt.id}
+                            style={({ pressed }) => [
+                              styles.appointmentCard,
+                              pressed && styles.appointmentCardPressed,
+                            ]}
+                            onPress={() => openEditModal(apt)}
+                          >
+                            <Text style={styles.appointmentTitle}>{apt.title}</Text>
+                            <View style={styles.detailRow}>
+                              <MaterialCommunityIcons
+                                name="clock-outline"
+                                size={16}
+                                color={themeColors.accentStrong}
+                              />
+                              <Text style={styles.detailText}>{formatTimeLabel(apt.time)}</Text>
+                            </View>
+                            <View style={styles.typeBadgeCompact}>
+                              <Text style={styles.typeBadgeText}>{apt.type}</Text>
+                            </View>
+                          </Pressable>
+                        ))
+                      )}
+                    </>
                   )}
-                </>
-              )}
-            </ScrollView>
-          </View>
+                </ScrollView>
+              </View>
             </MotiView>
-        </KeyboardAvoidingView>
-      </View>
+          </KeyboardAvoidingView>
+        </View>
       </BlurView>
 
       <Modal
@@ -557,25 +583,25 @@ export function AppointmentsModal({
               transition={{ type: 'spring', damping: 20, stiffness: 200 }}
             >
               <View style={[styles.eventSheet, { maxHeight: eventSheetMaxHeight }]}>
-              <View style={styles.eventHeader}>
-                <Text style={styles.eventTitle}>
-                  {selectedEvent ? 'Edit Appointment' : 'Add Appointment'}
-                </Text>
-                <Pressable
-                  onPress={() => {
-                    setShowEventModal(false);
-                    setSelectedEvent(null);
-                  }}
-                  style={styles.closeButton}
+                <View style={styles.eventHeader}>
+                  <Text style={styles.eventTitle}>
+                    {selectedEvent ? 'Edit Appointment' : 'Add Appointment'}
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      setShowEventModal(false);
+                      setSelectedEvent(null);
+                    }}
+                    style={styles.closeButton}
+                  >
+                    <MaterialCommunityIcons name="close" size={20} color={themeColors.textPrimary} />
+                  </Pressable>
+                </View>
+                <ScrollView
+                  contentContainerStyle={styles.eventContent}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
                 >
-                  <MaterialCommunityIcons name="close" size={20} color="#1f2f33" />
-                </Pressable>
-              </View>
-              <ScrollView
-                contentContainerStyle={styles.eventContent}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-              >
                 {isReadOnlyPastEvent ? (
                   <View style={styles.readOnlyBanner}>
                     <Text style={styles.readOnlyText}>
@@ -589,7 +615,7 @@ export function AppointmentsModal({
                     value={eventForm.title}
                     onChangeText={(value) => setEventForm((prev) => ({ ...prev, title: value }))}
                     placeholder="e.g., Doctor visit"
-                    placeholderTextColor="#9bb0b5"
+                    placeholderTextColor={themeColors.textTertiary}
                     style={[styles.input, isReadOnlyPastEvent && styles.inputDisabled]}
                     editable={!isReadOnlyPastEvent}
                   />
@@ -605,7 +631,11 @@ export function AppointmentsModal({
                     }}
                     disabled={isReadOnlyPastEvent}
                   >
-                    <MaterialCommunityIcons name="calendar-month-outline" size={18} color="#0f766e" />
+                    <MaterialCommunityIcons
+                      name="calendar-month-outline"
+                      size={18}
+                      color={themeColors.accentStrong}
+                    />
                     <Text style={styles.dateSelectorText}>{formatDateLabel(eventForm.date)}</Text>
                   </Pressable>
                   {showDatePicker && !isReadOnlyPastEvent && (
@@ -620,13 +650,13 @@ export function AppointmentsModal({
                       markedDates={{
                         [eventForm.date]: {
                           selected: true,
-                          selectedColor: '#0f766e',
+                          selectedColor: themeColors.accentStrong,
                         },
                       }}
                       theme={{
-                        todayTextColor: '#0f766e',
-                        selectedDayBackgroundColor: '#0f766e',
-                        arrowColor: '#0f766e',
+                        todayTextColor: themeColors.accentStrong,
+                        selectedDayBackgroundColor: themeColors.accentStrong,
+                        arrowColor: themeColors.accentStrong,
                         textDayFontWeight: '500',
                         textMonthFontWeight: '700',
                       }}
@@ -641,7 +671,7 @@ export function AppointmentsModal({
                       value={eventTime.hour}
                       onChangeText={(value) => updateTime({ hour: clampTimePart(value, 12) })}
                       placeholder="HH"
-                      placeholderTextColor="#9bb0b5"
+                      placeholderTextColor={themeColors.textTertiary}
                       keyboardType="number-pad"
                       maxLength={2}
                       style={[styles.timeInput, isReadOnlyPastEvent && styles.inputDisabled]}
@@ -652,7 +682,7 @@ export function AppointmentsModal({
                       value={eventTime.minute}
                       onChangeText={(value) => updateTime({ minute: clampTimePart(value, 59) })}
                       placeholder="MM"
-                      placeholderTextColor="#9bb0b5"
+                      placeholderTextColor={themeColors.textTertiary}
                       keyboardType="number-pad"
                       maxLength={2}
                       style={[styles.timeInput, isReadOnlyPastEvent && styles.inputDisabled]}
@@ -731,7 +761,7 @@ export function AppointmentsModal({
                             setAdditionalFields((prev) => ({ ...prev, [field.name]: value }))
                           }
                           placeholder={field.placeholder}
-                          placeholderTextColor="#9bb0b5"
+                          placeholderTextColor={themeColors.textTertiary}
                           multiline={Boolean(field.multiline)}
                           style={[
                             styles.input,
@@ -766,8 +796,8 @@ export function AppointmentsModal({
                     </Pressable>
                   )}
                 </View>
-              </ScrollView>
-            </View>
+                </ScrollView>
+              </View>
             </MotiView>
           </KeyboardAvoidingView>
         </View>
@@ -776,7 +806,8 @@ export function AppointmentsModal({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: AppThemeColors) {
+  return StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -790,7 +821,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#f8fbfb',
+    backgroundColor: themeColors.surfaceMuted,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingBottom: 24,
@@ -803,12 +834,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e8ea',
+    borderBottomColor: themeColors.border,
   },
   sheetTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   closeButton: {
     width: 32,
@@ -816,13 +847,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#eef4f5',
+    backgroundColor: themeColors.surfaceElevated,
   },
   segmented: {
     marginTop: 12,
     marginHorizontal: 20,
     flexDirection: 'row',
-    backgroundColor: '#eaf0f1',
+    backgroundColor: themeColors.backgroundMuted,
     borderRadius: 14,
     padding: 4,
   },
@@ -836,8 +867,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   segmentButtonActive: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#8aa1a6',
+    backgroundColor: themeColors.surface,
+    shadowColor: themeColors.shadow,
     shadowOpacity: 0.2,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -846,13 +877,13 @@ const styles = StyleSheet.create({
   segmentLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6b7f86',
+    color: themeColors.textSecondary,
   },
   segmentLabelCompact: {
     fontSize: 12,
   },
   segmentLabelActive: {
-    color: '#0f766e',
+    color: themeColors.accentStrong,
   },
   sheetBody: {
     paddingHorizontal: 20,
@@ -870,20 +901,20 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   emptySubtitle: {
     fontSize: 13,
-    color: '#7a8c90',
+    color: themeColors.textSecondary,
     textAlign: 'center',
   },
   appointmentCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: themeColors.surface,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#e0e8ea',
-    shadowColor: '#9eb0b4',
+    borderColor: themeColors.border,
+    shadowColor: themeColors.shadow,
     shadowOpacity: 0.15,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
@@ -899,28 +930,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   typeBadge: {
-    backgroundColor: '#0f766e',
+    backgroundColor: themeColors.accent,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
   },
   typeBadgeCompact: {
     alignSelf: 'flex-start',
-    backgroundColor: '#0f766e',
+    backgroundColor: themeColors.accent,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
     marginTop: 6,
   },
   typeBadgeText: {
-    color: '#ffffff',
+    color: themeColors.accentContrast,
     fontSize: 11,
     fontWeight: '600',
   },
   appointmentTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   detailRow: {
     flexDirection: 'row',
@@ -929,7 +960,7 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: 13,
-    color: '#52666b',
+    color: themeColors.textSecondary,
   },
   addButton: {
     flexDirection: 'row',
@@ -938,13 +969,14 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#b8d0d4',
+    borderColor: themeColors.border,
     paddingVertical: 12,
+    backgroundColor: themeColors.surface,
   },
   addButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0f766e',
+    color: themeColors.accentStrong,
   },
   sectionHeader: {
     marginTop: 16,
@@ -955,19 +987,19 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   sectionAction: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0f766e',
+    color: themeColors.accentStrong,
   },
   sectionActionDisabled: {
-    color: '#9bb0b5',
+    color: themeColors.textTertiary,
   },
   pastNote: {
     fontSize: 12,
-    color: '#8b9aa0',
+    color: themeColors.textSecondary,
   },
   dayCell: {
     alignItems: 'center',
@@ -977,7 +1009,7 @@ const styles = StyleSheet.create({
     minHeight: 40,
   },
   dayCellSelected: {
-    backgroundColor: '#0f766e',
+    backgroundColor: themeColors.accent,
   },
   dayCellOutside: {
     opacity: 0.3,
@@ -985,26 +1017,26 @@ const styles = StyleSheet.create({
   dayText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2a3a3f',
+    color: themeColors.textPrimary,
   },
   dayTextPast: {
-    color: '#b5c1c5',
+    color: themeColors.textTertiary,
   },
   dayTextSelected: {
-    color: '#ffffff',
+    color: themeColors.accentContrast,
   },
   dayTextOutside: {
-    color: '#9fb0b5',
+    color: themeColors.textTertiary,
   },
   dayDot: {
     width: 5,
     height: 5,
     borderRadius: 999,
-    backgroundColor: '#0f766e',
+    backgroundColor: themeColors.accent,
     marginTop: 4,
   },
   dayDotPast: {
-    backgroundColor: '#b5c1c5',
+    backgroundColor: themeColors.textTertiary,
   },
   eventOverlay: {
     flex: 1,
@@ -1016,7 +1048,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   eventSheet: {
-    backgroundColor: '#ffffff',
+    backgroundColor: themeColors.surface,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingBottom: 20,
@@ -1029,12 +1061,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
-    borderBottomColor: '#eef2f3',
+    borderBottomColor: themeColors.border,
   },
   eventTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   eventContent: {
     paddingHorizontal: 20,
@@ -1047,20 +1079,21 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#39484c',
+    color: themeColors.textSecondary,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#d8e3e6',
-    backgroundColor: '#f7fbfb',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.inputBackground,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   inputDisabled: {
     opacity: 0.6,
+    backgroundColor: themeColors.inputDisabled,
   },
   multiline: {
     minHeight: 90,
@@ -1074,12 +1107,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#d8e3e6',
-    backgroundColor: '#f7fbfb',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.inputBackground,
   },
   dateSelectorText: {
     fontSize: 14,
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   timeRow: {
     flexDirection: 'row',
@@ -1089,19 +1122,19 @@ const styles = StyleSheet.create({
   timeInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#d8e3e6',
-    backgroundColor: '#f7fbfb',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.inputBackground,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     textAlign: 'center',
     fontSize: 14,
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   timeSeparator: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#7c8b90',
+    color: themeColors.textSecondary,
   },
   periodColumn: {
     gap: 6,
@@ -1109,26 +1142,26 @@ const styles = StyleSheet.create({
   periodButton: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#d8e3e6',
+    borderColor: themeColors.border,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: '#f7fbfb',
+    backgroundColor: themeColors.inputBackground,
   },
   periodButtonActive: {
-    borderColor: '#0f766e',
-    backgroundColor: '#0f766e',
+    borderColor: themeColors.accent,
+    backgroundColor: themeColors.accent,
   },
   periodLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6b7f86',
+    color: themeColors.textSecondary,
   },
   periodLabelActive: {
-    color: '#ffffff',
+    color: themeColors.accentContrast,
   },
   timeHint: {
     fontSize: 12,
-    color: '#7a8c90',
+    color: themeColors.textTertiary,
   },
   typeGrid: {
     flexDirection: 'row',
@@ -1140,23 +1173,23 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#d8e3e6',
-    backgroundColor: '#f7fbfb',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.inputBackground,
   },
   typeChipActive: {
-    borderColor: '#0f766e',
-    backgroundColor: '#0f766e',
+    borderColor: themeColors.accent,
+    backgroundColor: themeColors.accent,
   },
   typeChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#52666b',
+    color: themeColors.textSecondary,
   },
   typeChipTextActive: {
-    color: '#ffffff',
+    color: themeColors.accentContrast,
   },
   extraFields: {
-    backgroundColor: '#f1f7f7',
+    backgroundColor: themeColors.backgroundMuted,
     borderRadius: 16,
     padding: 12,
     gap: 10,
@@ -1164,7 +1197,7 @@ const styles = StyleSheet.create({
   extraTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   actionRow: {
     flexDirection: 'row',
@@ -1172,24 +1205,24 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   readOnlyBanner: {
-    backgroundColor: '#f6f7f8',
+    backgroundColor: themeColors.backgroundMuted,
     borderRadius: 12,
     padding: 10,
   },
   readOnlyText: {
     fontSize: 12,
-    color: '#6b7f86',
+    color: themeColors.textSecondary,
   },
   primaryAction: {
     flex: 1,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: '#0f766e',
+    backgroundColor: themeColors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryActionText: {
-    color: '#ffffff',
+    color: themeColors.accentContrast,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1202,12 +1235,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   deleteAction: {
-    borderColor: '#f2b6b6',
-    backgroundColor: '#fff5f5',
+    borderColor: themeColors.dangerBorder,
+    backgroundColor: themeColors.dangerSurface,
   },
   deleteActionText: {
-    color: '#b42318',
+    color: themeColors.dangerText,
     fontSize: 13,
     fontWeight: '700',
   },
-});
+  });
+}

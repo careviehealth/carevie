@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -17,6 +17,8 @@ import { BlurView } from 'expo-blur';
 import { MotiView } from 'moti';
 import { toast } from '@/lib/toast';
 import { EmptyStatePreset } from '@/components/EmptyState';
+import { type AppThemeColors } from '@/constants/appThemes';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 export type Doctor = {
   id: string;
@@ -45,6 +47,8 @@ export function MedicalTeamModal({
   onDelete,
 }: Props) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { colors: themeColors } = useAppTheme();
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
   const isCompact = windowWidth < 360;
   const sheetMaxHeight = Math.min(windowHeight - 24, 760);
   const [showForm, setShowForm] = useState(false);
@@ -127,121 +131,140 @@ export function MedicalTeamModal({
               transition={{ type: 'spring', damping: 20, stiffness: 200 }}
             >
               <View style={[styles.sheet, { maxHeight: sheetMaxHeight }]}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Medical Team</Text>
-              <Pressable onPress={onClose} style={styles.closeButton}>
-                <MaterialCommunityIcons name="close" size={20} color="#1f2f33" />
-              </Pressable>
-            </View>
-
-            <ScrollView
-              contentContainerStyle={styles.sheetContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Pressable
-                style={[styles.addToggle, showForm && styles.addToggleActive]}
-                onPress={() => {
-                  setShowForm((prev) => !prev);
-                  if (showForm) resetForm();
-                }}
-              >
-                <MaterialCommunityIcons name={showForm ? 'close' : 'plus'} size={18} color="#0f766e" />
-                <Text style={styles.addToggleText}>
-                  {showForm ? 'Close' : editingId ? 'Edit Doctor' : 'Add Doctor'}
-                </Text>
-              </Pressable>
-
-            {showForm ? (
-              <View style={styles.formCard}>
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Name</Text>
-                  <TextInput
-                    value={name}
-                    onChangeText={setName}
-                    placeholder="e.g., Dr. John Smith"
-                    placeholderTextColor="#9bb0b5"
-                    style={styles.input}
-                  />
-                </View>
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Phone number</Text>
-                  <TextInput
-                    value={number}
-                    onChangeText={setNumber}
-                    placeholder="e.g., 9876543210"
-                    placeholderTextColor="#9bb0b5"
-                    keyboardType="phone-pad"
-                    style={styles.input}
-                  />
-                </View>
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Speciality</Text>
-                  <TextInput
-                    value={speciality}
-                    onChangeText={setSpeciality}
-                    placeholder="e.g., Cardiologist / General Physician"
-                    placeholderTextColor="#9bb0b5"
-                    style={styles.input}
-                  />
-                </View>
-                <View style={[styles.formActions, isCompact && styles.formActionsStacked]}>
-                  <Pressable
-                    style={styles.secondaryAction}
-                    onPress={() => {
-                      resetForm();
-                      setShowForm(false);
-                    }}
-                    disabled={saving}
-                  >
-                    <Text style={styles.secondaryActionText}>Cancel</Text>
+                <View style={styles.sheetHeader}>
+                  <Text style={styles.sheetTitle}>Medical Team</Text>
+                  <Pressable onPress={onClose} style={styles.closeButton}>
+                    <MaterialCommunityIcons name="close" size={20} color={themeColors.textPrimary} />
                   </Pressable>
+                </View>
+
+                <ScrollView
+                  contentContainerStyle={styles.sheetContent}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                >
                   <Pressable
-                    style={[styles.primaryAction, saving && styles.buttonDisabled]}
-                    onPress={handleSave}
-                    disabled={saving}
+                    style={[styles.addToggle, showForm && styles.addToggleActive]}
+                    onPress={() => {
+                      setShowForm((prev) => !prev);
+                      if (showForm) resetForm();
+                    }}
                   >
-                    <Text style={styles.primaryActionText}>
-                      {saving ? (editingId ? 'Updating...' : 'Saving...') : editingId ? 'Update' : 'Save'}
+                    <MaterialCommunityIcons
+                      name={showForm ? 'close' : 'plus'}
+                      size={18}
+                      color={themeColors.accentStrong}
+                    />
+                    <Text style={styles.addToggleText}>
+                      {showForm ? 'Close' : editingId ? 'Edit Doctor' : 'Add Doctor'}
                     </Text>
                   </Pressable>
-                </View>
-              </View>
-            ) : null}
 
-              {!doctors.length ? (
-                <EmptyStatePreset preset="doctors" />
-              ) : (
-                doctors.map((doctor) => (
-                  <View key={doctor.id} style={styles.doctorCard}>
-                    <View style={styles.doctorInfo}>
-                      <Text style={styles.doctorName}>{doctor.name}</Text>
-                      <Text style={styles.doctorMeta}>
-                        {doctor.speciality} • {doctor.number}
-                      </Text>
+                  {showForm ? (
+                    <View style={styles.formCard}>
+                      <View style={styles.fieldGroup}>
+                        <Text style={styles.fieldLabel}>Name</Text>
+                        <TextInput
+                          value={name}
+                          onChangeText={setName}
+                          placeholder="e.g., Dr. John Smith"
+                          placeholderTextColor={themeColors.textTertiary}
+                          style={styles.input}
+                        />
+                      </View>
+                      <View style={styles.fieldGroup}>
+                        <Text style={styles.fieldLabel}>Phone number</Text>
+                        <TextInput
+                          value={number}
+                          onChangeText={setNumber}
+                          placeholder="e.g., 9876543210"
+                          placeholderTextColor={themeColors.textTertiary}
+                          keyboardType="phone-pad"
+                          style={styles.input}
+                        />
+                      </View>
+                      <View style={styles.fieldGroup}>
+                        <Text style={styles.fieldLabel}>Speciality</Text>
+                        <TextInput
+                          value={speciality}
+                          onChangeText={setSpeciality}
+                          placeholder="e.g., Cardiologist / General Physician"
+                          placeholderTextColor={themeColors.textTertiary}
+                          style={styles.input}
+                        />
+                      </View>
+                      <View style={[styles.formActions, isCompact && styles.formActionsStacked]}>
+                        <Pressable
+                          style={styles.secondaryAction}
+                          onPress={() => {
+                            resetForm();
+                            setShowForm(false);
+                          }}
+                          disabled={saving}
+                        >
+                          <Text style={styles.secondaryActionText}>Cancel</Text>
+                        </Pressable>
+                        <Pressable
+                          style={[styles.primaryAction, saving && styles.buttonDisabled]}
+                          onPress={handleSave}
+                          disabled={saving}
+                        >
+                          <Text style={styles.primaryActionText}>
+                            {saving
+                              ? editingId
+                                ? 'Updating...'
+                                : 'Saving...'
+                              : editingId
+                                ? 'Update'
+                                : 'Save'}
+                          </Text>
+                        </Pressable>
+                      </View>
                     </View>
-                    <View style={styles.cardActions}>
-                      <Pressable onPress={() => handleEdit(doctor)} hitSlop={10}>
-                        <MaterialCommunityIcons name="square-edit-outline" size={18} color="#0f766e" />
-                      </Pressable>
-                      <Pressable onPress={() => handleDelete(doctor.id)} hitSlop={10}>
-                        <MaterialCommunityIcons name="trash-can-outline" size={18} color="#b42318" />
-                      </Pressable>
-                    </View>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-          </View>
+                  ) : null}
+
+                  {!doctors.length ? (
+                    <EmptyStatePreset preset="doctors" />
+                  ) : (
+                    doctors.map((doctor) => (
+                      <View key={doctor.id} style={styles.doctorCard}>
+                        <View style={styles.doctorInfo}>
+                          <Text style={styles.doctorName}>{doctor.name}</Text>
+                          <Text style={styles.doctorMeta}>
+                            {doctor.speciality} • {doctor.number}
+                          </Text>
+                        </View>
+                        <View style={styles.cardActions}>
+                          <Pressable onPress={() => handleEdit(doctor)} hitSlop={10}>
+                            <MaterialCommunityIcons
+                              name="square-edit-outline"
+                              size={18}
+                              color={themeColors.accentStrong}
+                            />
+                          </Pressable>
+                          <Pressable onPress={() => handleDelete(doctor.id)} hitSlop={10}>
+                            <MaterialCommunityIcons
+                              name="trash-can-outline"
+                              size={18}
+                              color={themeColors.dangerText}
+                            />
+                          </Pressable>
+                        </View>
+                      </View>
+                    ))
+                  )}
+                </ScrollView>
+              </View>
             </MotiView>
-        </KeyboardAvoidingView>
-      </View>
+          </KeyboardAvoidingView>
+        </View>
       </BlurView>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: AppThemeColors) {
+  return StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -255,7 +278,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#f8fbfb',
+    backgroundColor: themeColors.surfaceMuted,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingBottom: 24,
@@ -268,12 +291,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e8ea',
+    borderBottomColor: themeColors.border,
   },
   sheetTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   closeButton: {
     width: 32,
@@ -281,7 +304,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#eef4f5',
+    backgroundColor: themeColors.surfaceElevated,
   },
   sheetContent: {
     paddingHorizontal: 20,
@@ -296,24 +319,24 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#b8d0d4',
+    borderColor: themeColors.border,
     paddingVertical: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: themeColors.surface,
   },
   addToggleActive: {
-    borderColor: '#0f766e',
+    borderColor: themeColors.accentStrong,
   },
   addToggleText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0f766e',
+    color: themeColors.accentStrong,
   },
   formCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: themeColors.surface,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#e0e8ea',
+    borderColor: themeColors.border,
     gap: 12,
   },
   fieldGroup: {
@@ -322,17 +345,17 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#39484c',
+    color: themeColors.textSecondary,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#d8e3e6',
-    backgroundColor: '#f7fbfb',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.inputBackground,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   formActions: {
     flexDirection: 'row',
@@ -345,12 +368,12 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: '#0f766e',
+    backgroundColor: themeColors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryActionText: {
-    color: '#ffffff',
+    color: themeColors.accentContrast,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -359,14 +382,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#d8e3e6',
+    borderColor: themeColors.border,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: themeColors.surface,
   },
   secondaryActionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#52666b',
+    color: themeColors.textSecondary,
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -379,19 +403,19 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   emptySubtitle: {
     fontSize: 13,
-    color: '#7a8c90',
+    color: themeColors.textSecondary,
     textAlign: 'center',
   },
   doctorCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: themeColors.surface,
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#e0e8ea',
+    borderColor: themeColors.border,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -403,15 +427,16 @@ const styles = StyleSheet.create({
   doctorName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   doctorMeta: {
     fontSize: 12,
-    color: '#6b7f86',
+    color: themeColors.textSecondary,
     marginTop: 4,
   },
   cardActions: {
     flexDirection: 'row',
     gap: 12,
   },
-});
+  });
+}

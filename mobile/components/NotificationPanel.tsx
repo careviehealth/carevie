@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import {
@@ -16,9 +16,12 @@ import {
 import type {
   CareCircleAcceptance,
   CareCircleInvite,
+  MedicationReminderNotification,
   UpcomingAppointment,
 } from '@/hooks/useNotifications';
 import type { SharedActivityLogRow } from '@/api/modules/carecircle';
+import { type AppThemeColors } from '@/constants/appThemes';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 const ANIMATION_DURATION = 280;
 
@@ -29,6 +32,8 @@ type Props = {
   now: Date;
   unreadAppointments: UpcomingAppointment[];
   readAppointments: UpcomingAppointment[];
+  unreadMedicationReminders: MedicationReminderNotification[];
+  readMedicationReminders: MedicationReminderNotification[];
   unreadInvites: CareCircleInvite[];
   readInvites: CareCircleInvite[];
   unreadAcceptances: CareCircleAcceptance[];
@@ -48,12 +53,6 @@ type Props = {
   unreadLogsCount: number;
   markLogsSeen: () => void;
   hasHydratedSeenLogs: boolean;
-};
-
-const domainIcons: Record<string, { name: string; color: string; bg: string }> = {
-  vault: { name: 'file-document-outline', color: '#2563eb', bg: '#dbeafe' },
-  medication: { name: 'pill', color: '#7c3aed', bg: '#ede9fe' },
-  appointment: { name: 'calendar-clock', color: '#b45309', bg: '#ffe7c7' },
 };
 
 const getLogText = (log: SharedActivityLogRow) => {
@@ -85,6 +84,8 @@ export function NotificationPanel({
   now,
   unreadAppointments,
   readAppointments,
+  unreadMedicationReminders,
+  readMedicationReminders,
   unreadInvites,
   readInvites,
   unreadAcceptances,
@@ -105,6 +106,8 @@ export function NotificationPanel({
   markLogsSeen,
   hasHydratedSeenLogs,
 }: Props) {
+  const { colors: themeColors } = useAppTheme();
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
   const { width: screenWidth } = useWindowDimensions();
   const slideAnim = useRef(new Animated.Value(screenWidth)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
@@ -119,23 +122,36 @@ export function NotificationPanel({
 
   const unreadCount =
     unreadAppointments.length +
+    unreadMedicationReminders.length +
     unreadInvites.length +
     unreadAcceptances.length +
     unreadFamilyActivity.length;
   const readCount =
     readAppointments.length +
+    readMedicationReminders.length +
     readInvites.length +
     readAcceptances.length +
     readFamilyActivity.length;
   const totalNotifications = unreadCount + readCount;
   const isReadView = activeTab === 'read';
   const activeAppointments = isReadView ? readAppointments : unreadAppointments;
+  const activeMedicationReminders = isReadView
+    ? readMedicationReminders
+    : unreadMedicationReminders;
   const activeInvites = isReadView ? readInvites : unreadInvites;
   const activeAcceptances = isReadView ? readAcceptances : unreadAcceptances;
   const activeFamilyActivity = isReadView ? readFamilyActivity : unreadFamilyActivity;
   const activeCount = isReadView
     ? readCount
     : unreadCount;
+  const domainIcons = useMemo<Record<string, { name: string; color: string; bg: string }>>(
+    () => ({
+      vault: { name: 'file-document-outline', color: themeColors.info, bg: themeColors.infoSurface },
+      medication: { name: 'pill', color: themeColors.accentStrong, bg: themeColors.accentSoft },
+      appointment: { name: 'calendar-clock', color: themeColors.warningText, bg: themeColors.warningSurface },
+    }),
+    [themeColors.accentSoft, themeColors.accentStrong, themeColors.info, themeColors.infoSurface, themeColors.warningSurface, themeColors.warningText]
+  );
 
   useEffect(() => {
     if (visible) {
@@ -302,7 +318,7 @@ export function NotificationPanel({
               style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
-              <MaterialCommunityIcons name="chevron-left" size={28} color="#1f2f33" />
+              <MaterialCommunityIcons name="chevron-left" size={28} color={themeColors.textPrimary} />
             </Pressable>
             <View style={styles.titleRow}>
               <Text style={styles.title}>Notifications</Text>
@@ -349,18 +365,18 @@ export function NotificationPanel({
             {topTab === 'notifications' ? (
               <>
                 {!isHydrated && totalNotifications === 0 ? (
-                  <View style={styles.emptyState}>
-                    <MaterialCommunityIcons name="bell-outline" size={26} color="#9fb1b6" />
+                    <View style={styles.emptyState}>
+                    <MaterialCommunityIcons name="bell-outline" size={26} color={themeColors.textTertiary} />
                     <Text style={styles.statusText}>Syncing notifications...</Text>
                   </View>
                 ) : notificationsLoading && totalNotifications === 0 ? (
                   <View style={styles.emptyState}>
-                    <MaterialCommunityIcons name="bell-outline" size={26} color="#9fb1b6" />
+                    <MaterialCommunityIcons name="bell-outline" size={26} color={themeColors.textTertiary} />
                     <Text style={styles.statusText}>Checking for updates...</Text>
                   </View>
                 ) : notificationsError && totalNotifications === 0 ? (
                   <View style={styles.emptyState}>
-                    <MaterialCommunityIcons name="alert-circle-outline" size={26} color="#b42318" />
+                    <MaterialCommunityIcons name="alert-circle-outline" size={26} color={themeColors.dangerText} />
                     <Text style={styles.errorText}>Unable to load notifications.</Text>
                   </View>
                 ) : (
@@ -414,7 +430,7 @@ export function NotificationPanel({
                     >
                       {totalNotifications === 0 ? (
                         <View style={styles.emptyStateInline}>
-                          <MaterialCommunityIcons name="bell-outline" size={22} color="#9fb1b6" />
+                          <MaterialCommunityIcons name="bell-outline" size={22} color={themeColors.textTertiary} />
                           <View>
                             <Text style={styles.emptyTitle}>No notifications yet</Text>
                             <Text style={styles.emptySubtitle}>
@@ -429,15 +445,14 @@ export function NotificationPanel({
                         </Text>
                       ) : (
                         <>
-                          {activeAppointments.map(({ appointment, dateTime }) => {
+                          {activeAppointments.map(({ notificationId, appointment, dateTime, profileLabel }) => {
                             const apptTitle = appointment.title || appointment.type || 'Appointment';
                             const timeLabel = dateTime.toLocaleTimeString([], {
                               hour: 'numeric',
                               minute: '2-digit',
                             });
-                            const notifId = `appointment:${appointment.id}`;
                             return (
-                              <View key={`appointment-${isReadView ? 'read' : 'unread'}-${appointment.id}`}>
+                              <View key={`appointment-${isReadView ? 'read' : 'unread'}-${notificationId}`}>
                                 <Pressable
                                   onPress={() => handleNavigate('/home')}
                                   style={({ pressed }) => [
@@ -445,31 +460,76 @@ export function NotificationPanel({
                                     styles.cardAppointment,
                                     isReadView && styles.cardRead,
                                     pressed && styles.cardPressed,
-                                  ]}
-                                >
-                                  <View style={[styles.icon, styles.iconAppointment]}>
-                                    <MaterialCommunityIcons name="calendar-clock" size={18} color="#b45309" />
-                                  </View>
+                                ]}
+                              >
+                                <View style={[styles.icon, styles.iconAppointment]}>
+                                    <MaterialCommunityIcons
+                                      name="calendar-clock"
+                                      size={18}
+                                      color={themeColors.warningText}
+                                    />
+                                </View>
                                   <View style={styles.text}>
                                     <Text style={styles.itemTitle}>Upcoming appointment</Text>
                                     <Text style={styles.itemSubtitle} numberOfLines={1}>
+                                      {profileLabel ? `${profileLabel} · ` : ''}
                                       {apptTitle} · {timeLabel}
                                     </Text>
                                   </View>
                                   <View style={styles.cardActions}>
                                     <Text style={styles.itemMeta}>{formatTimeUntil(dateTime)}</Text>
                                     <Pressable
-                                      onPress={() => dismissNotification(notifId)}
+                                      onPress={() => dismissNotification(notificationId)}
                                       hitSlop={8}
                                       style={styles.dismissButton}
                                     >
-                                      <MaterialCommunityIcons name="close" size={14} color="#94a3b8" />
+                                      <MaterialCommunityIcons name="close" size={14} color={themeColors.textTertiary} />
                                     </Pressable>
                                   </View>
                                 </Pressable>
                               </View>
                             );
                           })}
+                          {activeMedicationReminders.map(
+                            ({ notificationId, medicationName, dosage, slotContext, slotTime }) => (
+                              <Pressable
+                                key={`medication-${isReadView ? 'read' : 'unread'}-${notificationId}`}
+                                onPress={() => handleNavigate('/home')}
+                                style={({ pressed }) => [
+                                  styles.card,
+                                  styles.cardMedication,
+                                  isReadView && styles.cardRead,
+                                  pressed && styles.cardPressed,
+                                ]}
+                              >
+                                <View style={[styles.icon, styles.iconMedication]}>
+                                  <MaterialCommunityIcons name="pill" size={18} color={themeColors.accentStrong} />
+                                </View>
+                                <View style={styles.text}>
+                                  <Text style={styles.itemTitle}>Medication due {slotContext}</Text>
+                                  <Text style={styles.itemSubtitle} numberOfLines={1}>
+                                    {medicationName}
+                                    {dosage ? ` · ${dosage}` : ''}
+                                  </Text>
+                                </View>
+                                <View style={styles.cardActions}>
+                                  <Text style={styles.itemMeta}>
+                                    {slotTime.toLocaleTimeString([], {
+                                      hour: 'numeric',
+                                      minute: '2-digit',
+                                    })}
+                                  </Text>
+                                  <Pressable
+                                    onPress={() => dismissNotification(notificationId)}
+                                    hitSlop={8}
+                                    style={styles.dismissButton}
+                                  >
+                                    <MaterialCommunityIcons name="close" size={14} color={themeColors.textTertiary} />
+                                  </Pressable>
+                                </View>
+                              </Pressable>
+                            )
+                          )}
                           {activeInvites.map((invite) => {
                             const notifId = `invite:${invite.id}`;
                             return (
@@ -484,7 +544,7 @@ export function NotificationPanel({
                                 ]}
                               >
                                 <View style={[styles.icon, styles.iconInvite]}>
-                                  <MaterialCommunityIcons name="account-plus" size={18} color="#0f766e" />
+                                  <MaterialCommunityIcons name="account-plus" size={18} color={themeColors.accentStrong} />
                                 </View>
                                 <View style={styles.text}>
                                   <Text style={styles.itemTitle}>Care circle invite</Text>
@@ -499,7 +559,7 @@ export function NotificationPanel({
                                     hitSlop={8}
                                     style={styles.dismissButton}
                                   >
-                                    <MaterialCommunityIcons name="close" size={14} color="#94a3b8" />
+                                    <MaterialCommunityIcons name="close" size={14} color={themeColors.textTertiary} />
                                   </Pressable>
                                 </View>
                               </Pressable>
@@ -519,7 +579,7 @@ export function NotificationPanel({
                                 ]}
                               >
                                 <View style={[styles.icon, styles.iconAcceptance]}>
-                                  <MaterialCommunityIcons name="account-check" size={18} color="#15803d" />
+                                  <MaterialCommunityIcons name="account-check" size={18} color={themeColors.success} />
                                 </View>
                                 <View style={styles.text}>
                                   <Text style={styles.itemTitle}>Care circle update</Text>
@@ -534,7 +594,7 @@ export function NotificationPanel({
                                     hitSlop={8}
                                     style={styles.dismissButton}
                                   >
-                                    <MaterialCommunityIcons name="close" size={14} color="#94a3b8" />
+                                    <MaterialCommunityIcons name="close" size={14} color={themeColors.textTertiary} />
                                   </Pressable>
                                 </View>
                               </Pressable>
@@ -575,7 +635,7 @@ export function NotificationPanel({
                                     hitSlop={8}
                                     style={styles.dismissButton}
                                   >
-                                    <MaterialCommunityIcons name="close" size={14} color="#94a3b8" />
+                                    <MaterialCommunityIcons name="close" size={14} color={themeColors.textTertiary} />
                                   </Pressable>
                                 </View>
                               </Pressable>
@@ -594,17 +654,17 @@ export function NotificationPanel({
               <>
                 {logsLoading && activityLogs.length === 0 ? (
                   <View style={styles.emptyState}>
-                    <MaterialCommunityIcons name="text-box-outline" size={26} color="#9fb1b6" />
+                    <MaterialCommunityIcons name="text-box-outline" size={26} color={themeColors.textTertiary} />
                     <Text style={styles.statusText}>Loading logs...</Text>
                   </View>
                 ) : logsError && activityLogs.length === 0 ? (
                   <View style={styles.emptyState}>
-                    <MaterialCommunityIcons name="alert-circle-outline" size={26} color="#b42318" />
+                    <MaterialCommunityIcons name="alert-circle-outline" size={26} color={themeColors.dangerText} />
                     <Text style={styles.errorText}>{logsError}</Text>
                   </View>
                 ) : activityLogs.length === 0 ? (
                   <View style={styles.emptyState}>
-                    <MaterialCommunityIcons name="text-box-outline" size={26} color="#9fb1b6" />
+                    <MaterialCommunityIcons name="text-box-outline" size={26} color={themeColors.textTertiary} />
                     <Text style={styles.statusText}>No activity logs yet</Text>
                   </View>
                 ) : (
@@ -671,7 +731,8 @@ export function NotificationPanel({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: AppThemeColors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     flexDirection: 'row',
@@ -679,12 +740,12 @@ const styles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#0a1418',
+    backgroundColor: themeColors.overlay,
   },
   panel: {
     flex: 1,
-    backgroundColor: '#f7fbfb',
-    shadowColor: '#0a1418',
+    backgroundColor: themeColors.surfaceMuted,
+    shadowColor: themeColors.shadow,
     shadowOffset: { width: -4, height: 0 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -711,7 +772,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   titleRow: {
     flexDirection: 'row',
@@ -737,7 +798,7 @@ const styles = StyleSheet.create({
   topSegmentedControl: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#dce5e7',
+    backgroundColor: themeColors.backgroundMuted,
     borderRadius: 18,
     padding: 4,
     marginBottom: 12,
@@ -749,8 +810,8 @@ const styles = StyleSheet.create({
     bottom: 4,
     left: 4,
     borderRadius: 14,
-    backgroundColor: '#2f565f',
-    shadowColor: '#0f1f22',
+    backgroundColor: themeColors.accentStrong,
+    shadowColor: themeColors.shadow,
     shadowOpacity: 0.12,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -766,7 +827,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   topSegmentText: {
-    color: '#5c6f75',
+    color: themeColors.textSecondary,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -777,7 +838,7 @@ const styles = StyleSheet.create({
   segmentedControl: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e6eff1',
+    backgroundColor: themeColors.backgroundMuted,
     borderRadius: 18,
     padding: 4,
     marginBottom: 12,
@@ -789,8 +850,8 @@ const styles = StyleSheet.create({
     bottom: 4,
     left: 4,
     borderRadius: 14,
-    backgroundColor: '#ffffff',
-    shadowColor: '#0f1f22',
+    backgroundColor: themeColors.surface,
+    shadowColor: themeColors.shadow,
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -809,16 +870,16 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   segmentText: {
-    color: '#5c6f75',
+    color: themeColors.textSecondary,
     fontSize: 13,
     fontWeight: '600',
   },
   segmentTextActive: {
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
     fontWeight: '700',
   },
   segmentBadge: {
-    backgroundColor: '#1f8f7a',
+    backgroundColor: themeColors.accent,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 10,
@@ -831,7 +892,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   segmentBadgeMuted: {
-    backgroundColor: '#d6e3e6',
+    backgroundColor: themeColors.backgroundMuted,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 10,
@@ -839,7 +900,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   segmentBadgeTextMuted: {
-    color: '#4f666d',
+    color: themeColors.textSecondary,
     fontWeight: '700',
     fontSize: 10,
   },
@@ -850,13 +911,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   listTitle: {
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
   listCount: {
-    backgroundColor: '#e3ecee',
+    backgroundColor: themeColors.backgroundMuted,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 12,
@@ -864,18 +925,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   listCountText: {
-    color: '#456068',
+    color: themeColors.textSecondary,
     fontWeight: '700',
     fontSize: 11,
   },
   listEmpty: {
-    color: '#2f565f',
+    color: themeColors.accentStrong,
     fontSize: 12,
     fontWeight: '600',
     paddingVertical: 6,
   },
   listEmptyMuted: {
-    color: '#7b8d93',
+    color: themeColors.textSecondary,
     fontSize: 12,
     fontWeight: '600',
     paddingVertical: 6,
@@ -887,24 +948,28 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#e1eaec',
-    backgroundColor: '#ffffff',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.surface,
   },
   cardAppointment: {
-    backgroundColor: '#fff6e8',
-    borderColor: '#f1ddbf',
+    backgroundColor: themeColors.warningSurface,
+    borderColor: themeColors.warning,
   },
   cardInvite: {
-    backgroundColor: '#f2f8f8',
-    borderColor: '#dfeaec',
+    backgroundColor: themeColors.accentSoft,
+    borderColor: themeColors.border,
+  },
+  cardMedication: {
+    backgroundColor: themeColors.accentSoft,
+    borderColor: themeColors.border,
   },
   cardAcceptance: {
-    backgroundColor: '#eef9f1',
-    borderColor: '#d8f0df',
+    backgroundColor: themeColors.successSurface,
+    borderColor: themeColors.success,
   },
   cardActivity: {
-    backgroundColor: '#f0f4ff',
-    borderColor: '#dce4f5',
+    backgroundColor: themeColors.infoSurface,
+    borderColor: themeColors.info,
   },
   cardRead: {
     opacity: 0.8,
@@ -923,7 +988,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f1f5f9',
+    backgroundColor: themeColors.backgroundMuted,
   },
   icon: {
     width: 36,
@@ -931,32 +996,35 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e4eef0',
+    backgroundColor: themeColors.backgroundMuted,
   },
   iconAppointment: {
-    backgroundColor: '#ffe7c7',
+    backgroundColor: themeColors.warningSurface,
   },
   iconInvite: {
-    backgroundColor: '#d9f0f1',
+    backgroundColor: themeColors.accentSoft,
+  },
+  iconMedication: {
+    backgroundColor: themeColors.accentSoft,
   },
   iconAcceptance: {
-    backgroundColor: '#dcf5e5',
+    backgroundColor: themeColors.successSurface,
   },
   text: {
     flex: 1,
   },
   itemTitle: {
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
     fontSize: 14,
     fontWeight: '700',
   },
   itemSubtitle: {
-    color: '#51666c',
+    color: themeColors.textSecondary,
     fontSize: 12,
     marginTop: 4,
   },
   itemMeta: {
-    color: '#708089',
+    color: themeColors.textTertiary,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -974,39 +1042,39 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   emptyTitle: {
-    color: '#2f3f44',
+    color: themeColors.textPrimary,
     fontSize: 16,
     fontWeight: '700',
   },
   emptySubtitle: {
-    color: '#6b7f86',
+    color: themeColors.textSecondary,
     fontSize: 12,
     textAlign: 'center',
     maxWidth: 220,
   },
   statusText: {
-    color: '#6b7f86',
+    color: themeColors.textSecondary,
     fontSize: 13,
     fontWeight: '600',
   },
   errorText: {
-    color: '#b42318',
+    color: themeColors.dangerText,
     fontSize: 13,
     fontWeight: '600',
   },
   warningText: {
-    color: '#b45309',
+    color: themeColors.warningText,
     fontSize: 12,
     textAlign: 'center',
     marginTop: 12,
   },
   loadMoreButton: {
     borderWidth: 1,
-    borderColor: '#d7e0e4',
+    borderColor: themeColors.border,
     borderRadius: 14,
     paddingVertical: 10,
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: themeColors.surface,
   },
   loadMoreButtonDisabled: {
     opacity: 0.6,
@@ -1014,6 +1082,7 @@ const styles = StyleSheet.create({
   loadMoreText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#2f565f',
+    color: themeColors.accentStrong,
   },
-});
+  });
+}

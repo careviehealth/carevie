@@ -19,6 +19,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 
 import { useAuth } from '@/hooks/useAuth';
+import { type AppThemeColors } from '@/constants/appThemes';
+import { useAppTheme } from '@/hooks/useAppTheme';
 import { useProfile } from '@/hooks/useProfile';
 import { Screen } from '@/components/Screen';
 import { toast } from '@/lib/toast';
@@ -29,6 +31,19 @@ import {
 } from '@/components/EmergencyContactsModal';
 import { MedicalTeamModal, type Doctor } from '@/components/MedicalTeamModal';
 import { MedicationsModal, type Medication } from '@/components/MedicationsModal';
+import {
+  getDueMedicationReminderSlots,
+  normalizeMedicationRecord,
+  type MedicationReminderSlot,
+} from '@/lib/medications';
+import {
+  buildAppointmentActivityChanges,
+  buildMedicationActivityChanges,
+  getAppointmentActivityMetadata,
+  getMedicationActivityMetadata,
+  logProfileActivity,
+} from '@/lib/profileActivity';
+import { TourAnchor } from '@/providers/OnboardingTourProvider';
 import { supabase } from '@/lib/supabase';
 import { apiRequest } from '@/api/client';
 
@@ -60,10 +75,29 @@ const quickActions = [
 const createMedicationId = () =>
   globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
+const getTodayDateKey = () => new Date().toISOString().split('T')[0];
+
+const normalizeMedicationEntry = (value: unknown): Medication => {
+  const normalized = normalizeMedicationRecord(value, createMedicationId);
+  return {
+    ...normalized,
+    startDate: normalized.startDate || getTodayDateKey(),
+  };
+};
+
+const normalizeMedicationList = (value: unknown): Medication[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => normalizeMedicationEntry(entry))
+    .filter((entry) => entry.name && entry.dosage && entry.frequency);
+};
+
 export default function HomeScreen() {
   const { width, height: windowHeight } = useWindowDimensions();
   const { user } = useAuth();
   const { selectedProfile } = useProfile();
+  const { colors: themeColors } = useAppTheme();
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
   const profileId = selectedProfile?.id ?? '';
   const [displayName, setDisplayName] = useState('');
   const [now, setNow] = useState(() => new Date());
@@ -205,7 +239,7 @@ export default function HomeScreen() {
         return;
       }
 
-      setMedications((data?.medications ?? []) as Medication[]);
+      setMedications(normalizeMedicationList(data?.medications));
     };
 
     loadMedications();
@@ -263,6 +297,7 @@ export default function HomeScreen() {
   const handleAddAppointment = async (appointment: Appointment) => {
     if (!user?.id || !profileId) return;
 
+    const existingAppointment = appointments.find((item) => item.id === appointment.id) ?? null;
     const existingIndex = appointments.findIndex((item) => item.id === appointment.id);
     const updatedAppointments =
       existingIndex !== -1
@@ -282,12 +317,37 @@ export default function HomeScreen() {
       return;
     }
 
+    const appointmentChanges = existingAppointment
+      ? buildAppointmentActivityChanges(existingAppointment, appointment)
+      : [];
+
+    void logProfileActivity({
+      profileId,
+      domain: 'appointment',
+      action: existingAppointment ? 'update' : 'add',
+      entity: {
+        id: appointment.id,
+        label: appointment.title || appointment.type || 'Appointment',
+      },
+      metadata: {
+        id: appointment.id,
+        ...getAppointmentActivityMetadata(appointment),
+        ...(existingAppointment
+          ? {
+              changes: appointmentChanges,
+              changeCount: appointmentChanges.length,
+            }
+          : {}),
+      },
+    });
+
     setAppointments(updatedAppointments);
   };
 
   const handleDeleteAppointment = async (id: string) => {
     if (!user?.id || !profileId) return;
 
+    const deletedAppointment = appointments.find((item) => item.id === id) ?? null;
     const updatedAppointments = appointments.filter((item) => item.id !== id);
 
     const { error } = await supabase.from('user_appointments').upsert({
@@ -302,6 +362,20 @@ export default function HomeScreen() {
       toast.error('Unable to delete', 'Failed to delete appointment. Please try again.');
       return;
     }
+
+    void logProfileActivity({
+      profileId,
+      domain: 'appointment',
+      action: 'delete',
+      entity: {
+        id,
+        label: deletedAppointment?.title || deletedAppointment?.type || 'Appointment',
+      },
+      metadata: {
+        id,
+        ...getAppointmentActivityMetadata(deletedAppointment ?? {}),
+      },
+    });
 
     setAppointments(updatedAppointments);
   };
@@ -424,24 +498,26 @@ export default function HomeScreen() {
   const addMedication = async (medication: Medication) => {
     if (!user?.id || !profileId) return;
 
-    if (!medication.name.trim() || !medication.dosage.trim() || !medication.frequency.trim()) {
-      toast.warning('Missing info', 'Please fill Name, Dosage, and Frequency.');
+    const normalizedMedication = normalizeMedicationEntry({
+      ...medication,
+      id: medication.id || createMedicationId(),
+      logs: [],
+      startDate: medication.startDate || getTodayDateKey(),
+    });
+
+    if (
+      !normalizedMedication.name.trim() ||
+      !normalizedMedication.dosage.trim() ||
+      !normalizedMedication.frequency.trim()
+    ) {
+      toast.warning(
+        'Missing info',
+        'Please fill the medication name, dosage, and at least one meal timing.'
+      );
       return;
     }
 
-    const newMedication: Medication = {
-      id: createMedicationId(),
-      name: medication.name.trim(),
-      dosage: medication.dosage.trim(),
-      purpose: medication.purpose.trim(),
-      frequency: medication.frequency.trim(),
-      timesPerDay: medication.timesPerDay || 1,
-      startDate: medication.startDate || new Date().toISOString().split('T')[0],
-      endDate: medication.endDate || undefined,
-      logs: [],
-    };
-
-    const updatedMedications = [...medications, newMedication];
+    const updatedMedications = [...medications, normalizedMedication];
 
     try {
       const { error } = await supabase.from('user_medications').upsert(
@@ -457,6 +533,20 @@ export default function HomeScreen() {
       );
 
       if (error) throw error;
+
+      void logProfileActivity({
+        profileId,
+        domain: 'medication',
+        action: 'add',
+        entity: {
+          id: normalizedMedication.id,
+          label: normalizedMedication.name,
+        },
+        metadata: {
+          id: normalizedMedication.id,
+          ...getMedicationActivityMetadata(normalizedMedication),
+        },
+      });
 
       setMedications(updatedMedications);
     } catch (error: any) {
@@ -468,12 +558,31 @@ export default function HomeScreen() {
   const updateMedication = async (medication: Medication) => {
     if (!user?.id || !profileId) return;
 
-    if (!medication.name.trim() || !medication.dosage.trim() || !medication.frequency.trim()) {
-      toast.warning('Missing info', 'Please fill Name, Dosage, and Frequency.');
+    const existingMedication = medications.find((entry) => entry.id === medication.id) ?? null;
+    const normalizedMedication = normalizeMedicationEntry({
+      ...existingMedication,
+      ...medication,
+      id: medication.id || existingMedication?.id || createMedicationId(),
+      logs: Array.isArray(medication.logs) ? medication.logs : existingMedication?.logs || [],
+      startDate:
+        medication.startDate || existingMedication?.startDate || getTodayDateKey(),
+    });
+
+    if (
+      !normalizedMedication.name.trim() ||
+      !normalizedMedication.dosage.trim() ||
+      !normalizedMedication.frequency.trim()
+    ) {
+      toast.warning(
+        'Missing info',
+        'Please fill the medication name, dosage, and at least one meal timing.'
+      );
       return;
     }
 
-    const updatedMedications = medications.map((m) => (m.id === medication.id ? medication : m));
+    const updatedMedications = medications.map((entry) =>
+      entry.id === normalizedMedication.id ? normalizedMedication : entry
+    );
 
     try {
       const { error } = await supabase.from('user_medications').upsert(
@@ -490,6 +599,26 @@ export default function HomeScreen() {
 
       if (error) throw error;
 
+      const medicationChanges = existingMedication
+        ? buildMedicationActivityChanges(existingMedication, normalizedMedication)
+        : [];
+
+      void logProfileActivity({
+        profileId,
+        domain: 'medication',
+        action: 'update',
+        entity: {
+          id: normalizedMedication.id,
+          label: normalizedMedication.name,
+        },
+        metadata: {
+          id: normalizedMedication.id,
+          ...getMedicationActivityMetadata(normalizedMedication),
+          changes: medicationChanges,
+          changeCount: medicationChanges.length,
+        },
+      });
+
       setMedications(updatedMedications);
     } catch (error: any) {
       console.error('Update medication error:', error);
@@ -500,6 +629,7 @@ export default function HomeScreen() {
   const deleteMedication = async (id: string) => {
     if (!user?.id || !profileId) return;
 
+    const deletedMedication = medications.find((entry) => entry.id === id) ?? null;
     const updatedMedications = medications.filter((m) => m.id !== id);
 
     try {
@@ -517,6 +647,20 @@ export default function HomeScreen() {
 
       if (error) throw error;
 
+      void logProfileActivity({
+        profileId,
+        domain: 'medication',
+        action: 'delete',
+        entity: {
+          id,
+          label: deletedMedication?.name ?? 'Medication',
+        },
+        metadata: {
+          id,
+          ...getMedicationActivityMetadata(deletedMedication ?? {}),
+        },
+      });
+
       setMedications(updatedMedications);
     } catch (error: any) {
       console.error('Delete medication error:', error);
@@ -524,13 +668,38 @@ export default function HomeScreen() {
     }
   };
 
-  const logMedicationDose = async (medicationId: string, taken: boolean) => {
+  const logMedicationDose = async (
+    medicationId: string,
+    taken: boolean,
+    slotKey?: MedicationReminderSlot['key']
+  ) => {
     if (!user?.id || !profileId) return;
+
+    const medication = medications.find((entry) => entry.id === medicationId) ?? null;
+    const dueSlots =
+      taken && medication
+        ? getDueMedicationReminderSlots(medication, new Date(), 90 * 60 * 1000)
+        : [];
+    const resolvedSlotKey = slotKey ?? dueSlots[0]?.key;
+
+    if (taken && medication && resolvedSlotKey) {
+      const alreadyLoggedToday = (medication.logs || []).some((log) => {
+        if (!log.taken || log.slotKey !== resolvedSlotKey) return false;
+        const parsed = new Date(log.timestamp);
+        if (Number.isNaN(parsed.getTime())) return false;
+        return parsed.toDateString() === new Date().toDateString();
+      });
+
+      if (alreadyLoggedToday) {
+        return;
+      }
+    }
 
     const newLog = {
       medicationId,
       timestamp: new Date().toISOString(),
       taken,
+      slotKey: resolvedSlotKey,
     };
 
     const updatedMedications = medications.map((m) => {
@@ -760,7 +929,7 @@ export default function HomeScreen() {
     >
       <View style={styles.headerCard}>
         <LinearGradient
-          colors={['#2f565f', '#6aa6a8']}
+          colors={[themeColors.headerGradientStart, themeColors.headerGradientEnd]}
           start={{ x: 0.15, y: 0 }}
           end={{ x: 0.85, y: 1 }}
           style={styles.headerGradient}
@@ -769,71 +938,93 @@ export default function HomeScreen() {
           <Text style={styles.name}>{greetingName}</Text>
 
           <View style={styles.actionStack}>
-            <Pressable
-              onPress={openSummaryModal}
-              disabled={!profileId}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                !profileId && styles.buttonDisabled,
-                pressed && styles.buttonPressed,
-              ]}
-            >
-              <MaterialCommunityIcons name="file-document-outline" size={18} color="#1b2b2f" />
-              <Text style={styles.primaryButtonText}>Get Summary</Text>
-              {hasUnreadSummary && (
-                <View style={styles.summaryReadyBadge}>
-                  <MaterialCommunityIcons name="alert-circle" size={12} color="#7a4b00" />
-                </View>
-              )}
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                isSendingSOS && styles.buttonDisabled,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={sendSOS}
-              disabled={isSendingSOS}
-            >
-              <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#ffffff" />
-              <Text style={styles.secondaryButtonText}>{isSendingSOS ? 'Sending...' : 'SOS'}</Text>
-            </Pressable>
+            <TourAnchor tourId="home-get-summary">
+              <Pressable
+                onPress={openSummaryModal}
+                disabled={!profileId}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  !profileId && styles.buttonDisabled,
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="file-document-outline"
+                  size={18}
+                  color={themeColors.textPrimary}
+                />
+                <Text style={styles.primaryButtonText}>Get Summary</Text>
+                {hasUnreadSummary && (
+                  <View style={styles.summaryReadyBadge}>
+                    <MaterialCommunityIcons
+                      name="alert-circle"
+                      size={12}
+                      color={themeColors.warningText}
+                    />
+                  </View>
+                )}
+              </Pressable>
+            </TourAnchor>
+            <TourAnchor tourId="home-sos">
+              <Pressable
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  isSendingSOS && styles.buttonDisabled,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={sendSOS}
+                disabled={isSendingSOS}
+              >
+                <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#ffffff" />
+                <Text style={styles.secondaryButtonText}>{isSendingSOS ? 'Sending...' : 'SOS'}</Text>
+              </Pressable>
+            </TourAnchor>
           </View>
         </LinearGradient>
       </View>
 
-      <View style={[styles.cardsGrid, { paddingHorizontal: horizontalPadding }]}>
-        {quickActions.map((action, index) => (
-          <Animated.View key={action.key} style={{ width: '47%' }} entering={FadeInDown.delay(index * 80).springify()}>
-            <Pressable
-              onPress={() => {
-                if (action.key === 'appointments') {
-                  setIsAppointmentsOpen(true);
-                }
-                if (action.key === 'emergency') {
-                  setIsEmergencyContactsOpen(true);
-                }
-                if (action.key === 'medical') {
-                  setIsMedicalTeamOpen(true);
-                }
-                if (action.key === 'medications') {
-                  setIsMedicationsOpen(true);
-                }
-              }}
-              style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      <TourAnchor tourId="home-quick-cards">
+        <View style={[styles.cardsGrid, { paddingHorizontal: horizontalPadding }]}>
+          {quickActions.map((action, index) => (
+            <Animated.View
+              key={action.key}
+              style={{ width: '47%' }}
+              entering={FadeInDown.delay(index * 80).springify()}
             >
-              <View style={styles.cardHeader}>
-                <View style={styles.cardIcon}>
-                  <MaterialCommunityIcons name={action.icon} size={20} color="#466a70" />
+              <Pressable
+                onPress={() => {
+                  if (action.key === 'appointments') {
+                    setIsAppointmentsOpen(true);
+                  }
+                  if (action.key === 'emergency') {
+                    setIsEmergencyContactsOpen(true);
+                  }
+                  if (action.key === 'medical') {
+                    setIsMedicalTeamOpen(true);
+                  }
+                  if (action.key === 'medications') {
+                    setIsMedicationsOpen(true);
+                  }
+                }}
+                style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+              >
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardIcon}>
+                    <MaterialCommunityIcons
+                      name={action.icon}
+                      size={20}
+                      color={themeColors.accentStrong}
+                    />
+                  </View>
                 </View>
-              </View>
-              <Text style={styles.cardTitle}>{action.title}</Text>
-              <View style={styles.cardDivider} />
-              <Text style={styles.cardLink}>View details</Text>
-            </Pressable>
-          </Animated.View>
-        ))}
-      </View>
+                <Text style={styles.cardTitle}>{action.title}</Text>
+                <View style={styles.cardDivider} />
+                <Text style={styles.cardLink}>View details</Text>
+              </Pressable>
+            </Animated.View>
+          ))}
+        </View>
+      </TourAnchor>
 
       <AppointmentsModal
         visible={isAppointmentsOpen}
@@ -887,7 +1078,11 @@ export default function HomeScreen() {
               <View style={styles.summaryHeader}>
                 <Text style={styles.summaryTitle}>Medical Report Summary</Text>
                 <Pressable onPress={closeSummaryModal} style={({ pressed }) => [pressed && styles.buttonPressed]}>
-                  <MaterialCommunityIcons name="close" size={22} color="#304c51" />
+                  <MaterialCommunityIcons
+                    name="close"
+                    size={22}
+                    color={themeColors.textPrimary}
+                  />
                 </Pressable>
               </View>
 
@@ -900,7 +1095,7 @@ export default function HomeScreen() {
             <View style={styles.summaryBody}>
               {isSummaryLoading && (
                 <View style={styles.summaryStateContainer}>
-                  <ActivityIndicator size="large" color="#2f565f" />
+                  <ActivityIndicator size="large" color={themeColors.accentStrong} />
                   <Text style={styles.summaryStateText}>
                     {isProcessingSummary
                       ? 'Processing your reports...'
@@ -961,7 +1156,11 @@ export default function HomeScreen() {
                     pressed && styles.buttonPressed,
                   ]}
                 >
-                  <MaterialCommunityIcons name="share-variant-outline" size={18} color="#ffffff" />
+                  <MaterialCommunityIcons
+                    name="share-variant-outline"
+                    size={18}
+                    color={themeColors.accentContrast}
+                  />
                   <Text style={styles.summaryShareButtonText}>
                     {isSharingSummary ? 'Sharing...' : 'Share'}
                   </Text>
@@ -977,259 +1176,261 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    backgroundColor: '#eef3f3',
-  },
-  screenContent: {
-    justifyContent: 'flex-start',
-    paddingVertical: 0,
-    paddingBottom: 28,
-  },
-  screenInner: {
-    alignItems: 'stretch',
-  },
-  headerCard: {
-    width: '100%',
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    overflow: 'hidden',
-    marginTop: -2,
-    borderTopWidth: 2,
-    borderTopColor: '#2f565f',
-    shadowColor: '#22484e',
-    shadowOpacity: 0.25,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: Platform.OS === 'android' ? 0 : 10,
-  },
-  headerGradient: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 24,
-    gap: 12,
-  },
-  greeting: {
-    fontSize: 28,
-    fontWeight: '600',
-    color: '#e8f4f4',
-  },
-  name: {
-    fontSize: 34,
-    fontWeight: '700',
-    color: '#f7fbfb',
-  },
-  actionStack: {
-    gap: 12,
-    marginTop: 6,
-  },
-  primaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#f8fdfd',
-    paddingVertical: 12,
-    borderRadius: 999,
-  },
-  primaryButtonText: {
-    color: '#1b2b2f',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  summaryReadyBadge: {
-    minWidth: 18,
-    minHeight: 18,
-    borderRadius: 999,
-    backgroundColor: '#fde68a',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#d7263d',
-    paddingVertical: 12,
-    backgroundColor: '#d7263d',
-  },
-  secondaryButtonText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
-  buttonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.97 }],
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  summaryBackdrop: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 24,
-  },
-  summaryModalCard: {
-    borderRadius: 22,
-    backgroundColor: '#f7fbfb',
-    borderWidth: 1,
-    borderColor: '#d4e0e3',
-    overflow: 'hidden',
-  },
-  summaryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#dbe7ea',
-    backgroundColor: '#eef5f6',
-  },
-  summaryTitle: {
-    color: '#1d2f33',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  summaryMeta: {
-    color: '#5f7479',
-    fontSize: 13,
-    paddingHorizontal: 18,
-    paddingTop: 10,
-  },
-  summaryBody: {
-    minHeight: 260,
-  },
-  summaryStateContainer: {
-    minHeight: 260,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    gap: 10,
-  },
-  summaryStateText: {
-    color: '#4f666b',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  summaryHintText: {
-    color: '#5f7479',
-    fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 18,
-    maxWidth: 320,
-  },
-  summaryErrorText: {
-    color: '#a61f2f',
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: 'center',
-  },
-  summaryRetryButton: {
-    marginTop: 8,
-    backgroundColor: '#2f565f',
-    borderRadius: 999,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  summaryRetryButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  summaryScrollView: {
-    flexShrink: 1,
-  },
-  summaryScrollContent: {
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-  },
-  summaryText: {
-    color: '#2a3f44',
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  summaryFooter: {
-    borderTopWidth: 1,
-    borderTopColor: '#dbe7ea',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    backgroundColor: '#eef5f6',
-  },
-  summaryShareButton: {
-    borderRadius: 999,
-    backgroundColor: '#2f565f',
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  summaryShareButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  cardsGrid: {
-    marginTop: 28,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    columnGap: 16,
-    rowGap: 16,
-  },
-  card: {
-    minHeight: 160,
-    borderRadius: 20,
-    padding: 16,
-    backgroundColor: '#fdfefe',
-    borderWidth: 1,
-    borderColor: '#dbe3e6',
-    shadowColor: '#1b2b2f',
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-    justifyContent: 'space-between',
-  },
-  cardPressed: {
-    transform: [{ scale: 0.98 }],
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
-  cardIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: '#e5eef0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardTitle: {
-    marginTop: 12,
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1d2f33',
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: '#d7e1e5',
-    marginVertical: 10,
-  },
-  cardLink: {
-    fontSize: 13,
-    color: '#6b7f86',
-  },
-});
+function createStyles(themeColors: AppThemeColors) {
+  return StyleSheet.create({
+    safeArea: {
+      backgroundColor: themeColors.background,
+    },
+    screenContent: {
+      justifyContent: 'flex-start',
+      paddingVertical: 0,
+      paddingBottom: 28,
+    },
+    screenInner: {
+      alignItems: 'stretch',
+    },
+    headerCard: {
+      width: '100%',
+      borderBottomLeftRadius: 28,
+      borderBottomRightRadius: 28,
+      borderTopLeftRadius: 0,
+      borderTopRightRadius: 0,
+      overflow: 'hidden',
+      marginTop: -2,
+      borderTopWidth: 2,
+      borderTopColor: themeColors.headerGradientStart,
+      shadowColor: themeColors.shadow,
+      shadowOpacity: 0.25,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: Platform.OS === 'android' ? 0 : 10,
+    },
+    headerGradient: {
+      paddingHorizontal: 20,
+      paddingTop: 16,
+      paddingBottom: 24,
+      gap: 12,
+    },
+    greeting: {
+      fontSize: 28,
+      fontWeight: '600',
+      color: themeColors.headerForeground,
+    },
+    name: {
+      fontSize: 34,
+      fontWeight: '700',
+      color: themeColors.headerForeground,
+    },
+    actionStack: {
+      gap: 12,
+      marginTop: 6,
+    },
+    primaryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      backgroundColor: themeColors.surface,
+      paddingVertical: 12,
+      borderRadius: 999,
+    },
+    primaryButtonText: {
+      color: themeColors.textPrimary,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    summaryReadyBadge: {
+      minWidth: 18,
+      minHeight: 18,
+      borderRadius: 999,
+      backgroundColor: themeColors.warningSurface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    secondaryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: themeColors.danger,
+      paddingVertical: 12,
+      backgroundColor: themeColors.danger,
+    },
+    secondaryButtonText: {
+      color: '#ffffff',
+      fontSize: 15,
+      fontWeight: '600',
+      letterSpacing: 0.3,
+    },
+    buttonPressed: {
+      opacity: 0.9,
+      transform: [{ scale: 0.97 }],
+    },
+    buttonDisabled: {
+      opacity: 0.7,
+    },
+    summaryBackdrop: {
+      flex: 1,
+      backgroundColor: 'transparent',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 24,
+    },
+    summaryModalCard: {
+      borderRadius: 22,
+      backgroundColor: themeColors.surface,
+      borderWidth: 1,
+      borderColor: themeColors.border,
+      overflow: 'hidden',
+    },
+    summaryHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 18,
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.border,
+      backgroundColor: themeColors.surfaceMuted,
+    },
+    summaryTitle: {
+      color: themeColors.textPrimary,
+      fontSize: 18,
+      fontWeight: '700',
+    },
+    summaryMeta: {
+      color: themeColors.textSecondary,
+      fontSize: 13,
+      paddingHorizontal: 18,
+      paddingTop: 10,
+    },
+    summaryBody: {
+      minHeight: 260,
+    },
+    summaryStateContainer: {
+      minHeight: 260,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      gap: 10,
+    },
+    summaryStateText: {
+      color: themeColors.textSecondary,
+      fontSize: 14,
+      textAlign: 'center',
+    },
+    summaryHintText: {
+      color: themeColors.textSecondary,
+      fontSize: 12,
+      textAlign: 'center',
+      lineHeight: 18,
+      maxWidth: 320,
+    },
+    summaryErrorText: {
+      color: themeColors.dangerText,
+      fontSize: 14,
+      lineHeight: 21,
+      textAlign: 'center',
+    },
+    summaryRetryButton: {
+      marginTop: 8,
+      backgroundColor: themeColors.accentStrong,
+      borderRadius: 999,
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+    },
+    summaryRetryButtonText: {
+      color: themeColors.accentContrast,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    summaryScrollView: {
+      flexShrink: 1,
+    },
+    summaryScrollContent: {
+      paddingHorizontal: 18,
+      paddingVertical: 16,
+    },
+    summaryText: {
+      color: themeColors.textPrimary,
+      fontSize: 14,
+      lineHeight: 22,
+    },
+    summaryFooter: {
+      borderTopWidth: 1,
+      borderTopColor: themeColors.border,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      backgroundColor: themeColors.surfaceMuted,
+    },
+    summaryShareButton: {
+      borderRadius: 999,
+      backgroundColor: themeColors.accentStrong,
+      paddingVertical: 11,
+      paddingHorizontal: 16,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 8,
+    },
+    summaryShareButtonText: {
+      color: themeColors.accentContrast,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    cardsGrid: {
+      marginTop: 28,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      columnGap: 16,
+      rowGap: 16,
+    },
+    card: {
+      minHeight: 160,
+      borderRadius: 20,
+      padding: 16,
+      backgroundColor: themeColors.surface,
+      borderWidth: 1,
+      borderColor: themeColors.border,
+      shadowColor: themeColors.shadow,
+      shadowOpacity: 0.1,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 4,
+      justifyContent: 'space-between',
+    },
+    cardPressed: {
+      transform: [{ scale: 0.98 }],
+    },
+    cardHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+    },
+    cardIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      backgroundColor: themeColors.accentSoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cardTitle: {
+      marginTop: 12,
+      fontSize: 15,
+      fontWeight: '700',
+      color: themeColors.textPrimary,
+    },
+    cardDivider: {
+      height: 1,
+      backgroundColor: themeColors.border,
+      marginVertical: 10,
+    },
+    cardLink: {
+      fontSize: 13,
+      color: themeColors.textSecondary,
+    },
+  });
+}

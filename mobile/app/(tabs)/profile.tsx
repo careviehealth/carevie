@@ -13,7 +13,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { MotiView } from 'moti';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -22,10 +21,23 @@ import { Text } from '@/components/Themed';
 import { Screen } from '@/components/Screen';
 import { MedicationsModal, type Medication } from '@/components/MedicationsModal';
 import { SkeletonProfileHeader, SkeletonKPIRow, Skeleton, SkeletonListItem } from '@/components/Skeleton';
+import { useAppTheme } from '@/hooks/useAppTheme';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
+import {
+  formatMedicationFrequencyLabel,
+  getDueMedicationReminderSlots,
+  normalizeMedicationRecord,
+  type MedicationReminderSlot,
+} from '@/lib/medications';
+import {
+  buildMedicationActivityChanges,
+  getMedicationActivityMetadata,
+  logProfileActivity,
+} from '@/lib/profileActivity';
 import { toast } from '@/lib/toast';
 import { profileRepository } from '@/repositories/profileRepository';
+import { TourAnchor } from '@/providers/OnboardingTourProvider';
 import { supabase, type User } from '@/lib/supabase';
 
 // --- Types (aligned with web profile) ---
@@ -88,18 +100,13 @@ function getInitials(name: string): string {
 const createMedicationId = () =>
   globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
+const getTodayDateKey = () => new Date().toISOString().split('T')[0];
+
 function normalizeMedication(item: unknown): Medication {
-  const record = (item ?? {}) as Record<string, unknown>;
+  const normalized = normalizeMedicationRecord(item, createMedicationId);
   return {
-    id: typeof record.id === 'string' && record.id.trim() ? record.id : createMedicationId(),
-    name: typeof record.name === 'string' ? record.name : '',
-    dosage: typeof record.dosage === 'string' ? record.dosage : '',
-    frequency: typeof record.frequency === 'string' ? record.frequency : '',
-    purpose: typeof record.purpose === 'string' ? record.purpose : '',
-    timesPerDay: typeof record.timesPerDay === 'number' ? record.timesPerDay : undefined,
-    startDate: typeof record.startDate === 'string' ? record.startDate : undefined,
-    endDate: typeof record.endDate === 'string' ? record.endDate : undefined,
-    logs: Array.isArray(record.logs) ? (record.logs as Medication['logs']) : undefined,
+    ...normalized,
+    startDate: normalized.startDate || getTodayDateKey(),
   };
 }
 
@@ -173,8 +180,8 @@ function AnimatedCard({
 }
 
 export default function ProfileScreen() {
-  const router = useRouter();
   const isFocused = useIsFocused();
+  const { colors: themeColors } = useAppTheme();
   const { user } = useAuth();
   const { selectedProfile } = useProfile();
   const userId = user?.id ?? '';
@@ -316,7 +323,7 @@ export default function ProfileScreen() {
       }
 
       const meds = Array.isArray(data?.medications)
-        ? data?.medications.map(normalizeMedication)
+        ? data?.medications.map(normalizeMedication).filter((med) => med.name && med.dosage && med.frequency)
         : [];
       setCurrentMedications(meds);
     };
@@ -420,24 +427,26 @@ export default function ProfileScreen() {
   const addMedication = async (medication: Medication) => {
     if (!user?.id || !profileId) return;
 
-    if (!medication.name.trim() || !medication.dosage.trim() || !medication.frequency.trim()) {
-      toast.warning('Missing info', 'Please fill Name, Dosage, and Frequency.');
+    const normalizedMedication = normalizeMedication({
+      ...medication,
+      id: medication.id || createMedicationId(),
+      logs: [],
+      startDate: medication.startDate || getTodayDateKey(),
+    });
+
+    if (
+      !normalizedMedication.name.trim() ||
+      !normalizedMedication.dosage.trim() ||
+      !normalizedMedication.frequency.trim()
+    ) {
+      toast.warning(
+        'Missing info',
+        'Please fill the medication name, dosage, and at least one meal timing.'
+      );
       return;
     }
 
-    const newMedication: Medication = {
-      id: createMedicationId(),
-      name: medication.name.trim(),
-      dosage: medication.dosage.trim(),
-      purpose: medication.purpose.trim(),
-      frequency: medication.frequency.trim(),
-      timesPerDay: medication.timesPerDay || 1,
-      startDate: medication.startDate || new Date().toISOString().split('T')[0],
-      endDate: medication.endDate || undefined,
-      logs: [],
-    };
-
-    const updatedMedications = [...currentMedications, newMedication];
+    const updatedMedications = [...currentMedications, normalizedMedication];
 
     try {
       const { error } = await supabase.from('user_medications').upsert(
@@ -453,6 +462,20 @@ export default function ProfileScreen() {
       );
 
       if (error) throw error;
+
+      void logProfileActivity({
+        profileId,
+        domain: 'medication',
+        action: 'add',
+        entity: {
+          id: normalizedMedication.id,
+          label: normalizedMedication.name,
+        },
+        metadata: {
+          id: normalizedMedication.id,
+          ...getMedicationActivityMetadata(normalizedMedication),
+        },
+      });
 
       setCurrentMedications(updatedMedications);
     } catch (error: any) {
@@ -464,12 +487,31 @@ export default function ProfileScreen() {
   const updateMedication = async (medication: Medication) => {
     if (!user?.id || !profileId) return;
 
-    if (!medication.name.trim() || !medication.dosage.trim() || !medication.frequency.trim()) {
-      toast.warning('Missing info', 'Please fill Name, Dosage, and Frequency.');
+    const existingMedication = currentMedications.find((entry) => entry.id === medication.id) ?? null;
+    const normalizedMedication = normalizeMedication({
+      ...existingMedication,
+      ...medication,
+      id: medication.id || existingMedication?.id || createMedicationId(),
+      logs: Array.isArray(medication.logs) ? medication.logs : existingMedication?.logs || [],
+      startDate:
+        medication.startDate || existingMedication?.startDate || getTodayDateKey(),
+    });
+
+    if (
+      !normalizedMedication.name.trim() ||
+      !normalizedMedication.dosage.trim() ||
+      !normalizedMedication.frequency.trim()
+    ) {
+      toast.warning(
+        'Missing info',
+        'Please fill the medication name, dosage, and at least one meal timing.'
+      );
       return;
     }
 
-    const updatedMedications = currentMedications.map((m) => (m.id === medication.id ? medication : m));
+    const updatedMedications = currentMedications.map((entry) =>
+      entry.id === normalizedMedication.id ? normalizedMedication : entry
+    );
 
     try {
       const { error } = await supabase.from('user_medications').upsert(
@@ -486,6 +528,26 @@ export default function ProfileScreen() {
 
       if (error) throw error;
 
+      const medicationChanges = existingMedication
+        ? buildMedicationActivityChanges(existingMedication, normalizedMedication)
+        : [];
+
+      void logProfileActivity({
+        profileId,
+        domain: 'medication',
+        action: 'update',
+        entity: {
+          id: normalizedMedication.id,
+          label: normalizedMedication.name,
+        },
+        metadata: {
+          id: normalizedMedication.id,
+          ...getMedicationActivityMetadata(normalizedMedication),
+          changes: medicationChanges,
+          changeCount: medicationChanges.length,
+        },
+      });
+
       setCurrentMedications(updatedMedications);
     } catch (error: any) {
       console.error('Update medication error:', error);
@@ -496,6 +558,7 @@ export default function ProfileScreen() {
   const deleteMedication = async (id: string) => {
     if (!user?.id || !profileId) return;
 
+    const deletedMedication = currentMedications.find((entry) => entry.id === id) ?? null;
     const updatedMedications = currentMedications.filter((m) => m.id !== id);
 
     try {
@@ -513,6 +576,20 @@ export default function ProfileScreen() {
 
       if (error) throw error;
 
+      void logProfileActivity({
+        profileId,
+        domain: 'medication',
+        action: 'delete',
+        entity: {
+          id,
+          label: deletedMedication?.name ?? 'Medication',
+        },
+        metadata: {
+          id,
+          ...getMedicationActivityMetadata(deletedMedication ?? {}),
+        },
+      });
+
       setCurrentMedications(updatedMedications);
     } catch (error: any) {
       console.error('Delete medication error:', error);
@@ -520,13 +597,38 @@ export default function ProfileScreen() {
     }
   };
 
-  const logMedicationDose = async (medicationId: string, taken: boolean) => {
+  const logMedicationDose = async (
+    medicationId: string,
+    taken: boolean,
+    slotKey?: MedicationReminderSlot['key']
+  ) => {
     if (!user?.id || !profileId) return;
+
+    const medication = currentMedications.find((entry) => entry.id === medicationId) ?? null;
+    const dueSlots =
+      taken && medication
+        ? getDueMedicationReminderSlots(medication, new Date(), 90 * 60 * 1000)
+        : [];
+    const resolvedSlotKey = slotKey ?? dueSlots[0]?.key;
+
+    if (taken && medication && resolvedSlotKey) {
+      const alreadyLoggedToday = (medication.logs || []).some((log) => {
+        if (!log.taken || log.slotKey !== resolvedSlotKey) return false;
+        const parsed = new Date(log.timestamp);
+        if (Number.isNaN(parsed.getTime())) return false;
+        return parsed.toDateString() === new Date().toDateString();
+      });
+
+      if (alreadyLoggedToday) {
+        return;
+      }
+    }
 
     const newLog = {
       medicationId,
       timestamp: new Date().toISOString(),
       taken,
+      slotKey: resolvedSlotKey,
     };
 
     const updatedMedications = currentMedications.map((m) => {
@@ -628,7 +730,9 @@ export default function ProfileScreen() {
               (m) =>
                 `<li><strong>${escapeHtml(m.name)}</strong> — ${escapeHtml(
                   m.dosage || '—'
-                )} · ${escapeHtml(m.frequency || '—')}${m.purpose ? ` · ${escapeHtml(m.purpose)}` : ''}</li>`
+                )} · ${escapeHtml(
+                  formatMedicationFrequencyLabel(m.frequency, m.mealTiming) || '—'
+                )}${m.purpose ? ` · ${escapeHtml(m.purpose)}` : ''}</li>`
             )
             .join('')}</ul>`
           : '<p>None</p>';
@@ -662,7 +766,7 @@ export default function ProfileScreen() {
             body { font-family: -apple-system, Arial, sans-serif; color: #0f172a; margin: 0; background: #f8fafc; }
             .page { padding: 24px; }
             .header {
-              background: linear-gradient(135deg, #14b8a6, #0f766e);
+              background: linear-gradient(135deg, ${themeColors.headerGradientStart}, ${themeColors.headerGradientEnd});
               color: #fff;
               padding: 24px;
               border-radius: 16px;
@@ -787,7 +891,7 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#eef3f3' }}>
+      <View style={{ flex: 1, backgroundColor: themeColors.background }}>
         <View style={{ paddingHorizontal: 20, paddingTop: 60 }}>
           <SkeletonProfileHeader />
           <SkeletonKPIRow />
@@ -816,106 +920,150 @@ export default function ProfileScreen() {
         <Text style={styles.pageTitle}>Profile</Text>
         <Pressable
           onPress={exportProfilePdf}
-          style={({ pressed }) => [styles.exportTopButton, pressed && styles.exportTopButtonPressed]}
+          style={({ pressed }) => [
+            styles.exportTopButton,
+            {
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.border,
+              shadowColor: themeColors.shadow,
+            },
+            pressed && styles.exportTopButtonPressed,
+          ]}
         >
-          <MaterialCommunityIcons name="file-pdf-box" size={22} color="#111827" />
-          <Text style={styles.exportTopText}>Export PDF</Text>
+          <MaterialCommunityIcons name="file-pdf-box" size={22} color={themeColors.textPrimary} />
+          <Text style={[styles.exportTopText, { color: themeColors.textPrimary }]}>Export PDF</Text>
         </Pressable>
       </View>
       {/* Header card: avatar, name, contact info, edit + export */}
-      <AnimatedCard delay={0}>
-        <View style={styles.headerCardRow}>
-          <View style={styles.avatarWrap}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initials}</Text>
+      <TourAnchor tourId="profile-overview">
+        <AnimatedCard
+          delay={0}
+          style={{
+            backgroundColor: themeColors.surface,
+            borderColor: themeColors.border,
+            shadowColor: themeColors.shadow,
+          }}
+        >
+          <View style={styles.headerCardRow}>
+            <View style={styles.avatarWrap}>
+              <View
+                style={[
+                  styles.avatar,
+                  {
+                    backgroundColor: themeColors.accentSoft,
+                    borderColor: themeColors.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.avatarText, { color: themeColors.accentStrong }]}>{initials}</Text>
+              </View>
+            </View>
+            <View style={styles.headerInfo}>
+              <Text style={styles.profileName} numberOfLines={1}>{userName || 'No name'}</Text>
+              {gender ? (
+                <View style={[styles.badge, genderBadgeStyle]}>
+                  <Text style={styles.badgeText}>{gender}</Text>
+                </View>
+              ) : null}
+              {phoneNumber ? (
+                <View style={styles.infoRow}>
+                  <MaterialCommunityIcons name="phone-outline" size={14} color={themeColors.textSecondary} />
+                  <Text style={styles.infoText} numberOfLines={1}>{phoneNumber}</Text>
+                </View>
+              ) : null}
+              {dob ? (
+                <View style={styles.infoRow}>
+                  <MaterialCommunityIcons name="calendar-outline" size={14} color={themeColors.textSecondary} />
+                  <Text style={styles.infoText}>{formatDOBDisplay(dob)}</Text>
+                </View>
+              ) : null}
+              {address ? (
+                <View style={styles.infoRow}>
+                  <MaterialCommunityIcons name="map-marker-outline" size={14} color={themeColors.textSecondary} />
+                  <Text style={styles.infoText} numberOfLines={2}>{address}</Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={openPersonalModal}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  {
+                    backgroundColor: themeColors.accentSoft,
+                    borderColor: themeColors.border,
+                  },
+                  pressed && styles.iconButtonPressed,
+                ]}
+              >
+                <MaterialCommunityIcons name="pencil" size={20} color={themeColors.accentStrong} />
+              </Pressable>
             </View>
           </View>
-          <View style={styles.headerInfo}>
-            <Text style={styles.profileName} numberOfLines={1}>{userName || 'No name'}</Text>
-            {gender ? (
-              <View style={[styles.badge, genderBadgeStyle]}>
-                <Text style={styles.badgeText}>{gender}</Text>
-              </View>
-            ) : null}
-            {phoneNumber ? (
-              <View style={styles.infoRow}>
-                <MaterialCommunityIcons name="phone-outline" size={14} color="#5a6b72" />
-                <Text style={styles.infoText} numberOfLines={1}>{phoneNumber}</Text>
-              </View>
-            ) : null}
-            {dob ? (
-              <View style={styles.infoRow}>
-                <MaterialCommunityIcons name="calendar-outline" size={14} color="#5a6b72" />
-                <Text style={styles.infoText}>{formatDOBDisplay(dob)}</Text>
-              </View>
-            ) : null}
-            {address ? (
-              <View style={styles.infoRow}>
-                <MaterialCommunityIcons name="map-marker-outline" size={14} color="#5a6b72" />
-                <Text style={styles.infoText} numberOfLines={2}>{address}</Text>
-              </View>
-            ) : null}
-          </View>
-          <View style={styles.headerActions}>
-            <Pressable
-              onPress={openPersonalModal}
-              style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
-            >
-              <MaterialCommunityIcons name="pencil" size={20} color="#0f766e" />
-            </Pressable>
-          </View>
-        </View>
-      </AnimatedCard>
+        </AnimatedCard>
+      </TourAnchor>
 
       {/* KPI row */}
       <View style={styles.kpiRow}>
-        <Animated.View entering={FadeInDown.delay(80).springify()} style={[styles.kpiCard, styles.kpiBlood]}>
-          <MaterialCommunityIcons name="water" size={18} color="#b91c1c" />
-          <Text style={styles.kpiLabel}>Blood</Text>
-          <Text style={styles.kpiValue} adjustsFontSizeToFit numberOfLines={1}>{bloodGroup || '—'}</Text>
-        </Animated.View>
-        <Animated.View entering={FadeInDown.delay(120).springify()} style={[styles.kpiCard, styles.kpiBmi]}>
-          <MaterialCommunityIcons name="counter" size={18} color="#1d4ed8" />
-          <Text style={styles.kpiLabel}>BMI</Text>
-          <Text style={styles.kpiValue} adjustsFontSizeToFit numberOfLines={1}>
-            {bmi ? (
-              <>
-                {bmi}
-                <Text style={styles.kpiUnit}> kg/m²</Text>
-              </>
-            ) : (
-              '—'
-            )}
+        <Animated.View
+          entering={FadeInDown.delay(80).springify()}
+          style={[
+            styles.kpiCard,
+            {
+              backgroundColor: themeColors.backgroundMuted,
+              borderColor: themeColors.borderStrong,
+            },
+          ]}
+        >
+          <MaterialCommunityIcons name="water" size={18} color={themeColors.accent} />
+          <Text style={[styles.kpiLabel, { color: themeColors.textSecondary }]}>Blood</Text>
+          <Text style={[styles.kpiValue, { color: themeColors.textPrimary }]} adjustsFontSizeToFit numberOfLines={1}>
+            {bloodGroup || '—'}
           </Text>
         </Animated.View>
-        <Animated.View entering={FadeInDown.delay(160).springify()} style={[styles.kpiCard, styles.kpiAge]}>
-          <MaterialCommunityIcons name="calendar-check" size={18} color="#6b21a8" />
-          <Text style={styles.kpiLabel}>Age</Text>
-          <Text style={styles.kpiValue} adjustsFontSizeToFit numberOfLines={1}>{age || '—'}</Text>
+        <Animated.View
+          entering={FadeInDown.delay(120).springify()}
+          style={[
+            styles.kpiCard,
+            {
+              backgroundColor: themeColors.backgroundMuted,
+              borderColor: themeColors.borderStrong,
+            },
+          ]}
+        >
+          <MaterialCommunityIcons name="counter" size={18} color={themeColors.accent} />
+          <Text style={[styles.kpiLabel, { color: themeColors.textSecondary }]}>BMI</Text>
+          <Text style={[styles.kpiValue, { color: themeColors.textPrimary }]} adjustsFontSizeToFit numberOfLines={1}>
+            {bmi || '—'}
+          </Text>
+        </Animated.View>
+        <Animated.View
+          entering={FadeInDown.delay(160).springify()}
+          style={[
+            styles.kpiCard,
+            {
+              backgroundColor: themeColors.backgroundMuted,
+              borderColor: themeColors.borderStrong,
+            },
+          ]}
+        >
+          <MaterialCommunityIcons name="calendar-check" size={18} color={themeColors.accent} />
+          <Text style={[styles.kpiLabel, { color: themeColors.textSecondary }]}>Age</Text>
+          <Text style={[styles.kpiValue, { color: themeColors.textPrimary }]} adjustsFontSizeToFit numberOfLines={1}>
+            {age || '—'}
+          </Text>
         </Animated.View>
       </View>
 
-      {/* Health onboarding — step-by-step setup */}
-      <AnimatedCard delay={180}>
-        <Pressable
-          onPress={() => router.push('/health-onboarding')}
-          style={({ pressed }) => [styles.healthOnboardingCard, pressed && styles.healthOnboardingCardPressed]}
-        >
-          <View style={styles.healthOnboardingIconWrap}>
-            <MaterialCommunityIcons name="clipboard-plus-outline" size={24} color="#0f766e" />
-          </View>
-          <View style={styles.healthOnboardingTextWrap}>
-            <Text style={styles.healthOnboardingTitle}>Set up health profile</Text>
-            <Text style={styles.healthOnboardingSubtitle}>
-              Answer a few questions to build your medical profile securely.
-            </Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#64748b" />
-        </Pressable>
-      </AnimatedCard>
-
       {/* Current Medical Status */}
-      <AnimatedCard delay={200}>
+      <AnimatedCard
+        delay={180}
+        style={{
+          backgroundColor: themeColors.surface,
+          borderColor: themeColors.border,
+          shadowColor: themeColors.shadow,
+        }}
+      >
         <View style={styles.sectionHeader}>
           <View style={styles.sectionIconRed}>
             <MaterialCommunityIcons name="heart-pulse" size={20} color="#b91c1c" />
@@ -923,9 +1071,16 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Current Medical Status</Text>
           <Pressable
             onPress={() => setCurrentMedicalModalOpen(true)}
-            style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
+            style={({ pressed }) => [
+              styles.iconButton,
+              {
+                backgroundColor: themeColors.accentSoft,
+                borderColor: themeColors.border,
+              },
+              pressed && styles.iconButtonPressed,
+            ]}
           >
-            <MaterialCommunityIcons name="pencil" size={18} color="#0f766e" />
+            <MaterialCommunityIcons name="pencil" size={18} color={themeColors.accentStrong} />
           </Pressable>
         </View>
         <View style={styles.sectionBody}>
@@ -941,17 +1096,24 @@ export default function ProfileScreen() {
           ) : (
             currentMedications.map((med, i) => (
               <View key={i} style={styles.medRow}>
-                <MaterialCommunityIcons name="pill" size={16} color="#0f766e" />
+                <MaterialCommunityIcons name="pill" size={16} color={themeColors.accentStrong} />
                 <View style={styles.medInfo}>
                   <Text style={styles.medName}>{med.name}</Text>
-                  <Text style={styles.medMeta}>Dosage: {med.dosage || '—'} · {med.frequency || '—'}</Text>
+                  <Text style={styles.medMeta}>
+                    Dosage: {med.dosage || '—'} ·{' '}
+                    {formatMedicationFrequencyLabel(med.frequency, med.mealTiming) || '—'}
+                  </Text>
                 </View>
               </View>
             ))
           )}
           <Pressable
             onPress={() => setMedicationsModalOpen(true)}
-            style={({ pressed }) => [styles.manageButton, pressed && styles.manageButtonPressed]}
+            style={({ pressed }) => [
+              styles.manageButton,
+              { backgroundColor: themeColors.accent },
+              pressed && styles.manageButtonPressed,
+            ]}
           >
             <MaterialCommunityIcons name="pill" size={16} color="#ffffff" />
             <Text style={styles.manageButtonText}>Manage medications</Text>
@@ -960,7 +1122,14 @@ export default function ProfileScreen() {
       </AnimatedCard>
 
       {/* Past Medical History */}
-      <AnimatedCard delay={240}>
+      <AnimatedCard
+        delay={220}
+        style={{
+          backgroundColor: themeColors.surface,
+          borderColor: themeColors.border,
+          shadowColor: themeColors.shadow,
+        }}
+      >
         <View style={styles.sectionHeader}>
           <View style={styles.sectionIconBlue}>
             <MaterialCommunityIcons name="history" size={20} color="#1d4ed8" />
@@ -968,9 +1137,16 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Past Medical History</Text>
           <Pressable
             onPress={() => setPastMedicalModalOpen(true)}
-            style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
+            style={({ pressed }) => [
+              styles.iconButton,
+              {
+                backgroundColor: themeColors.accentSoft,
+                borderColor: themeColors.border,
+              },
+              pressed && styles.iconButtonPressed,
+            ]}
           >
-            <MaterialCommunityIcons name="pencil" size={18} color="#0f766e" />
+            <MaterialCommunityIcons name="pencil" size={18} color={themeColors.accentStrong} />
           </Pressable>
         </View>
         <View style={styles.sectionBody}>
@@ -995,7 +1171,14 @@ export default function ProfileScreen() {
       </AnimatedCard>
 
       {/* Family Medical History */}
-      <AnimatedCard delay={280}>
+      <AnimatedCard
+        delay={260}
+        style={{
+          backgroundColor: themeColors.surface,
+          borderColor: themeColors.border,
+          shadowColor: themeColors.shadow,
+        }}
+      >
         <View style={styles.sectionHeader}>
           <View style={styles.sectionIconGreen}>
             <MaterialCommunityIcons name="account-group" size={20} color="#15803d" />
@@ -1003,9 +1186,16 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Family Medical History</Text>
           <Pressable
             onPress={() => setFamilyModalOpen(true)}
-            style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
+            style={({ pressed }) => [
+              styles.iconButton,
+              {
+                backgroundColor: themeColors.accentSoft,
+                borderColor: themeColors.border,
+              },
+              pressed && styles.iconButtonPressed,
+            ]}
           >
-            <MaterialCommunityIcons name="pencil" size={18} color="#0f766e" />
+            <MaterialCommunityIcons name="pencil" size={18} color={themeColors.accentStrong} />
           </Pressable>
         </View>
         <View style={styles.sectionBody}>
@@ -1078,7 +1268,8 @@ export default function ProfileScreen() {
 }
 
 function SectionLabel({ label }: { label: string }) {
-  return <Text style={styles.sectionLabel}>{label.toUpperCase()}</Text>;
+  const { colors: themeColors } = useAppTheme();
+  return <Text style={[styles.sectionLabel, { color: themeColors.textTertiary }]}>{label.toUpperCase()}</Text>;
 }
 
 function TagList({
@@ -1090,15 +1281,16 @@ function TagList({
   emptyLabel: string;
   variant?: 'red' | 'blue';
 }) {
+  const { colors: themeColors } = useAppTheme();
   const tagStyle = variant === 'red' ? styles.tagRed : styles.tagBlue;
   if (items.length === 0) {
-    return <Text style={styles.emptyText}>{emptyLabel}</Text>;
+    return <Text style={[styles.emptyText, { color: themeColors.textTertiary }]}>{emptyLabel}</Text>;
   }
   return (
     <View style={styles.tagWrap}>
       {items.map((item, i) => (
         <View key={i} style={[styles.tag, tagStyle]}>
-          <Text style={styles.tagText}>{item}</Text>
+          <Text style={[styles.tagText, { color: themeColors.textPrimary }]}>{item}</Text>
         </View>
       ))}
     </View>
@@ -1129,6 +1321,7 @@ function PersonalInfoModal({
   onClose: () => void;
   onSave: () => void;
 }) {
+  const { colors: themeColors } = useAppTheme();
   const [genderOpen, setGenderOpen] = useState(false);
   const [bloodOpen, setBloodOpen] = useState(false);
   const [dobOpen, setDobOpen] = useState(false);
@@ -1161,9 +1354,9 @@ function PersonalInfoModal({
   const markedDates = useMemo(() => {
     if (!selectedDobIso) return undefined;
     return {
-      [selectedDobIso]: { selected: true, selectedColor: '#0f766e' },
+      [selectedDobIso]: { selected: true, selectedColor: themeColors.accentStrong },
     } as Record<string, { selected: boolean; selectedColor: string }>;
-  }, [selectedDobIso]);
+  }, [selectedDobIso, themeColors.accentStrong]);
   const calendarCurrent = useMemo(() => {
     return calendarCurrentOverride || selectedDobIso || todayIso;
   }, [calendarCurrentOverride, selectedDobIso, todayIso]);
@@ -1177,11 +1370,14 @@ function PersonalInfoModal({
           animate={{ translateY: 0, opacity: 1 }}
           transition={{ type: 'spring', damping: 20, stiffness: 200 }}
         >
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: themeColors.surface }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
               <Text style={styles.modalTitle}>Edit Personal Info</Text>
               <Pressable onPress={onClose} style={styles.modalClose}>
-                <MaterialCommunityIcons name="close" size={24} color="#374151" />
+                <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
               </Pressable>
             </View>
             <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
@@ -1192,7 +1388,7 @@ function PersonalInfoModal({
               </View>
             </Pressable>
             <View style={styles.inputRow}>
-              <Text style={styles.inputLabel}>Gender</Text>
+              <Text style={[styles.inputLabel, { color: themeColors.accentStrong }]}>Gender</Text>
               <Pressable
                 onPress={() => setGenderOpen(true)}
                 style={styles.selectInput}
@@ -1205,11 +1401,11 @@ function PersonalInfoModal({
                 >
                   {draft.gender || 'Male / Female / Other'}
                 </Text>
-                <MaterialCommunityIcons name="chevron-down" size={18} color="#6b7280" />
+                <MaterialCommunityIcons name="chevron-down" size={18} color={themeColors.textSecondary} />
               </Pressable>
             </View>
             <View style={styles.inputRow}>
-              <Text style={styles.inputLabel}>Blood group</Text>
+              <Text style={[styles.inputLabel, { color: themeColors.accentStrong }]}>Blood group</Text>
               <Pressable
                 onPress={() => setBloodOpen(true)}
                 style={styles.selectInput}
@@ -1222,7 +1418,7 @@ function PersonalInfoModal({
                 >
                   {draft.bloodGroup || 'e.g. O+'}
                 </Text>
-                <MaterialCommunityIcons name="chevron-down" size={18} color="#6b7280" />
+                <MaterialCommunityIcons name="chevron-down" size={18} color={themeColors.textSecondary} />
               </Pressable>
             </View>
             <InputRow label="Address" value={draft.address} onChange={(v) => setDraft((p) => ({ ...p, address: v }))} placeholder="Address" multiline />
@@ -1230,10 +1426,13 @@ function PersonalInfoModal({
             <InputRow label="BMI (read-only)" value={bmi} editable={false} />
           </ScrollView>
           <View style={styles.modalFooter}>
-            <Pressable onPress={onClose} style={styles.modalCancel}>
+            <Pressable
+              onPress={onClose}
+              style={[styles.modalCancel, { backgroundColor: themeColors.backgroundMuted }]}
+            >
               <Text style={styles.modalCancelText}>Cancel</Text>
             </Pressable>
-            <Pressable onPress={onSave} style={styles.modalSave}>
+            <Pressable onPress={onSave} style={[styles.modalSave, { backgroundColor: themeColors.accent }]}>
               <Text style={styles.modalSaveText}>Save</Text>
             </Pressable>
           </View>
@@ -1242,11 +1441,14 @@ function PersonalInfoModal({
       </Pressable>
       <Modal visible={genderOpen} animationType="fade" transparent>
         <Pressable style={styles.modalOverlay} onPress={() => setGenderOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: themeColors.surface }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
               <Text style={styles.modalTitle}>Select gender</Text>
               <Pressable onPress={() => setGenderOpen(false)} style={styles.modalClose}>
-                <MaterialCommunityIcons name="close" size={24} color="#374151" />
+                <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
               </Pressable>
             </View>
             <View style={styles.modalScroll}>
@@ -1268,11 +1470,14 @@ function PersonalInfoModal({
       </Modal>
       <Modal visible={bloodOpen} animationType="fade" transparent>
         <Pressable style={styles.modalOverlay} onPress={() => setBloodOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: themeColors.surface }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
               <Text style={styles.modalTitle}>Select blood group</Text>
               <Pressable onPress={() => setBloodOpen(false)} style={styles.modalClose}>
-                <MaterialCommunityIcons name="close" size={24} color="#374151" />
+                <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
               </Pressable>
             </View>
             <View style={styles.modalScroll}>
@@ -1294,17 +1499,20 @@ function PersonalInfoModal({
       </Modal>
       <Modal visible={dobOpen} animationType="fade" transparent>
         <Pressable style={styles.modalOverlay} onPress={() => setDobOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: themeColors.surface }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
               <Text style={styles.modalTitle}>Select date of birth</Text>
               <Pressable onPress={() => setDobOpen(false)} style={styles.modalClose}>
-                <MaterialCommunityIcons name="close" size={24} color="#374151" />
+                <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
               </Pressable>
             </View>
             <View style={styles.modalScroll}>
               <View style={styles.dobPickerRow}>
                 <View style={styles.dobPickerCol}>
-                  <Text style={styles.inputLabel}>Month</Text>
+                  <Text style={[styles.inputLabel, { color: themeColors.accentStrong }]}>Month</Text>
                   <Pressable
                     onPress={() => {
                       setDobMonthOpen((prev) => !prev);
@@ -1315,7 +1523,7 @@ function PersonalInfoModal({
                     <Text style={styles.selectInputText}>
                       {MONTH_OPTIONS.find((opt) => opt.value === dobMonth)?.label ?? 'Select month'}
                     </Text>
-                    <MaterialCommunityIcons name="chevron-down" size={18} color="#6b7280" />
+                    <MaterialCommunityIcons name="chevron-down" size={18} color={themeColors.textSecondary} />
                   </Pressable>
                   {dobMonthOpen ? (
                     <View style={styles.selectMenu}>
@@ -1337,7 +1545,7 @@ function PersonalInfoModal({
                   ) : null}
                 </View>
                 <View style={styles.dobPickerCol}>
-                  <Text style={styles.inputLabel}>Year</Text>
+                  <Text style={[styles.inputLabel, { color: themeColors.accentStrong }]}>Year</Text>
                   <Pressable
                     onPress={() => {
                       setDobYearOpen((prev) => !prev);
@@ -1348,7 +1556,7 @@ function PersonalInfoModal({
                     <Text style={styles.selectInputText}>
                       {dobYear ?? 'Select year'}
                     </Text>
-                    <MaterialCommunityIcons name="chevron-down" size={18} color="#6b7280" />
+                    <MaterialCommunityIcons name="chevron-down" size={18} color={themeColors.textSecondary} />
                   </Pressable>
                   {dobYearOpen ? (
                     <View style={styles.selectMenu}>
@@ -1386,9 +1594,9 @@ function PersonalInfoModal({
                 }}
                 maxDate={new Date().toISOString().split('T')[0]}
                 theme={{
-                  todayTextColor: '#0f766e',
-                  selectedDayBackgroundColor: '#0f766e',
-                  arrowColor: '#0f766e',
+                  todayTextColor: themeColors.accentStrong,
+                  selectedDayBackgroundColor: themeColors.accentStrong,
+                  arrowColor: themeColors.accentStrong,
                 }}
               />
             </View>
@@ -1415,15 +1623,24 @@ function InputRow({
   multiline?: boolean;
   editable?: boolean;
 }) {
+  const { colors: themeColors } = useAppTheme();
   return (
     <View style={styles.inputRow}>
-      <Text style={styles.inputLabel}>{label}</Text>
+      <Text style={[styles.inputLabel, { color: themeColors.accentStrong }]}>{label}</Text>
       <TextInput
-        style={[styles.input, multiline && styles.inputMultiline]}
+        style={[
+          styles.input,
+          multiline && styles.inputMultiline,
+          {
+            borderColor: themeColors.border,
+            backgroundColor: themeColors.inputBackground,
+            color: themeColors.textPrimary,
+          },
+        ]}
         value={value}
         onChangeText={onChange ?? (() => { })}
         placeholder={placeholder}
-        placeholderTextColor="#9ca3af"
+        placeholderTextColor={themeColors.textTertiary}
         multiline={multiline}
         editable={editable}
       />
@@ -1452,6 +1669,7 @@ function CurrentMedicalModal({
   onClose: () => void;
   onSave: () => void;
 }) {
+  const { colors: themeColors } = useAppTheme();
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addModalValue, setAddModalValue] = useState('');
   const [addModalLabel, setAddModalLabel] = useState('');
@@ -1500,68 +1718,68 @@ function CurrentMedicalModal({
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <Pressable style={styles.modalOverlay} onPress={handleClose}>
-        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-          <View style={styles.modalHeader}>
+        <Pressable style={[styles.modalCard, { backgroundColor: themeColors.surface }]} onPress={(e) => e.stopPropagation()}>
+          <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
             <Text style={styles.modalTitle}>Current Medical Status</Text>
             <Pressable onPress={handleClose} style={styles.modalClose}>
-              <MaterialCommunityIcons name="close" size={24} color="#374151" />
+              <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
             </Pressable>
           </View>
           <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
-            <Text style={styles.modalSectionHeading}>Conditions</Text>
+            <Text style={[styles.modalSectionHeading, { color: themeColors.warningText }]}>Conditions</Text>
             {conditions.map((c, i) => (
               <View key={i} style={styles.listItemCard}>
                 <View style={styles.listItemRow}>
                   <Text style={styles.listItemText}>{c}</Text>
                   <Pressable onPress={() => setConditions((prev) => prev.filter((_, j) => j !== i))}>
-                    <MaterialCommunityIcons name="close-circle" size={20} color="#b91c1c" />
+                    <MaterialCommunityIcons name="close-circle" size={20} color={themeColors.dangerText} />
                   </Pressable>
                 </View>
               </View>
             ))}
             <Pressable onPress={() => openAddModal('condition')} style={styles.addRow}>
-              <MaterialCommunityIcons name="plus" size={20} color="#FF8000" />
-              <Text style={styles.addRowText}>Add condition</Text>
+              <MaterialCommunityIcons name="plus" size={20} color={themeColors.warningText} />
+              <Text style={[styles.addRowText, { color: themeColors.warningText }]}>Add condition</Text>
             </Pressable>
 
-            <Text style={styles.modalSectionHeading}>Allergies</Text>
+            <Text style={[styles.modalSectionHeading, { color: themeColors.warningText }]}>Allergies</Text>
             {allergy.map((a, i) => (
               <View key={i} style={styles.listItemCard}>
                 <View style={styles.listItemRow}>
                   <Text style={styles.listItemText}>{a}</Text>
                   <Pressable onPress={() => setAllergy((prev) => prev.filter((_, j) => j !== i))}>
-                    <MaterialCommunityIcons name="close-circle" size={20} color="#b91c1c" />
+                    <MaterialCommunityIcons name="close-circle" size={20} color={themeColors.dangerText} />
                   </Pressable>
                 </View>
               </View>
             ))}
             <Pressable onPress={() => openAddModal('allergy')} style={styles.addRow}>
-              <MaterialCommunityIcons name="plus" size={20} color="#FF8000" />
-              <Text style={styles.addRowText}>Add allergy</Text>
+              <MaterialCommunityIcons name="plus" size={20} color={themeColors.warningText} />
+              <Text style={[styles.addRowText, { color: themeColors.warningText }]}>Add allergy</Text>
             </Pressable>
 
-            <Text style={styles.modalSectionHeading}>Ongoing treatments</Text>
+            <Text style={[styles.modalSectionHeading, { color: themeColors.warningText }]}>Ongoing treatments</Text>
             {treatment.map((t, i) => (
               <View key={i} style={styles.listItemCard}>
                 <View style={styles.listItemRow}>
                   <Text style={styles.listItemText}>{t}</Text>
                   <Pressable onPress={() => setTreatment((prev) => prev.filter((_, j) => j !== i))}>
-                    <MaterialCommunityIcons name="close-circle" size={20} color="#b91c1c" />
+                    <MaterialCommunityIcons name="close-circle" size={20} color={themeColors.dangerText} />
                   </Pressable>
                 </View>
               </View>
             ))}
             <Pressable onPress={() => openAddModal('treatment')} style={styles.addRow}>
-              <MaterialCommunityIcons name="plus" size={20} color="#FF8000" />
-              <Text style={styles.addRowText}>Add treatment</Text>
+              <MaterialCommunityIcons name="plus" size={20} color={themeColors.warningText} />
+              <Text style={[styles.addRowText, { color: themeColors.warningText }]}>Add treatment</Text>
             </Pressable>
 
           </ScrollView>
           <View style={styles.modalFooter}>
-            <Pressable onPress={handleClose} style={styles.modalCancel}>
+            <Pressable onPress={handleClose} style={[styles.modalCancel, { backgroundColor: themeColors.backgroundMuted }]}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </Pressable>
-            <Pressable onPress={onSave} style={styles.modalSave}>
+            <Pressable onPress={onSave} style={[styles.modalSave, { backgroundColor: themeColors.accent }]}>
               <Text style={styles.modalSaveText}>Save</Text>
             </Pressable>
           </View>
@@ -1569,11 +1787,11 @@ function CurrentMedicalModal({
       </Pressable>
       <Modal visible={addModalOpen} animationType="fade" transparent>
         <Pressable style={styles.modalOverlay} onPress={() => setAddModalOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
+          <Pressable style={[styles.modalCard, { backgroundColor: themeColors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
               <Text style={styles.modalTitle}>{addModalLabel}</Text>
               <Pressable onPress={() => setAddModalOpen(false)} style={styles.modalClose}>
-                <MaterialCommunityIcons name="close" size={24} color="#374151" />
+                <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
               </Pressable>
             </View>
             <View style={styles.modalScroll}>
@@ -1585,10 +1803,10 @@ function CurrentMedicalModal({
               />
             </View>
             <View style={styles.modalFooter}>
-              <Pressable onPress={() => setAddModalOpen(false)} style={styles.modalCancel}>
+              <Pressable onPress={() => setAddModalOpen(false)} style={[styles.modalCancel, { backgroundColor: themeColors.backgroundMuted }]}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={saveAddModal} style={styles.modalSave}>
+              <Pressable onPress={saveAddModal} style={[styles.modalSave, { backgroundColor: themeColors.accent }]}>
                 <Text style={styles.modalSaveText}>Add</Text>
               </Pressable>
             </View>
@@ -1624,6 +1842,7 @@ function PastMedicalModal({
   onClose: () => void;
   onSave: () => void;
 }) {
+  const { colors: themeColors } = useAppTheme();
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addModalValue, setAddModalValue] = useState('');
   const [addModalLabel, setAddModalLabel] = useState('');
@@ -1700,84 +1919,84 @@ function PastMedicalModal({
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <Pressable style={styles.modalOverlay} onPress={handleClose}>
-        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-          <View style={styles.modalHeader}>
+        <Pressable style={[styles.modalCard, { backgroundColor: themeColors.surface }]} onPress={(e) => e.stopPropagation()}>
+          <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
             <Text style={styles.modalTitle}>Past Medical History</Text>
             <Pressable onPress={handleClose} style={styles.modalClose}>
-              <MaterialCommunityIcons name="close" size={24} color="#374151" />
+              <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
             </Pressable>
           </View>
           <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
-            <Text style={styles.modalSectionHeading}>Previous conditions</Text>
+            <Text style={[styles.modalSectionHeading, { color: themeColors.warningText }]}>Previous conditions</Text>
             {previousDiagnosedCondition.map((c, i) => (
               <View key={i} style={styles.listItemCard}>
                 <View style={styles.listItemRow}>
                   <Text style={styles.listItemText}>{c}</Text>
                   <Pressable onPress={() => setPreviousDiagnosedCondition((prev) => prev.filter((_, j) => j !== i))}>
-                    <MaterialCommunityIcons name="close-circle" size={20} color="#b91c1c" />
+                    <MaterialCommunityIcons name="close-circle" size={20} color={themeColors.dangerText} />
                   </Pressable>
                 </View>
               </View>
             ))}
             <Pressable onPress={() => openAddModal('previous')} style={styles.addRow}>
-              <MaterialCommunityIcons name="plus" size={20} color="#FF8000" />
-              <Text style={styles.addRowText}>Add condition</Text>
+              <MaterialCommunityIcons name="plus" size={20} color={themeColors.warningText} />
+              <Text style={[styles.addRowText, { color: themeColors.warningText }]}>Add condition</Text>
             </Pressable>
 
-            <Text style={styles.modalSectionHeading}>Past surgeries</Text>
+            <Text style={[styles.modalSectionHeading, { color: themeColors.warningText }]}>Past surgeries</Text>
             {pastSurgeries.map((s, i) => (
               <View key={i} style={styles.medBlock}>
                 <View style={styles.surgeryHeaderRow}>
                   <Text style={styles.surgeryTitle}>{s.name}</Text>
                   <Pressable onPress={() => setPastSurgeries((prev) => prev.filter((_, j) => j !== i))}>
-                    <MaterialCommunityIcons name="close-circle" size={20} color="#b91c1c" />
+                    <MaterialCommunityIcons name="close-circle" size={20} color={themeColors.dangerText} />
                   </Pressable>
                 </View>
                 <Text style={styles.surgeryMeta}>{formatMonthYear(s.month, s.year)}</Text>
               </View>
             ))}
             <Pressable onPress={openSurgeryModal} style={styles.addRow}>
-              <MaterialCommunityIcons name="plus" size={20} color="#FF8000" />
-              <Text style={styles.addRowText}>Add surgery</Text>
+              <MaterialCommunityIcons name="plus" size={20} color={themeColors.warningText} />
+              <Text style={[styles.addRowText, { color: themeColors.warningText }]}>Add surgery</Text>
             </Pressable>
 
-            <Text style={styles.modalSectionHeading}>Childhood illness</Text>
+            <Text style={[styles.modalSectionHeading, { color: themeColors.warningText }]}>Childhood illness</Text>
             {childhoodIllness.map((c, i) => (
               <View key={i} style={styles.listItemCard}>
                 <View style={styles.listItemRow}>
                   <Text style={styles.listItemText}>{c}</Text>
                   <Pressable onPress={() => setChildhoodIllness((prev) => prev.filter((_, j) => j !== i))}>
-                    <MaterialCommunityIcons name="close-circle" size={20} color="#b91c1c" />
+                    <MaterialCommunityIcons name="close-circle" size={20} color={themeColors.dangerText} />
                   </Pressable>
                 </View>
               </View>
             ))}
             <Pressable onPress={() => openAddModal('childhood')} style={styles.addRow}>
-              <MaterialCommunityIcons name="plus" size={20} color="#FF8000" />
-              <Text style={styles.addRowText}>Add</Text>
+              <MaterialCommunityIcons name="plus" size={20} color={themeColors.warningText} />
+              <Text style={[styles.addRowText, { color: themeColors.warningText }]}>Add</Text>
             </Pressable>
 
-            <Text style={styles.modalSectionHeading}>Long-term treatments</Text>
+            <Text style={[styles.modalSectionHeading, { color: themeColors.warningText }]}>Long-term treatments</Text>
             {longTermTreatments.map((t, i) => (
               <View key={i} style={styles.listItemCard}>
                 <View style={styles.listItemRow}>
                   <Text style={styles.listItemText}>{t}</Text>
                   <Pressable onPress={() => setLongTermTreatments((prev) => prev.filter((_, j) => j !== i))}>
-                    <MaterialCommunityIcons name="close-circle" size={20} color="#b91c1c" />
+                    <MaterialCommunityIcons name="close-circle" size={20} color={themeColors.dangerText} />
                   </Pressable>
                 </View>
               </View>
             ))}
             <Pressable onPress={() => openAddModal('longTerm')} style={styles.addRow}>
-              <MaterialCommunityIcons name="plus" size={20} color="#FF8000" />
-              <Text style={styles.addRowText}>Add</Text>
+              <MaterialCommunityIcons name="plus" size={20} color={themeColors.warningText} />
+              <Text style={[styles.addRowText, { color: themeColors.warningText }]}>Add</Text>
             </Pressable>
           </ScrollView>
           <View style={styles.modalFooter}>
-            <Pressable onPress={handleClose} style={styles.modalCancel}>
+            <Pressable onPress={handleClose} style={[styles.modalCancel, { backgroundColor: themeColors.backgroundMuted }]}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </Pressable>
-            <Pressable onPress={onSave} style={styles.modalSave}>
+            <Pressable onPress={onSave} style={[styles.modalSave, { backgroundColor: themeColors.accent }]}>
               <Text style={styles.modalSaveText}>Save</Text>
             </Pressable>
           </View>
@@ -1785,11 +2004,11 @@ function PastMedicalModal({
       </Pressable>
       <Modal visible={addModalOpen} animationType="fade" transparent>
         <Pressable style={styles.modalOverlay} onPress={() => setAddModalOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
+          <Pressable style={[styles.modalCard, { backgroundColor: themeColors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
               <Text style={styles.modalTitle}>{addModalLabel}</Text>
               <Pressable onPress={() => setAddModalOpen(false)} style={styles.modalClose}>
-                <MaterialCommunityIcons name="close" size={24} color="#374151" />
+                <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
               </Pressable>
             </View>
             <View style={styles.modalScroll}>
@@ -1801,10 +2020,10 @@ function PastMedicalModal({
               />
             </View>
             <View style={styles.modalFooter}>
-              <Pressable onPress={() => setAddModalOpen(false)} style={styles.modalCancel}>
+              <Pressable onPress={() => setAddModalOpen(false)} style={[styles.modalCancel, { backgroundColor: themeColors.backgroundMuted }]}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={saveAddModal} style={styles.modalSave}>
+              <Pressable onPress={saveAddModal} style={[styles.modalSave, { backgroundColor: themeColors.accent }]}>
                 <Text style={styles.modalSaveText}>Add</Text>
               </Pressable>
             </View>
@@ -1813,11 +2032,11 @@ function PastMedicalModal({
       </Modal>
       <Modal visible={surgeryModalOpen} animationType="fade" transparent>
         <Pressable style={styles.modalOverlay} onPress={() => setSurgeryModalOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
+          <Pressable style={[styles.modalCard, { backgroundColor: themeColors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
               <Text style={styles.modalTitle}>Add surgery</Text>
               <Pressable onPress={() => setSurgeryModalOpen(false)} style={styles.modalClose}>
-                <MaterialCommunityIcons name="close" size={24} color="#374151" />
+                <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
               </Pressable>
             </View>
             <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
@@ -1833,7 +2052,11 @@ function PastMedicalModal({
                   <Pressable
                     key={opt.value}
                     onPress={() => setSurgeryMonth(opt.value)}
-                    style={[styles.chip, surgeryMonth === opt.value && styles.chipSelected]}
+                    style={[
+                      styles.chip,
+                      surgeryMonth === opt.value && styles.chipSelected,
+                      surgeryMonth === opt.value && { backgroundColor: themeColors.accent },
+                    ]}
                   >
                     <Text style={surgeryMonth === opt.value ? styles.chipTextSelected : styles.chipText}>
                       {opt.label}
@@ -1847,7 +2070,11 @@ function PastMedicalModal({
                   <Pressable
                     key={y}
                     onPress={() => setSurgeryYear(y)}
-                    style={[styles.chip, surgeryYear === y && styles.chipSelected]}
+                    style={[
+                      styles.chip,
+                      surgeryYear === y && styles.chipSelected,
+                      surgeryYear === y && { backgroundColor: themeColors.accent },
+                    ]}
                   >
                     <Text style={surgeryYear === y ? styles.chipTextSelected : styles.chipText}>{y}</Text>
                   </Pressable>
@@ -1855,10 +2082,10 @@ function PastMedicalModal({
               </ScrollView>
             </ScrollView>
             <View style={styles.modalFooter}>
-              <Pressable onPress={() => setSurgeryModalOpen(false)} style={styles.modalCancel}>
+              <Pressable onPress={() => setSurgeryModalOpen(false)} style={[styles.modalCancel, { backgroundColor: themeColors.backgroundMuted }]}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={saveSurgeryModal} style={styles.modalSave}>
+              <Pressable onPress={saveSurgeryModal} style={[styles.modalSave, { backgroundColor: themeColors.accent }]}>
                 <Text style={styles.modalSaveText}>Add</Text>
               </Pressable>
             </View>
@@ -1882,6 +2109,7 @@ function FamilyHistoryModal({
   onClose: () => void;
   onSave: () => void;
 }) {
+  const { colors: themeColors } = useAppTheme();
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [relationOpen, setRelationOpen] = useState(false);
   const [newDisease, setNewDisease] = useState('');
@@ -1915,11 +2143,11 @@ function FamilyHistoryModal({
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <Pressable style={styles.modalOverlay} onPress={handleClose}>
-        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-          <View style={styles.modalHeader}>
+        <Pressable style={[styles.modalCard, { backgroundColor: themeColors.surface }]} onPress={(e) => e.stopPropagation()}>
+          <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
             <Text style={styles.modalTitle}>Family Medical History</Text>
             <Pressable onPress={handleClose} style={styles.modalClose}>
-              <MaterialCommunityIcons name="close" size={24} color="#374151" />
+              <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
             </Pressable>
           </View>
           <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
@@ -1928,22 +2156,22 @@ function FamilyHistoryModal({
                 <View style={styles.listItemRow}>
                   <Text style={styles.listItemText}>{f.disease}</Text>
                   <Pressable onPress={() => setFamilyMedicalHistory((prev) => prev.filter((_, j) => j !== i))}>
-                    <MaterialCommunityIcons name="close-circle" size={20} color="#b91c1c" />
+                    <MaterialCommunityIcons name="close-circle" size={20} color={themeColors.dangerText} />
                   </Pressable>
                 </View>
                 <Text style={styles.familyItemMeta}>{f.relation}</Text>
               </View>
             ))}
             <Pressable onPress={openAddModal} style={styles.addRow}>
-              <MaterialCommunityIcons name="plus" size={20} color="#FF8000" />
-              <Text style={styles.addRowText}>Add entry</Text>
+              <MaterialCommunityIcons name="plus" size={20} color={themeColors.warningText} />
+              <Text style={[styles.addRowText, { color: themeColors.warningText }]}>Add entry</Text>
             </Pressable>
           </ScrollView>
           <View style={styles.modalFooter}>
-            <Pressable onPress={handleClose} style={styles.modalCancel}>
+            <Pressable onPress={handleClose} style={[styles.modalCancel, { backgroundColor: themeColors.backgroundMuted }]}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </Pressable>
-            <Pressable onPress={onSave} style={styles.modalSave}>
+            <Pressable onPress={onSave} style={[styles.modalSave, { backgroundColor: themeColors.accent }]}>
               <Text style={styles.modalSaveText}>Save</Text>
             </Pressable>
           </View>
@@ -1951,11 +2179,11 @@ function FamilyHistoryModal({
       </Pressable>
       <Modal visible={addModalOpen} animationType="fade" transparent>
         <Pressable style={styles.modalOverlay} onPress={() => setAddModalOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
+          <Pressable style={[styles.modalCard, { backgroundColor: themeColors.surface }]} onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
               <Text style={styles.modalTitle}>Add family history</Text>
               <Pressable onPress={() => setAddModalOpen(false)} style={styles.modalClose}>
-                <MaterialCommunityIcons name="close" size={24} color="#374151" />
+                <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
               </Pressable>
             </View>
             <View style={styles.modalScroll}>
@@ -1966,7 +2194,7 @@ function FamilyHistoryModal({
                 placeholder="Disease"
               />
               <View style={styles.inputRow}>
-                <Text style={styles.inputLabel}>Relation</Text>
+                <Text style={[styles.inputLabel, { color: themeColors.accentStrong }]}>Relation</Text>
                 <Pressable
                   onPress={() => setRelationOpen((prev) => !prev)}
                   style={styles.selectInput}
@@ -1976,10 +2204,10 @@ function FamilyHistoryModal({
                       styles.selectInputText,
                       !newRelation && styles.selectInputPlaceholder,
                     ]}
-                  >
-                    {newRelation || 'Select relation'}
-                  </Text>
-                  <MaterialCommunityIcons name="chevron-down" size={18} color="#6b7280" />
+                >
+                  {newRelation || 'Select relation'}
+                </Text>
+                  <MaterialCommunityIcons name="chevron-down" size={18} color={themeColors.textSecondary} />
                 </Pressable>
               </View>
               {relationOpen ? (
@@ -2002,10 +2230,10 @@ function FamilyHistoryModal({
               ) : null}
             </View>
             <View style={styles.modalFooter}>
-              <Pressable onPress={() => setAddModalOpen(false)} style={styles.modalCancel}>
+              <Pressable onPress={() => setAddModalOpen(false)} style={[styles.modalCancel, { backgroundColor: themeColors.backgroundMuted }]}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={saveAddModal} style={styles.modalSave}>
+              <Pressable onPress={saveAddModal} style={[styles.modalSave, { backgroundColor: themeColors.accent }]}>
                 <Text style={styles.modalSaveText}>Add</Text>
               </Pressable>
             </View>
@@ -2115,11 +2343,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0fdfa',
+    backgroundColor: '#f8fafc',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#99e0e0',
+    borderColor: '#cbd5e1',
   },
   iconButtonPressed: {
     opacity: 0.8,
@@ -2169,9 +2397,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 4,
   },
-  kpiBlood: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
-  kpiBmi: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' },
-  kpiAge: { backgroundColor: '#faf5ff', borderColor: '#e9d5ff' },
   kpiLabel: {
     fontSize: 10,
     fontWeight: '700',
@@ -2183,37 +2408,6 @@ const styles = StyleSheet.create({
     fontSize: 25,
     fontWeight: '700',
     color: '#111827',
-    marginTop: 2,
-  },
-  kpiUnit: { fontSize: 12, fontWeight: '400', color: '#6b7280' },
-  healthOnboardingCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(15, 118, 110, 0.2)',
-    backgroundColor: 'rgba(15, 118, 110, 0.06)',
-    gap: 14,
-  },
-  healthOnboardingCardPressed: { opacity: 0.9 },
-  healthOnboardingIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: 'rgba(15, 118, 110, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  healthOnboardingTextWrap: { flex: 1 },
-  healthOnboardingTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  healthOnboardingSubtitle: {
-    fontSize: 12,
-    color: '#64748b',
     marginTop: 2,
   },
   sectionHeader: {
@@ -2379,25 +2573,25 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 12,
-    backgroundColor: '#0f766e',
+    backgroundColor: '#334155',
   },
   modalSaveText: { color: '#fff', fontWeight: '700' },
   inputRow: { marginBottom: 14 },
   inputLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#0f766e',
+    color: '#334155',
     marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#d8e3e6',
+    borderColor: '#cbd5e1',
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     color: '#111827',
-    backgroundColor: '#f7fbfb',
+    backgroundColor: '#f8fafc',
   },
   inputMultiline: {
     minHeight: 72,
@@ -2417,11 +2611,11 @@ const styles = StyleSheet.create({
   selectMenuScroll: { maxHeight: 220 },
   selectInput: {
     borderWidth: 1,
-    borderColor: '#d8e3e6',
+    borderColor: '#cbd5e1',
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    backgroundColor: '#f7fbfb',
+    backgroundColor: '#f8fafc',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -2476,7 +2670,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: '#0f766e',
+    backgroundColor: '#334155',
   },
   manageButtonPressed: { opacity: 0.85 },
   manageButtonText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
@@ -2515,7 +2709,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
     alignSelf: 'flex-start',
   },
-  chipSelected: { backgroundColor: '#0f766e' },
+  chipSelected: { backgroundColor: '#334155' },
   chipText: { fontSize: 13, color: '#374151' },
   chipTextSelected: { fontSize: 13, color: '#fff', fontWeight: '600' },
   familyEditRow: {

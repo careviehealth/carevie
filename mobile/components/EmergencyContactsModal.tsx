@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -17,6 +17,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { MotiView } from 'moti';
 import { EmptyStatePreset } from '@/components/EmptyState';
+import { type AppThemeColors } from '@/constants/appThemes';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 import {
   COUNTRIES,
@@ -46,6 +48,8 @@ const createContactId = () => `${Date.now()}-${Math.random().toString(36).slice(
 
 export function EmergencyContactsModal({ visible, contacts, onClose, onAdd, onDelete }: Props) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { colors: themeColors } = useAppTheme();
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
   const isCompact = windowWidth < 360;
   const sheetMaxHeight = Math.min(windowHeight - 24, 760);
   const countryPickerHeight = Math.min(windowHeight * 0.72, 520);
@@ -131,168 +135,183 @@ export function EmergencyContactsModal({ visible, contacts, onClose, onAdd, onDe
               transition={{ type: 'spring', damping: 20, stiffness: 200 }}
             >
               <View style={[styles.sheet, { maxHeight: sheetMaxHeight }]}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Emergency Contacts</Text>
-              <Pressable onPress={onClose} style={styles.closeButton}>
-                <MaterialCommunityIcons name="close" size={20} color="#1f2f33" />
-              </Pressable>
-            </View>
-
-            <ScrollView
-              contentContainerStyle={styles.sheetContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Pressable
-                style={[styles.addToggle, showForm && styles.addToggleActive]}
-                onPress={() => {
-                  setShowForm((prev) => !prev);
-                  if (showForm) resetForm();
-                }}
-              >
-                <MaterialCommunityIcons name={showForm ? 'close' : 'plus'} size={18} color="#0f766e" />
-                <Text style={styles.addToggleText}>
-                  {showForm ? 'Close' : 'Add Contact'}
-                </Text>
-              </Pressable>
-
-              {showForm ? (
-                <View style={styles.formCard}>
-                  <View style={styles.fieldGroup}>
-                    <Text style={styles.fieldLabel}>Name</Text>
-                    <TextInput
-                      value={name}
-                      onChangeText={setName}
-                      placeholder="e.g., Mom / John Doe"
-                      placeholderTextColor="#9bb0b5"
-                      style={styles.input}
-                    />
-                  </View>
-                  <View style={styles.fieldGroup}>
-                    <Text style={styles.fieldLabel}>Phone</Text>
-                    <View style={[styles.phoneRow, isCompact && styles.phoneRowStacked]}>
-                      <Pressable
-                        style={styles.countryCodeButton}
-                        onPress={() => setCountryPickerVisible(true)}
-                      >
-                        <Text style={styles.countryCodeText}>{selectedCountry.dialCode}</Text>
-                        <MaterialCommunityIcons name="chevron-down" size={16} color="#39484c" />
-                      </Pressable>
-                      <TextInput
-                        value={phone}
-                        onChangeText={(value) =>
-                          setPhone(value.replace(/\D/g, '').slice(0, PHONE_MAX_DIGITS))
-                        }
-                        placeholder="e.g., 9876543210"
-                        placeholderTextColor="#9bb0b5"
-                        keyboardType="phone-pad"
-                        style={[styles.input, styles.phoneInput]}
-                      />
-                    </View>
-                    <Modal
-                      visible={countryPickerVisible}
-                      transparent
-                      animationType="slide"
-                      onRequestClose={() => setCountryPickerVisible(false)}
-                    >
-                      <View style={styles.countryModalOverlay}>
-                        <Pressable
-                          style={StyleSheet.absoluteFill}
-                          onPress={() => setCountryPickerVisible(false)}
-                        />
-                        <View
-                          style={[styles.countryModalContent, { height: countryPickerHeight }]}
-                          pointerEvents="box-none"
-                        >
-                          <View style={styles.countryModalHeader}>
-                            <Text style={styles.countryModalTitle}>Select country</Text>
-                            <Pressable onPress={() => setCountryPickerVisible(false)} hitSlop={12}>
-                              <Text style={styles.countryModalDone}>Done</Text>
-                            </Pressable>
-                          </View>
-                          <View
-                            style={[
-                              styles.countryListContainer,
-                              { maxHeight: countryListMaxHeight },
-                            ]}
-                          >
-                            <FlatList
-                              data={COUNTRIES}
-                              keyExtractor={(item) => item.code}
-                              style={styles.countryList}
-                              contentContainerStyle={styles.countryListContent}
-                              showsVerticalScrollIndicator={true}
-                              keyboardShouldPersistTaps="handled"
-                              renderItem={({ item }) => (
-                                <Pressable
-                                  style={({ pressed }) => [
-                                    styles.countryItem,
-                                    pressed && styles.countryItemPressed,
-                                  ]}
-                                  onPress={() => {
-                                    setSelectedCountry(item);
-                                    setCountryPickerVisible(false);
-                                  }}
-                                >
-                                  <Text style={styles.countryItemText}>
-                                    {item.name} ({item.dialCode})
-                                  </Text>
-                                </Pressable>
-                              )}
-                            />
-                          </View>
-                        </View>
-                      </View>
-                    </Modal>
-                  </View>
-                  <View style={styles.fieldGroup}>
-                    <Text style={styles.fieldLabel}>Relation</Text>
-                    <TextInput
-                      value={relation}
-                      onChangeText={setRelation}
-                      placeholder="e.g., Parent / Friend"
-                      placeholderTextColor="#9bb0b5"
-                      style={styles.input}
-                    />
-                  </View>
-                  <Pressable
-                    style={[styles.primaryAction, saving && styles.buttonDisabled]}
-                    onPress={handleSave}
-                    disabled={saving}
-                  >
-                    <Text style={styles.primaryActionText}>{saving ? 'Saving...' : 'Save Contact'}</Text>
+                <View style={styles.sheetHeader}>
+                  <Text style={styles.sheetTitle}>Emergency Contacts</Text>
+                  <Pressable onPress={onClose} style={styles.closeButton}>
+                    <MaterialCommunityIcons name="close" size={20} color={themeColors.textPrimary} />
                   </Pressable>
                 </View>
-              ) : null}
 
-              {!contacts.length ? (
-                <EmptyStatePreset preset="contacts" />
-              ) : (
-                contacts.map((contact) => (
-                  <View key={contact.id} style={styles.contactCard}>
-                    <View style={styles.contactInfo}>
-                      <Text style={styles.contactName}>{contact.name}</Text>
-                      <Text style={styles.contactMeta}>
-                        {contact.relation} • {contact.phone}
-                      </Text>
+                <ScrollView
+                  contentContainerStyle={styles.sheetContent}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  <Pressable
+                    style={[styles.addToggle, showForm && styles.addToggleActive]}
+                    onPress={() => {
+                      setShowForm((prev) => !prev);
+                      if (showForm) resetForm();
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name={showForm ? 'close' : 'plus'}
+                      size={18}
+                      color={themeColors.accentStrong}
+                    />
+                    <Text style={styles.addToggleText}>
+                      {showForm ? 'Close' : 'Add Contact'}
+                    </Text>
+                  </Pressable>
+
+                  {showForm ? (
+                    <View style={styles.formCard}>
+                      <View style={styles.fieldGroup}>
+                        <Text style={styles.fieldLabel}>Name</Text>
+                        <TextInput
+                          value={name}
+                          onChangeText={setName}
+                          placeholder="e.g., Mom / John Doe"
+                          placeholderTextColor={themeColors.textTertiary}
+                          style={styles.input}
+                        />
+                      </View>
+                      <View style={styles.fieldGroup}>
+                        <Text style={styles.fieldLabel}>Phone</Text>
+                        <View style={[styles.phoneRow, isCompact && styles.phoneRowStacked]}>
+                          <Pressable
+                            style={styles.countryCodeButton}
+                            onPress={() => setCountryPickerVisible(true)}
+                          >
+                            <Text style={styles.countryCodeText}>{selectedCountry.dialCode}</Text>
+                            <MaterialCommunityIcons
+                              name="chevron-down"
+                              size={16}
+                              color={themeColors.textSecondary}
+                            />
+                          </Pressable>
+                          <TextInput
+                            value={phone}
+                            onChangeText={(value) =>
+                              setPhone(value.replace(/\D/g, '').slice(0, PHONE_MAX_DIGITS))
+                            }
+                            placeholder="e.g., 9876543210"
+                            placeholderTextColor={themeColors.textTertiary}
+                            keyboardType="phone-pad"
+                            style={[styles.input, styles.phoneInput]}
+                          />
+                        </View>
+                        <Modal
+                          visible={countryPickerVisible}
+                          transparent
+                          animationType="slide"
+                          onRequestClose={() => setCountryPickerVisible(false)}
+                        >
+                          <View style={styles.countryModalOverlay}>
+                            <Pressable
+                              style={StyleSheet.absoluteFill}
+                              onPress={() => setCountryPickerVisible(false)}
+                            />
+                            <View
+                              style={[styles.countryModalContent, { height: countryPickerHeight }]}
+                              pointerEvents="box-none"
+                            >
+                              <View style={styles.countryModalHeader}>
+                                <Text style={styles.countryModalTitle}>Select country</Text>
+                                <Pressable onPress={() => setCountryPickerVisible(false)} hitSlop={12}>
+                                  <Text style={styles.countryModalDone}>Done</Text>
+                                </Pressable>
+                              </View>
+                              <View
+                                style={[
+                                  styles.countryListContainer,
+                                  { maxHeight: countryListMaxHeight },
+                                ]}
+                              >
+                                <FlatList
+                                  data={COUNTRIES}
+                                  keyExtractor={(item) => item.code}
+                                  style={styles.countryList}
+                                  contentContainerStyle={styles.countryListContent}
+                                  showsVerticalScrollIndicator={true}
+                                  keyboardShouldPersistTaps="handled"
+                                  renderItem={({ item }) => (
+                                    <Pressable
+                                      style={({ pressed }) => [
+                                        styles.countryItem,
+                                        pressed && styles.countryItemPressed,
+                                      ]}
+                                      onPress={() => {
+                                        setSelectedCountry(item);
+                                        setCountryPickerVisible(false);
+                                      }}
+                                    >
+                                      <Text style={styles.countryItemText}>
+                                        {item.name} ({item.dialCode})
+                                      </Text>
+                                    </Pressable>
+                                  )}
+                                />
+                              </View>
+                            </View>
+                          </View>
+                        </Modal>
+                      </View>
+                      <View style={styles.fieldGroup}>
+                        <Text style={styles.fieldLabel}>Relation</Text>
+                        <TextInput
+                          value={relation}
+                          onChangeText={setRelation}
+                          placeholder="e.g., Parent / Friend"
+                          placeholderTextColor={themeColors.textTertiary}
+                          style={styles.input}
+                        />
+                      </View>
+                      <Pressable
+                        style={[styles.primaryAction, saving && styles.buttonDisabled]}
+                        onPress={handleSave}
+                        disabled={saving}
+                      >
+                        <Text style={styles.primaryActionText}>
+                          {saving ? 'Saving...' : 'Save Contact'}
+                        </Text>
+                      </Pressable>
                     </View>
-                    <Pressable onPress={() => handleDelete(contact.id)} hitSlop={10}>
-                      <MaterialCommunityIcons name="trash-can-outline" size={18} color="#b42318" />
-                    </Pressable>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-          </View>
+                  ) : null}
+
+                  {!contacts.length ? (
+                    <EmptyStatePreset preset="contacts" />
+                  ) : (
+                    contacts.map((contact) => (
+                      <View key={contact.id} style={styles.contactCard}>
+                        <View style={styles.contactInfo}>
+                          <Text style={styles.contactName}>{contact.name}</Text>
+                          <Text style={styles.contactMeta}>
+                            {contact.relation} • {contact.phone}
+                          </Text>
+                        </View>
+                        <Pressable onPress={() => handleDelete(contact.id)} hitSlop={10}>
+                          <MaterialCommunityIcons
+                            name="trash-can-outline"
+                            size={18}
+                            color={themeColors.dangerText}
+                          />
+                        </Pressable>
+                      </View>
+                    ))
+                  )}
+                </ScrollView>
+              </View>
             </MotiView>
-        </KeyboardAvoidingView>
-      </View>
+          </KeyboardAvoidingView>
+        </View>
       </BlurView>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: AppThemeColors) {
+  return StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -306,7 +325,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#f8fbfb',
+    backgroundColor: themeColors.surfaceMuted,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingBottom: 24,
@@ -319,12 +338,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e8ea',
+    borderBottomColor: themeColors.border,
   },
   sheetTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   closeButton: {
     width: 32,
@@ -332,7 +351,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#eef4f5',
+    backgroundColor: themeColors.surfaceElevated,
   },
   sheetContent: {
     paddingHorizontal: 20,
@@ -347,24 +366,24 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#b8d0d4',
+    borderColor: themeColors.border,
     paddingVertical: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: themeColors.surface,
   },
   addToggleActive: {
-    borderColor: '#0f766e',
+    borderColor: themeColors.accentStrong,
   },
   addToggleText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0f766e',
+    color: themeColors.accentStrong,
   },
   formCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: themeColors.surface,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#e0e8ea',
+    borderColor: themeColors.border,
     gap: 12,
   },
   fieldGroup: {
@@ -373,17 +392,17 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#39484c',
+    color: themeColors.textSecondary,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#d8e3e6',
-    backgroundColor: '#f7fbfb',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.inputBackground,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   phoneRow: {
     flexDirection: 'row',
@@ -395,8 +414,8 @@ const styles = StyleSheet.create({
   countryCodeButton: {
     minWidth: 70,
     borderWidth: 1,
-    borderColor: '#d8e3e6',
-    backgroundColor: '#f7fbfb',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.inputBackground,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 14,
@@ -408,7 +427,7 @@ const styles = StyleSheet.create({
   countryCodeText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   phoneInput: {
     flex: 1,
@@ -419,7 +438,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   countryModalContent: {
-    backgroundColor: '#ffffff',
+    backgroundColor: themeColors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingBottom: 34,
@@ -432,18 +451,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
+    borderBottomColor: themeColors.border,
+    backgroundColor: themeColors.surface,
   },
   countryModalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0f172a',
+    color: themeColors.textPrimary,
   },
   countryModalDone: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#0f766e',
+    color: themeColors.accentStrong,
   },
   countryListContainer: {
     flex: 1,
@@ -459,24 +478,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: themeColors.border,
   },
   countryItemPressed: {
-    backgroundColor: '#f0fdfa',
+    backgroundColor: themeColors.accentSoft,
   },
   countryItemText: {
     fontSize: 16,
-    color: '#334155',
+    color: themeColors.textPrimary,
   },
   primaryAction: {
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: '#0f766e',
+    backgroundColor: themeColors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryActionText: {
-    color: '#ffffff',
+    color: themeColors.accentContrast,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -491,19 +510,19 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   emptySubtitle: {
     fontSize: 13,
-    color: '#7a8c90',
+    color: themeColors.textSecondary,
     textAlign: 'center',
   },
   contactCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: themeColors.surface,
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#e0e8ea',
+    borderColor: themeColors.border,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -515,11 +534,12 @@ const styles = StyleSheet.create({
   contactName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1f2f33',
+    color: themeColors.textPrimary,
   },
   contactMeta: {
     fontSize: 12,
-    color: '#6b7f86',
+    color: themeColors.textSecondary,
     marginTop: 4,
   },
-});
+  });
+}

@@ -1,4 +1,5 @@
 import { apiRequest } from '@/api/client';
+import type { MedicationMealTiming, MedicationReminderSlot } from '@/lib/medications';
 
 export type CareCircleStatus = 'pending' | 'accepted' | 'declined';
 export type CareCircleRole = 'family' | 'friend';
@@ -52,6 +53,7 @@ export type MemberDetailsMedication = {
   name: string;
   dosage: string;
   frequency: string;
+  mealTiming?: MedicationMealTiming;
   purpose?: string;
   timesPerDay?: number;
   startDate?: string;
@@ -60,6 +62,7 @@ export type MemberDetailsMedication = {
     medicationId: string;
     timestamp: string;
     taken: boolean;
+    slotKey?: MedicationReminderSlot['key'];
   }[];
 };
 

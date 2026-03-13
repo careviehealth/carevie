@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { ProfileAvatarSelector } from '@/components/ProfileAvatarSelector';
+import { useAppTheme } from '@/hooks/useAppTheme';
 import { useProfile } from '@/hooks/useProfile';
 import type { Profile } from '@/repositories/userProfilesRepository';
 import { toast } from '@/lib/toast';
@@ -28,6 +29,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function ProfileSelectionScreen() {
     const router = useRouter();
+    const { colors: themeColors } = useAppTheme();
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const insets = useSafeAreaInsets();
@@ -39,7 +41,7 @@ export default function ProfileSelectionScreen() {
     const [newProfileName, setNewProfileName] = useState('');
     const [showAvatarSelector, setShowAvatarSelector] = useState(false);
     const [selectedAvatarType, setSelectedAvatarType] = useState('default');
-    const [selectedAvatarColor, setSelectedAvatarColor] = useState('#14b8a6');
+    const [selectedAvatarColor, setSelectedAvatarColor] = useState(themeColors.accent);
 
     const isCompact = width < 360;
     const profileColumns = isCompact ? 1 : 2;
@@ -63,7 +65,7 @@ export default function ProfileSelectionScreen() {
     const handleAddProfile = () => {
         setNewProfileName('');
         setSelectedAvatarType('default');
-        setSelectedAvatarColor('#14b8a6');
+        setSelectedAvatarColor(themeColors.accent);
         setShowAddModal(true);
     };
 
@@ -105,7 +107,10 @@ export default function ProfileSelectionScreen() {
 
     if (isLoading) {
         return (
-            <LinearGradient colors={['#14b8a6', '#0f766e']} style={styles.container}>
+            <LinearGradient
+                colors={[themeColors.headerGradientStart, themeColors.headerGradientEnd]}
+                style={styles.container}
+            >
                 <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
                     <ActivityIndicator size="large" color="#ffffff" />
                     <Text style={styles.loadingText}>Loading child profiles...</Text>
@@ -115,7 +120,10 @@ export default function ProfileSelectionScreen() {
     }
 
     return (
-        <LinearGradient colors={['#14b8a6', '#0f766e']} style={styles.container}>
+        <LinearGradient
+            colors={[themeColors.headerGradientStart, themeColors.headerGradientEnd]}
+            style={styles.container}
+        >
             <ScrollView
                 contentContainerStyle={[styles.content, { paddingTop: insets.top + 32 }]}
                 showsVerticalScrollIndicator={false}
@@ -223,7 +231,9 @@ export default function ProfileSelectionScreen() {
                                         style={styles.changeAvatarButton}
                                         onPress={() => setShowAvatarSelector(true)}
                                     >
-                                        <Text style={styles.changeAvatarText}>Change Avatar</Text>
+                                        <Text style={[styles.changeAvatarText, { color: themeColors.accent }]}>
+                                            Change Avatar
+                                        </Text>
                                     </Pressable>
                                 </View>
 
@@ -246,7 +256,11 @@ export default function ProfileSelectionScreen() {
                                         <Text style={styles.modalButtonTextCancel}>Cancel</Text>
                                     </Pressable>
                                     <Pressable
-                                        style={[styles.modalButton, styles.modalButtonConfirm]}
+                                        style={[
+                                            styles.modalButton,
+                                            styles.modalButtonConfirm,
+                                            { backgroundColor: themeColors.accent },
+                                        ]}
                                         onPress={handleCreateProfile}
                                     >
                                         <Text style={styles.modalButtonTextConfirm}>Create</Text>
@@ -425,7 +439,7 @@ const styles = StyleSheet.create({
     changeAvatarText: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#14b8a6',
+        color: '#475569',
     },
     input: {
         backgroundColor: '#f8fafc',
@@ -459,7 +473,7 @@ const styles = StyleSheet.create({
         borderColor: '#e2e8f0',
     },
     modalButtonConfirm: {
-        backgroundColor: '#14b8a6',
+        backgroundColor: '#475569',
     },
     modalButtonTextCancel: {
         fontSize: 16,

@@ -38,9 +38,12 @@ import { Text } from '@/components/Themed';
 import { Screen } from '@/components/Screen';
 import { SkeletonListItem } from '@/components/Skeleton';
 import { EmptyStatePreset } from '@/components/EmptyState';
+import { useAppTheme } from '@/hooks/useAppTheme';
 import { useProfile } from '@/hooks/useProfile';
 import { vaultApi, type VaultFile } from '@/api/modules/vault';
 import type { MedicalFolder } from '@/constants/medicalFolders';
+import { logProfileActivity } from '@/lib/profileActivity';
+import { TourAnchor } from '@/providers/OnboardingTourProvider';
 import { toast } from '@/lib/toast';
 
 type CategoryKey = 'all' | MedicalFolder;
@@ -82,11 +85,30 @@ const sortOptions: { key: SortOption; label: string }[] = [
   { key: 'name-desc', label: 'Name Z-A' },
 ];
 
-const folderIcon: Record<MedicalFolder, keyof typeof MaterialCommunityIcons.glyphMap> = {
-  reports: 'pulse',
-  prescriptions: 'pill',
-  insurance: 'shield-outline',
-  bills: 'receipt',
+const folderLabel: Record<MedicalFolder, string> = {
+  reports: 'Lab Report',
+  prescriptions: 'Prescription',
+  insurance: 'Insurance',
+  bills: 'Bill',
+};
+
+const folderSurface: Record<MedicalFolder, { rowBg: string; rowBorder: string }> = {
+  reports: {
+    rowBg: '#f9fcfb',
+    rowBorder: '#e3ece8',
+  },
+  prescriptions: {
+    rowBg: '#fafbfe',
+    rowBorder: '#e6eaf4',
+  },
+  insurance: {
+    rowBg: '#fffdf9',
+    rowBorder: '#eee6d9',
+  },
+  bills: {
+    rowBg: '#fffafb',
+    rowBorder: '#efe2e5',
+  },
 };
 
 const allowedImageExt = new Set([
@@ -108,6 +130,44 @@ const stripExtension = (name: string) => name.replace(/\.[^/.]+$/, '');
 const getExtension = (name: string) => {
   const parts = name.split('.');
   return parts.length > 1 ? parts.pop() ?? '' : '';
+};
+
+const getDocumentVisual = (
+  name: string
+): {
+  label: string;
+  shortLabel: string;
+} => {
+  const extension = getExtension(name).toLowerCase();
+  if (extension === 'pdf') {
+    return { label: 'PDF document', shortLabel: 'PDF' };
+  }
+  if (allowedImageExt.has(extension)) {
+    return { label: 'Image file', shortLabel: extension.toUpperCase() || 'IMG' };
+  }
+  if (extension === 'doc' || extension === 'docx') {
+    return { label: 'Word document', shortLabel: extension.toUpperCase() };
+  }
+  if (extension === 'xls' || extension === 'xlsx' || extension === 'csv') {
+    return { label: 'Spreadsheet', shortLabel: extension.toUpperCase() };
+  }
+  if (extension === 'txt') {
+    return { label: 'Text document', shortLabel: 'TXT' };
+  }
+  if (extension) {
+    return { label: `${extension.toUpperCase()} file`, shortLabel: extension.toUpperCase() };
+  }
+  return { label: 'Document', shortLabel: 'DOC' };
+};
+
+const formatVaultDate = (value: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Recently added';
+  return parsed.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 };
 
 const getMimeType = (name: string) => {
@@ -224,6 +284,7 @@ const AnimatedButton = ({
 };
 
 export default function VaultScreen() {
+  const { colors: themeColors } = useAppTheme();
   const { selectedProfile } = useProfile();
   const storageOwnerId = selectedProfile?.id ?? '';
   const insets = useSafeAreaInsets();
@@ -430,6 +491,19 @@ export default function VaultScreen() {
         return;
       }
 
+      void logProfileActivity({
+        profileId: storageOwnerId,
+        domain: 'vault',
+        action: 'upload',
+        entity: {
+          label: finalName,
+        },
+        metadata: {
+          folder,
+          fileName: finalName,
+        },
+      });
+
       setUploadModalOpen(false);
       setUploadDraft({ file: null, category: 'reports', fileName: '' });
       await refreshAll();
@@ -549,6 +623,21 @@ export default function VaultScreen() {
       toast.error('Rename failed', error.message || 'Unable to rename file.');
       return;
     }
+
+    void logProfileActivity({
+      profileId: storageOwnerId,
+      domain: 'vault',
+      action: 'rename',
+      entity: {
+        label: nextName,
+      },
+      metadata: {
+        folder: renameFile.folder,
+        fromName: renameFile.name,
+        toName: nextName,
+      },
+    });
+
     setFiles((prev) =>
       prev.map((file) =>
         file.name === renameFile.name && file.folder === renameFile.folder
@@ -573,6 +662,20 @@ export default function VaultScreen() {
             toast.error('Delete failed', error.message || 'Unable to delete file.');
             return;
           }
+
+          void logProfileActivity({
+            profileId: storageOwnerId,
+            domain: 'vault',
+            action: 'delete',
+            entity: {
+              label: item.name,
+            },
+            metadata: {
+              folder: item.folder,
+              fileName: item.name,
+            },
+          });
+
           setFiles((prev) => prev.filter((file) => file.name !== item.name));
           fetchCounts();
         },
@@ -720,10 +823,12 @@ export default function VaultScreen() {
             <Text style={styles.title}>Medical Vault</Text>
             <Text style={styles.subtitle}>Securely store and manage your medical documents</Text>
           </View>
-          <AnimatedButton style={styles.uploadButton} onPress={handlePickFile}>
-            <MaterialCommunityIcons name="upload" size={18} color="#1f2f33" />
-            <Text style={styles.uploadText}>Upload</Text>
-          </AnimatedButton>
+          <TourAnchor tourId="vault-upload">
+            <AnimatedButton style={styles.uploadButton} onPress={handlePickFile}>
+              <MaterialCommunityIcons name="upload" size={18} color="#1f2f33" />
+              <Text style={styles.uploadText}>Upload</Text>
+            </AnimatedButton>
+          </TourAnchor>
         </View>
 
         <View style={styles.searchRow}>
@@ -754,13 +859,45 @@ export default function VaultScreen() {
               >
                 <AnimatedButton
                   onPress={() => onSelectCategory(category.key)}
-                  style={[styles.chip, isActive && styles.chipActive]}
+                  style={[
+                    styles.chip,
+                    {
+                      borderColor: themeColors.border,
+                      backgroundColor: themeColors.surface,
+                    },
+                    isActive && styles.chipActive,
+                    isActive && {
+                      backgroundColor: themeColors.headerChipBackground,
+                      borderColor: themeColors.headerChipBorder,
+                    },
+                  ]}
                 >
-                  <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
+                  <Text
+                    style={[
+                      styles.chipText,
+                      { color: themeColors.textPrimary },
+                      isActive && styles.chipTextActive,
+                      isActive && { color: themeColors.headerChipText },
+                    ]}
+                  >
                     {category.label}
                   </Text>
-                  <View style={[styles.chipCount, isActive && styles.chipCountActive]}>
-                    <Text style={[styles.chipCountText, isActive && styles.chipCountTextActive]}>
+                  <View
+                    style={[
+                      styles.chipCount,
+                      { backgroundColor: themeColors.backgroundMuted },
+                      isActive && styles.chipCountActive,
+                      isActive && { backgroundColor: themeColors.headerChipBorder },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.chipCountText,
+                        { color: themeColors.textSecondary },
+                        isActive && styles.chipCountTextActive,
+                        isActive && { color: themeColors.headerChipText },
+                      ]}
+                    >
                       {renderCount(category.key)}
                     </Text>
                   </View>
@@ -791,9 +928,27 @@ export default function VaultScreen() {
                       setCustomRange({ start: '', end: '' });
                     }
                   }}
-                  style={[styles.filterChip, isActive && styles.filterChipActive]}
+                  style={[
+                    styles.filterChip,
+                    {
+                      borderColor: themeColors.border,
+                      backgroundColor: themeColors.surface,
+                    },
+                    isActive && styles.filterChipActive,
+                    isActive && {
+                      backgroundColor: themeColors.accentSoft,
+                      borderColor: themeColors.headerChipBorder,
+                    },
+                  ]}
                 >
-                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      { color: themeColors.textSecondary },
+                      isActive && styles.filterChipTextActive,
+                      isActive && { color: themeColors.accentStrong },
+                    ]}
+                  >
                     {filter.label}
                   </Text>
                 </AnimatedButton>
@@ -821,29 +976,48 @@ export default function VaultScreen() {
                 key={`${item.folder}-${item.name}`}
                 entering={FadeInDown.delay(Math.min(index * 60, 600)).springify()}
               >
-                <AnimatedPressable
-                  style={({ pressed }) => [styles.listItem, pressed && styles.listItemPressed]}
-                  onPress={() => handlePreview(item)}
-                >
-                  <View style={styles.listIcon}>
-                    <MaterialCommunityIcons name={folderIcon[item.folder]} size={22} color="#2f565f" />
-                  </View>
-                  <View style={styles.listText}>
-                    <Text style={styles.itemTitle}>{item.name}</Text>
-                    <Text style={styles.itemDate}>
-                      {new Date(item.created_at).toLocaleDateString()}
-                    </Text>
-                  </View>
-                  <AnimatedButton
-                    onPress={(event) => {
-                      event?.stopPropagation?.();
-                      openMenu(item, event);
-                    }}
-                    style={styles.moreButton}
-                  >
-                    <MaterialCommunityIcons name="dots-vertical" size={18} color="#7c8b90" />
-                  </AnimatedButton>
-              </AnimatedPressable>
+                {(() => {
+                  const surface = folderSurface[item.folder];
+                  const documentVisual = getDocumentVisual(item.name);
+                  const metadataLine = `${folderLabel[item.folder]} • ${documentVisual.shortLabel} • ${formatVaultDate(
+                    item.created_at
+                  )}`;
+                  return (
+                    <AnimatedPressable
+                      style={({ pressed }) => [
+                        styles.listItem,
+                        {
+                          backgroundColor: surface.rowBg,
+                          borderColor: surface.rowBorder,
+                        },
+                        pressed && styles.listItemPressed,
+                      ]}
+                      onPress={() => handlePreview(item)}
+                    >
+                      <View style={styles.listText}>
+                        <View style={styles.listTopRow}>
+                          <View style={styles.titleWrap}>
+                            <Text style={styles.itemTitle} numberOfLines={2}>
+                              {item.name}
+                            </Text>
+                          </View>
+                          <AnimatedButton
+                            onPress={(event) => {
+                              event?.stopPropagation?.();
+                              openMenu(item, event);
+                            }}
+                            style={styles.moreButton}
+                          >
+                            <MaterialCommunityIcons name="dots-vertical" size={18} color="#63757b" />
+                          </AnimatedButton>
+                        </View>
+                        <Text style={styles.itemMetaLine} numberOfLines={1}>
+                          {metadataLine}
+                        </Text>
+                      </View>
+                    </AnimatedPressable>
+                  );
+                })()}
               </Animated.View>
             ))}
         </View>
@@ -999,9 +1173,27 @@ export default function VaultScreen() {
                         <Pressable
                           key={category.key}
                           onPress={() => setUploadDraft((prev) => ({ ...prev, category: category.key }))}
-                          style={[styles.chip, isActive && styles.chipActive]}
+                          style={[
+                            styles.chip,
+                            {
+                              borderColor: themeColors.border,
+                              backgroundColor: themeColors.surface,
+                            },
+                            isActive && styles.chipActive,
+                            isActive && {
+                              backgroundColor: themeColors.headerChipBackground,
+                              borderColor: themeColors.headerChipBorder,
+                            },
+                          ]}
                         >
-                          <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
+                          <Text
+                            style={[
+                              styles.chipText,
+                              { color: themeColors.textPrimary },
+                              isActive && styles.chipTextActive,
+                              isActive && { color: themeColors.headerChipText },
+                            ]}
+                          >
                             {category.label}
                           </Text>
                         </Pressable>
@@ -1323,47 +1515,53 @@ const styles = StyleSheet.create({
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#d7e0e4',
-    borderRadius: 18,
+    borderColor: '#e1e8eb',
+    borderRadius: 16,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    shadowColor: '#9aa8ad',
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
-  },
-  listIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: '#e4eef0',
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 11,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   listText: {
     flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  listTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  titleWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   itemTitle: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#1b2b2f',
+    fontWeight: '600',
+    color: '#172326',
+    lineHeight: 18,
   },
-  itemDate: {
+  itemMetaLine: {
     fontSize: 12,
-    color: '#64748b',
-    marginTop: 4,
+    color: '#71838a',
   },
   moreButton: {
     width: 32,
     height: 32,
-    borderRadius: 12,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f1f5f6',
+    backgroundColor: '#f8fafb',
+    borderWidth: 1,
+    borderColor: '#e5ecef',
+    flexShrink: 0,
   },
   emptyState: {
     padding: 24,

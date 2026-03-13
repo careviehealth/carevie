@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Alert,
     Modal,
@@ -11,6 +11,7 @@ import {
     useWindowDimensions,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useAppTheme } from '@/hooks/useAppTheme';
 import { ProfileAvatar } from './ProfileAvatar';
 
 const AVATAR_TYPES = [
@@ -48,8 +49,9 @@ export function ProfileAvatarSelector({
     onClose,
     onSelect,
     initialAvatarType = 'default',
-    initialAvatarColor = '#14b8a6',
+    initialAvatarColor,
 }: ProfileAvatarSelectorProps) {
+    const { colors: themeColors } = useAppTheme();
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -58,8 +60,15 @@ export function ProfileAvatarSelector({
     const avatarOptionWidth = isCompact ? '30%' : '22%';
     const colorCircleSize = isCompact ? 52 : 60;
 
+    const resolvedInitialAvatarColor = initialAvatarColor || themeColors.accent;
     const [selectedType, setSelectedType] = useState(initialAvatarType);
-    const [selectedColor, setSelectedColor] = useState(initialAvatarColor);
+    const [selectedColor, setSelectedColor] = useState(resolvedInitialAvatarColor);
+
+    useEffect(() => {
+        if (!visible) return;
+        setSelectedType(initialAvatarType);
+        setSelectedColor(resolvedInitialAvatarColor);
+    }, [initialAvatarType, resolvedInitialAvatarColor, visible]);
 
     const handleConfirm = () => {
         onSelect(selectedType, selectedColor);
@@ -112,6 +121,12 @@ export function ProfileAvatarSelector({
                                             selectedType === avatar.type && styles.avatarOptionSelected,
                                             isDark && styles.avatarOptionDark,
                                             selectedType === avatar.type && isDark && styles.avatarOptionSelectedDark,
+                                            selectedType === avatar.type && {
+                                                borderColor: themeColors.accent,
+                                                backgroundColor: isDark
+                                                    ? themeColors.headerChipBackground
+                                                    : themeColors.accentSoft,
+                                            },
                                         ]}
                                         onPress={() => setSelectedType(avatar.type)}
                                     >
@@ -125,6 +140,7 @@ export function ProfileAvatarSelector({
                                                 styles.avatarLabel,
                                                 isDark && styles.avatarLabelDark,
                                                 selectedType === avatar.type && styles.avatarLabelSelected,
+                                                selectedType === avatar.type && { color: themeColors.accentStrong },
                                             ]}
                                             numberOfLines={2}
                                         >
@@ -183,7 +199,10 @@ export function ProfileAvatarSelector({
                         >
                             <Text style={[styles.buttonText, styles.buttonTextCancel]}>Cancel</Text>
                         </Pressable>
-                        <Pressable style={[styles.button, styles.buttonConfirm]} onPress={handleConfirm}>
+                        <Pressable
+                            style={[styles.button, styles.buttonConfirm, { backgroundColor: themeColors.accent }]}
+                            onPress={handleConfirm}
+                        >
                             <Text style={[styles.buttonText, styles.buttonTextConfirm]}>Confirm</Text>
                         </Pressable>
                     </View>
@@ -265,12 +284,12 @@ const styles = StyleSheet.create({
         borderColor: '#475569',
     },
     avatarOptionSelected: {
-        borderColor: '#14b8a6',
-        backgroundColor: '#f0fdfa',
+        borderColor: '#475569',
+        backgroundColor: '#e2e8f0',
     },
     avatarOptionSelectedDark: {
-        borderColor: '#14b8a6',
-        backgroundColor: '#0f766e20',
+        borderColor: '#94a3b8',
+        backgroundColor: '#334155',
     },
     avatarLabel: {
         marginTop: 8,
@@ -283,7 +302,7 @@ const styles = StyleSheet.create({
         color: '#94a3b8',
     },
     avatarLabelSelected: {
-        color: '#0f766e',
+        color: '#475569',
         fontWeight: '600',
     },
     colorGrid: {
@@ -339,7 +358,7 @@ const styles = StyleSheet.create({
         borderColor: '#475569',
     },
     buttonConfirm: {
-        backgroundColor: '#14b8a6',
+        backgroundColor: '#475569',
     },
     buttonText: {
         fontSize: 16,

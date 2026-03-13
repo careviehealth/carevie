@@ -1,6 +1,7 @@
 import { type ComponentProps } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 const AVATAR_ICONS: Record<string, ComponentProps<typeof MaterialCommunityIcons>['name']> = {
     default: 'account',
@@ -30,8 +31,9 @@ export function ProfileAvatar({
     avatarColor,
     size = 'medium',
 }: ProfileAvatarProps) {
+    const { colors: themeColors } = useAppTheme();
     const iconName = AVATAR_ICONS[avatarType] || AVATAR_ICONS.default;
-    const color = avatarColor || '#14b8a6';
+    const color = avatarColor || themeColors.accent;
     const dimensions = SIZES[size];
 
     const containerStyle = {

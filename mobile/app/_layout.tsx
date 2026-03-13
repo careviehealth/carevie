@@ -1,5 +1,5 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -10,11 +10,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import Toast from 'react-native-toast-message';
 import { toastConfig } from '@/lib/toast';
-import { useColorScheme } from '@/components/useColorScheme';
+import { useAppTheme } from '@/hooks/useAppTheme';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { AuthProvider } from '@/providers/AuthProvider';
+import { OnboardingTourProvider } from '@/providers/OnboardingTourProvider';
 import { ProfileProvider } from '@/providers/ProfileProvider';
+import { AppThemeProvider } from '@/providers/ThemeProvider';
 import { supabase } from '@/lib/supabase';
 
 export {
@@ -51,52 +53,62 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
+  return <RootProviders />;
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const { navigationTheme } = useAppTheme();
 
   return (
+    <ThemeProvider value={navigationTheme}>
+      <OnboardingTourProvider>
+        <AuthGate />
+        <Stack>
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="profile-selection" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="manage-profiles"
+            options={{
+              headerShown: false,
+              presentation: 'modal',
+              title: 'Manage Children',
+            }}
+          />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="settings"
+            options={{
+              headerShown: false,
+              title: 'Settings',
+            }}
+          />
+          <Stack.Screen
+            name="health-onboarding"
+            options={{
+              headerShown: false,
+              title: 'Health Setup',
+            }}
+          />
+          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        </Stack>
+      </OnboardingTourProvider>
+    </ThemeProvider>
+  );
+}
+
+function RootProviders() {
+  return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-    <AuthProvider>
-      <ProfileProvider>
-        <SafeAreaProvider>
-          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <AuthGate />
-            <Stack>
-              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-              <Stack.Screen name="profile-selection" options={{ headerShown: false }} />
-              <Stack.Screen
-                name="manage-profiles"
-                options={{
-                  headerShown: false,
-                  presentation: 'modal',
-                  title: 'Manage Children',
-                }}
-              />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen
-                name="settings"
-                options={{
-                  headerShown: false,
-                  title: 'Settings',
-                }}
-              />
-              <Stack.Screen
-                name="health-onboarding"
-                options={{
-                  headerShown: false,
-                  title: 'Health Setup',
-                }}
-              />
-              <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-            </Stack>
-          </ThemeProvider>
-        </SafeAreaProvider>
-      </ProfileProvider>
-    </AuthProvider>
-    <Toast config={toastConfig} />
+      <AuthProvider>
+        <AppThemeProvider>
+          <ProfileProvider>
+            <SafeAreaProvider>
+              <RootLayoutNav />
+            </SafeAreaProvider>
+          </ProfileProvider>
+        </AppThemeProvider>
+      </AuthProvider>
+      <Toast config={toastConfig} />
     </GestureHandlerRootView>
   );
 }

@@ -18,8 +18,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/Themed';
 import { apiRequest } from '@/api/client';
-import { supabase } from '@/lib/supabase';
+import { type AppThemeColors } from '@/constants/appThemes';
+import { useAppTheme } from '@/hooks/useAppTheme';
 import { useProfile } from '@/hooks/useProfile';
+import { supabase } from '@/lib/supabase';
+import { useOnboardingTour } from '@/providers/OnboardingTourProvider';
 
 // --- Types (aligned with web) ---
 interface MedicationEntry {
@@ -36,6 +39,7 @@ interface PastSurgeryEntry {
 
 interface Profile {
   displayName: string;
+  gender: string;
   dateOfBirth: string;
   bloodGroup: string;
   heightCm: number | null;
@@ -74,6 +78,13 @@ const QUESTIONS: QuestionConfig[] = [
     inputType: 'text',
     required: true,
     placeholder: 'e.g. John Doe',
+  },
+  {
+    key: 'gender',
+    question: "What is your gender?",
+    inputType: 'single-select',
+    required: true,
+    options: ['Male', 'Female', 'Other'],
   },
   {
     key: 'dateOfBirth',
@@ -204,6 +215,9 @@ const getMaxDayForMonth = (month: number | null, year: number | null) => {
 
 export default function HealthOnboardingScreen() {
   const router = useRouter();
+  const { colors: themeColors } = useAppTheme();
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const { startTour } = useOnboardingTour();
   const params = useLocalSearchParams<{
     newProfileId?: string | string[];
     previousProfileId?: string | string[];
@@ -239,6 +253,7 @@ export default function HealthOnboardingScreen() {
 
   const [profile, setProfile] = useState<Profile>({
     displayName: '',
+    gender: '',
     dateOfBirth: '',
     bloodGroup: '',
     heightCm: null,
@@ -254,7 +269,7 @@ export default function HealthOnboardingScreen() {
   });
 
   const currentQ = QUESTIONS[step];
-  const canSkip = step >= 4;
+  const canSkip = !currentQ?.required;
   const isRequired = !!currentQ?.required;
   const progressPercent = Math.min(100, Math.round((step / QUESTIONS.length) * 100));
   const selectedMonth = dobParts.month ? parseInt(dobParts.month, 10) : null;
@@ -306,6 +321,7 @@ export default function HealthOnboardingScreen() {
   const reviewItems = useMemo(() => {
     const labels: Record<keyof Profile, string> = {
       displayName: 'Full name',
+      gender: 'Gender',
       dateOfBirth: 'Date of birth',
       bloodGroup: 'Blood group',
       heightCm: 'Height (cm)',
@@ -331,6 +347,9 @@ export default function HealthOnboardingScreen() {
       }
       if (key === 'dateOfBirth') {
         return profile.dateOfBirth || 'Not provided';
+      }
+      if (key === 'gender') {
+        return profile.gender || 'Not provided';
       }
       if (key === 'bloodGroup') {
         return profile.bloodGroup || 'Not provided';
@@ -436,6 +455,7 @@ export default function HealthOnboardingScreen() {
 
   const formatAnswerForChat = (key: keyof Profile) => {
     if (key === 'displayName') return profile.displayName.trim();
+    if (key === 'gender') return profile.gender;
     if (key === 'dateOfBirth') return profile.dateOfBirth ? formatDobLabel(profile.dateOfBirth) : '';
     if (key === 'bloodGroup') return profile.bloodGroup;
     if (key === 'heightCm') {
@@ -573,6 +593,7 @@ export default function HealthOnboardingScreen() {
     const trimmed = raw.trim();
     if (!isRequired) return true;
     if (key === 'dateOfBirth') return !!trimmed;
+    if (key === 'gender') return !!trimmed;
     if (key === 'bloodGroup') return !!trimmed;
     if (key === 'heightCm' || key === 'weightKg') {
       const n = Number(trimmed);
@@ -858,12 +879,21 @@ export default function HealthOnboardingScreen() {
         body: healthPayload,
       });
 
-      // Update profile name and display_name so the user's chosen name appears everywhere
+      // Update profile fields stored directly on profiles.
+      const profileUpdates: { name?: string; display_name?: string; gender?: string } = {};
       if (profile.displayName.trim()) {
         const trimmedName = profile.displayName.trim();
+        profileUpdates.name = trimmedName;
+        profileUpdates.display_name = trimmedName;
+      }
+      if (profile.gender.trim()) {
+        profileUpdates.gender = profile.gender.trim();
+      }
+
+      if (Object.keys(profileUpdates).length > 0) {
         await supabase
           .from('profiles')
-          .update({ name: trimmedName, display_name: trimmedName })
+          .update(profileUpdates)
           .eq('id', targetProfileId);
         await refreshProfiles();
         try {
@@ -874,7 +904,14 @@ export default function HealthOnboardingScreen() {
       }
 
       setIsSaved(true);
-      setTimeout(() => router.replace('/home'), 400);
+      setTimeout(() => {
+        void (async () => {
+          const didStartTour = await startTour('autostart');
+          if (!didStartTour) {
+            router.replace('/home');
+          }
+        })();
+      }, 400);
     } catch (e: unknown) {
       const message = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : 'Something went wrong';
       setSaveError(message);
@@ -885,10 +922,19 @@ export default function HealthOnboardingScreen() {
 
   if (!currentQ && !isComplete) return null;
 
+  const currentSingleSelectValue =
+    currentQ?.inputType === 'single-select' && typeof profile[currentQ.key] === 'string'
+      ? (profile[currentQ.key] as string)
+      : '';
+
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#2f565f', '#5a9a9c', '#7FCCA3']}
+        colors={[
+          themeColors.headerGradientStart,
+          themeColors.headerGradientEnd,
+          themeColors.accent,
+        ]}
         style={StyleSheet.absoluteFill}
       />
       <KeyboardAvoidingView
@@ -910,7 +956,11 @@ export default function HealthOnboardingScreen() {
             }}
             style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
           >
-            <MaterialCommunityIcons name="arrow-left" size={24} color="#eef7f7" />
+            <MaterialCommunityIcons
+              name="arrow-left"
+              size={24}
+              color={themeColors.headerForeground}
+            />
           </Pressable>
           <View style={styles.headerCenter}>
             <Text style={styles.kicker}>Health Setup</Text>
@@ -1252,7 +1302,7 @@ export default function HealthOnboardingScreen() {
                       </>
                     )}
 
-                    {/* Single select (blood group) */}
+                    {/* Single select */}
                     {currentQ.inputType === 'single-select' && (
                       <>
                         <View style={styles.chipRow}>
@@ -1261,15 +1311,20 @@ export default function HealthOnboardingScreen() {
                               key={opt}
                               style={({ pressed }) => [
                                 styles.chip,
-                                profile.bloodGroup === opt && styles.chipActive,
+                                currentSingleSelectValue === opt && styles.chipActive,
                                 pressed && styles.chipPressed,
                               ]}
-                              onPress={() => setProfile((prev) => ({ ...prev, bloodGroup: opt }))}
+                              onPress={() =>
+                                setProfile((prev) => ({
+                                  ...prev,
+                                  [currentQ.key]: opt,
+                                }))
+                              }
                             >
                               <Text
                                 style={[
                                   styles.chipText,
-                                  profile.bloodGroup === opt && styles.chipTextActive,
+                                  currentSingleSelectValue === opt && styles.chipTextActive,
                                 ]}
                               >
                                 {opt}
@@ -1283,8 +1338,8 @@ export default function HealthOnboardingScreen() {
                             styles.sendBtn,
                             pressed && styles.primaryBtnPressed,
                           ]}
-                          onPress={() => handleSingleNext(profile.bloodGroup)}
-                          disabled={!profile.bloodGroup}
+                          onPress={() => handleSingleNext(currentSingleSelectValue)}
+                          disabled={!currentSingleSelectValue}
                         >
                           <Text style={styles.primaryBtnText}>Send</Text>
                           <MaterialCommunityIcons name="send" size={18} color="#fff" />
@@ -1338,7 +1393,11 @@ export default function HealthOnboardingScreen() {
                             }}
                             disabled={!canAddMultiText(currentQ.key)}
                           >
-                            <MaterialCommunityIcons name="plus" size={18} color="#0f766e" />
+                            <MaterialCommunityIcons
+                              name="plus"
+                              size={18}
+                              color={themeColors.accentStrong}
+                            />
                             <Text style={styles.addBtnText}>Add another</Text>
                           </Pressable>
                           <Pressable
@@ -1495,7 +1554,11 @@ export default function HealthOnboardingScreen() {
                             }
                             disabled={!canAddMedication()}
                           >
-                            <MaterialCommunityIcons name="plus" size={18} color="#0f766e" />
+                            <MaterialCommunityIcons
+                              name="plus"
+                              size={18}
+                              color={themeColors.accentStrong}
+                            />
                             <Text style={styles.addBtnText}>Add medication</Text>
                           </Pressable>
                           <Pressable
@@ -1685,7 +1748,11 @@ export default function HealthOnboardingScreen() {
                             }
                             disabled={!canAddSurgery()}
                           >
-                            <MaterialCommunityIcons name="plus" size={18} color="#0f766e" />
+                            <MaterialCommunityIcons
+                              name="plus"
+                              size={18}
+                              color={themeColors.accentStrong}
+                            />
                             <Text style={styles.addBtnText}>Add surgery</Text>
                           </Pressable>
                           <Pressable
@@ -1706,7 +1773,7 @@ export default function HealthOnboardingScreen() {
                 </View>
               </View>
 
-              {canSkip && currentQ.key !== 'weightKg' && (
+              {canSkip && (
                 <Pressable
                   style={({ pressed }) => [styles.skipBtn, pressed && styles.skipBtnPressed]}
                   onPress={handleSkip}
@@ -1720,7 +1787,11 @@ export default function HealthOnboardingScreen() {
                   style={({ pressed }) => [styles.stepBackBtn, pressed && styles.stepBackBtnPressed]}
                   onPress={goBackStep}
                 >
-                  <MaterialCommunityIcons name="chevron-left" size={20} color="#0f766e" />
+                  <MaterialCommunityIcons
+                    name="chevron-left"
+                    size={20}
+                    color={themeColors.accentStrong}
+                  />
                   <Text style={styles.stepBackBtnText}>Back</Text>
                 </Pressable>
               )}
@@ -1790,7 +1861,8 @@ export default function HealthOnboardingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: AppThemeColors) {
+  return StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -1897,8 +1969,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.2)',
-    backgroundColor: '#fff',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.surface,
   },
   dateSelectLabel: {
     fontSize: 11,
@@ -1922,8 +1994,8 @@ const styles = StyleSheet.create({
     maxHeight: 200,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.18)',
-    backgroundColor: '#ffffff',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.surface,
     marginBottom: 14,
     shadowColor: '#0f172a',
     shadowOpacity: 0.08,
@@ -1941,7 +2013,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   dateOptionActive: {
-    backgroundColor: 'rgba(15,118,110,0.12)',
+    backgroundColor: themeColors.accentSoft,
   },
   dateOptionText: {
     fontSize: 14,
@@ -1949,7 +2021,7 @@ const styles = StyleSheet.create({
     color: '#0f172a',
   },
   dateOptionTextActive: {
-    color: '#0f766e',
+    color: themeColors.accentStrong,
   },
   scroll: {
     flex: 1,
@@ -1963,7 +2035,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.1)',
+    borderColor: themeColors.border,
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.08,
@@ -1989,9 +2061,9 @@ const styles = StyleSheet.create({
     maxWidth: '92%',
     padding: 14,
     borderRadius: 16,
-    backgroundColor: 'rgba(15,118,110,0.08)',
+    backgroundColor: themeColors.accentSoft,
     borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.18)',
+    borderColor: themeColors.border,
   },
   botHeader: {
     flexDirection: 'row',
@@ -2003,7 +2075,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#0f766e',
+    backgroundColor: themeColors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2015,7 +2087,7 @@ const styles = StyleSheet.create({
   botLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#0f766e',
+    color: themeColors.accentStrong,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
@@ -2030,14 +2102,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 14,
-    backgroundColor: 'rgba(15,118,110,0.06)',
+    backgroundColor: themeColors.accentSoft,
     borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.12)',
+    borderColor: themeColors.border,
   },
   botAckText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#0f766e',
+    color: themeColors.accentStrong,
   },
   botMeta: {
     marginTop: 8,
@@ -2047,17 +2119,17 @@ const styles = StyleSheet.create({
     maxWidth: '86%',
     padding: 12,
     borderRadius: 16,
-    backgroundColor: '#0f766e',
+    backgroundColor: themeColors.accent,
     borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.4)',
+    borderColor: themeColors.accentStrong,
   },
   userComposer: {
     width: '100%',
     padding: 14,
     borderRadius: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: themeColors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.12)',
+    borderColor: themeColors.border,
   },
   userLabel: {
     alignSelf: 'flex-end',
@@ -2091,7 +2163,7 @@ const styles = StyleSheet.create({
   },
   requiredHint: {
     fontSize: 12,
-    color: '#0f766e',
+    color: themeColors.accentStrong,
     fontWeight: '600',
     marginBottom: 14,
   },
@@ -2112,8 +2184,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.2)',
-    backgroundColor: '#fff',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.surface,
     fontSize: 16,
     color: '#0f172a',
     marginBottom: 14,
@@ -2126,7 +2198,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 14,
-    backgroundColor: '#0f766e',
+    backgroundColor: themeColors.accent,
     marginBottom: 10,
   },
   sendBtn: {
@@ -2155,12 +2227,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.25)',
-    backgroundColor: 'rgba(15,118,110,0.06)',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.accentSoft,
   },
   chipActive: {
-    backgroundColor: 'rgba(15,118,110,0.2)',
-    borderColor: '#0f766e',
+    backgroundColor: themeColors.accentSoft,
+    borderColor: themeColors.accentStrong,
   },
   chipPressed: {
     opacity: 0.8,
@@ -2171,7 +2243,7 @@ const styles = StyleSheet.create({
     color: '#0f172a',
   },
   chipTextActive: {
-    color: '#0f766e',
+    color: themeColors.accentStrong,
     fontWeight: '700',
   },
   multiRow: {
@@ -2201,8 +2273,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(15,118,110,0.35)',
-    backgroundColor: 'rgba(15,118,110,0.06)',
+    borderColor: themeColors.borderStrong,
+    backgroundColor: themeColors.accentSoft,
   },
   addBtnPressed: {
     opacity: 0.8,
@@ -2213,13 +2285,13 @@ const styles = StyleSheet.create({
   addBtnText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0f766e',
+    color: themeColors.accentStrong,
   },
   removeBtn: {
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 10,
-    backgroundColor: 'rgba(15,118,110,0.1)',
+    backgroundColor: themeColors.accentSoft,
     alignSelf: 'flex-start',
   },
   removeBtnPressed: {
@@ -2234,14 +2306,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     padding: 14,
     borderRadius: 14,
-    backgroundColor: 'rgba(15,118,110,0.04)',
+    backgroundColor: themeColors.backgroundMuted,
     borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.1)',
+    borderColor: themeColors.border,
   },
   medLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#0f766e',
+    color: themeColors.accentStrong,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: 10,
@@ -2257,8 +2329,8 @@ const styles = StyleSheet.create({
   },
   medInput: {
     borderWidth: 1,
-    borderColor: '#d8e3e6',
-    backgroundColor: '#f7fbfb',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.inputBackground,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -2270,8 +2342,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: '#d8e3e6',
-    backgroundColor: '#f7fbfb',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.inputBackground,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -2289,8 +2361,8 @@ const styles = StyleSheet.create({
     maxHeight: 220,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#d8e3e6',
-    backgroundColor: '#ffffff',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.surface,
     marginTop: 8,
     shadowColor: '#0f172a',
     shadowOpacity: 0.08,
@@ -2308,7 +2380,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   medOptionActive: {
-    backgroundColor: 'rgba(15,118,110,0.12)',
+    backgroundColor: themeColors.accentSoft,
   },
   medOptionText: {
     fontSize: 13,
@@ -2316,7 +2388,7 @@ const styles = StyleSheet.create({
     color: '#1f2f33',
   },
   medOptionTextActive: {
-    color: '#0f766e',
+    color: themeColors.accentStrong,
   },
   surgeryDateRow: {
     flexDirection: 'row',
@@ -2328,7 +2400,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(15,118,110,0.3)',
+    borderColor: themeColors.borderStrong,
     borderRadius: 12,
     marginTop: 6,
   },
@@ -2362,7 +2434,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 14,
-    backgroundColor: '#0f766e',
+    backgroundColor: themeColors.accent,
   },
   saveBtnDisabled: {
     opacity: 0.7,
@@ -2371,7 +2443,7 @@ const styles = StyleSheet.create({
     marginTop: 18,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(15,118,110,0.12)',
+    borderTopColor: themeColors.border,
   },
   reviewTitle: {
     fontSize: 15,
@@ -2381,15 +2453,15 @@ const styles = StyleSheet.create({
   },
   reviewList: {
     borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.1)',
+    borderColor: themeColors.border,
     borderRadius: 14,
-    backgroundColor: '#f8fbfb',
+    backgroundColor: themeColors.surfaceMuted,
   },
   reviewRow: {
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(15,118,110,0.08)',
+    borderBottomColor: themeColors.border,
   },
   reviewRowLast: {
     borderBottomWidth: 0,
@@ -2397,7 +2469,7 @@ const styles = StyleSheet.create({
   reviewLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#0f766e',
+    color: themeColors.accentStrong,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 4,
@@ -2415,8 +2487,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(15,118,110,0.25)',
-    backgroundColor: 'rgba(15,118,110,0.06)',
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.accentSoft,
     marginTop: 10,
   },
   stepBackBtnPressed: {
@@ -2425,6 +2497,7 @@ const styles = StyleSheet.create({
   stepBackBtnText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0f766e',
+    color: themeColors.accentStrong,
   },
-});
+  });
+}

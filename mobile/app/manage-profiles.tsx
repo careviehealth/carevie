@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
     Alert,
     KeyboardAvoidingView,
@@ -19,6 +19,8 @@ import Animated, { FadeInRight, FadeInUp } from 'react-native-reanimated';
 
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { ProfileAvatarSelector } from '@/components/ProfileAvatarSelector';
+import { type AppThemeColors } from '@/constants/appThemes';
+import { useAppTheme } from '@/hooks/useAppTheme';
 import { useProfile } from '@/hooks/useProfile';
 import type { Profile } from '@/repositories/userProfilesRepository';
 import { toast } from '@/lib/toast';
@@ -27,8 +29,10 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function ManageProfilesScreen() {
     const router = useRouter();
+    const { colors: themeColors } = useAppTheme();
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
+    const styles = useMemo(() => createStyles(themeColors, isDark), [themeColors, isDark]);
     const insets = useSafeAreaInsets();
     const { height } = useWindowDimensions();
 
@@ -37,7 +41,7 @@ export default function ManageProfilesScreen() {
     const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
     const [editName, setEditName] = useState('');
     const [editAvatarType, setEditAvatarType] = useState('default');
-    const [editAvatarColor, setEditAvatarColor] = useState('#14b8a6');
+    const [editAvatarColor, setEditAvatarColor] = useState(themeColors.accent);
     const [showAvatarSelector, setShowAvatarSelector] = useState(false);
     const modalMaxHeight = Math.min(height * 0.9, 620);
 
@@ -45,7 +49,7 @@ export default function ManageProfilesScreen() {
         setEditingProfile(profile);
         setEditName(profile.name);
         setEditAvatarType(profile.avatar_type);
-        setEditAvatarColor(profile.avatar_color || '#14b8a6');
+        setEditAvatarColor(profile.avatar_color || themeColors.accent);
     };
 
     const handleSaveEdit = async () => {
@@ -98,13 +102,13 @@ export default function ManageProfilesScreen() {
     };
 
     return (
-        <View style={[styles.container, isDark && styles.containerDark]}>
+        <View style={styles.container}>
             {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
                 <Pressable onPress={() => router.back()} hitSlop={8}>
                     <MaterialCommunityIcons name="arrow-left" size={28} color={isDark ? '#e2e8f0' : '#1e293b'} />
                 </Pressable>
-                <Text style={[styles.headerTitle, isDark && styles.headerTitleDark]}>Manage Children</Text>
+                <Text style={styles.headerTitle}>Manage Children</Text>
                 <View style={{ width: 28 }} />
             </View>
 
@@ -113,7 +117,7 @@ export default function ManageProfilesScreen() {
                     <AnimatedPressable
                         key={profile.id}
                         entering={FadeInRight.delay(index * 100).springify()}
-                        style={[styles.profileItem, isDark && styles.profileItemDark]}
+                        style={styles.profileItem}
                     >
                         <View style={styles.profileInfo}>
                             <ProfileAvatar
@@ -123,7 +127,7 @@ export default function ManageProfilesScreen() {
                             />
                             <View style={styles.profileDetails}>
                                 <View style={styles.nameRow}>
-                                    <Text style={[styles.profileName, isDark && styles.profileNameDark]}>
+                                    <Text style={styles.profileName}>
                                         {profile.display_name?.trim() || profile.name}
                                     </Text>
                                     {profile.is_primary && (
@@ -133,7 +137,7 @@ export default function ManageProfilesScreen() {
                                         </View>
                                     )}
                                 </View>
-                                <Text style={[styles.profileMeta, isDark && styles.profileMetaDark]}>
+                                <Text style={styles.profileMeta}>
                                     {profile.avatar_type.replace('_', ' ')} • {profile.avatar_color}
                                 </Text>
                             </View>
@@ -144,7 +148,7 @@ export default function ManageProfilesScreen() {
                                 style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
                                 onPress={() => handleEditProfile(profile)}
                             >
-                                <MaterialCommunityIcons name="pencil" size={20} color="#14b8a6" />
+                                <MaterialCommunityIcons name="pencil" size={20} color={themeColors.accentStrong} />
                             </Pressable>
                             {!profile.is_primary && (
                                 <Pressable
@@ -174,7 +178,6 @@ export default function ManageProfilesScreen() {
                             style={[
                                 styles.modalContent,
                                 { maxHeight: modalMaxHeight },
-                                isDark && styles.modalContentDark,
                             ]}
                         >
                             <ScrollView
@@ -183,7 +186,7 @@ export default function ManageProfilesScreen() {
                                 keyboardShouldPersistTaps="handled"
                             >
                                 <View style={styles.modalHeader}>
-                                    <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>
+                                    <Text style={styles.modalTitle}>
                                         Edit Child Profile
                                     </Text>
                                     <Pressable onPress={() => setEditingProfile(null)} hitSlop={8}>
@@ -199,16 +202,18 @@ export default function ManageProfilesScreen() {
                                 <View style={styles.avatarPreview}>
                                     <ProfileAvatar avatarType={editAvatarType} avatarColor={editAvatarColor} size="large" />
                                     <Pressable style={styles.changeAvatarButton} onPress={() => setShowAvatarSelector(true)}>
-                                        <Text style={styles.changeAvatarText}>Change Avatar</Text>
+                                        <Text style={[styles.changeAvatarText, { color: themeColors.accent }]}>
+                                            Change Avatar
+                                        </Text>
                                     </Pressable>
                                 </View>
 
                                 {/* Name Input */}
-                                <Text style={[styles.inputLabel, isDark && styles.inputLabelDark]}>Name</Text>
+                                <Text style={styles.inputLabel}>Name</Text>
                                 <TextInput
-                                    style={[styles.input, isDark && styles.inputDark]}
+                                    style={styles.input}
                                     placeholder="Child Name"
-                                    placeholderTextColor={isDark ? '#94a3b8' : '#94a3b8'}
+                                    placeholderTextColor={themeColors.textTertiary}
                                     value={editName}
                                     onChangeText={setEditName}
                                     autoFocus
@@ -232,7 +237,11 @@ export default function ManageProfilesScreen() {
                                         <Text style={styles.modalButtonTextCancel}>Cancel</Text>
                                     </Pressable>
                                     <Pressable
-                                        style={[styles.modalButton, styles.modalButtonConfirm]}
+                                        style={[
+                                            styles.modalButton,
+                                            styles.modalButtonConfirm,
+                                            { backgroundColor: themeColors.accent },
+                                        ]}
                                         onPress={handleSaveEdit}
                                     >
                                         <Text style={styles.modalButtonTextConfirm}>Save</Text>
@@ -260,13 +269,11 @@ export default function ManageProfilesScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+function createStyles(themeColors: AppThemeColors, isDark: boolean) {
+    return StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f8fafc',
-    },
-    containerDark: {
-        backgroundColor: '#0f172a',
+        backgroundColor: isDark ? '#0f172a' : themeColors.background,
     },
     header: {
         flexDirection: 'row',
@@ -275,15 +282,12 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingBottom: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#e2e8f0',
+        borderBottomColor: isDark ? '#334155' : themeColors.border,
     },
     headerTitle: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#0f172a',
-    },
-    headerTitleDark: {
-        color: '#f1f5f9',
+        color: isDark ? '#f1f5f9' : themeColors.textPrimary,
     },
     content: {
         flex: 1,
@@ -294,18 +298,15 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: '#ffffff',
+        backgroundColor: isDark ? '#1e293b' : themeColors.surface,
         borderRadius: 16,
         padding: 16,
         marginBottom: 12,
-        shadowColor: '#000',
+        shadowColor: isDark ? '#000' : themeColors.shadow,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 8,
         elevation: 2,
-    },
-    profileItemDark: {
-        backgroundColor: '#1e293b',
     },
     profileInfo: {
         flexDirection: 'row',
@@ -324,11 +325,8 @@ const styles = StyleSheet.create({
     profileName: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#0f172a',
+        color: isDark ? '#f1f5f9' : themeColors.textPrimary,
         marginRight: 8,
-    },
-    profileNameDark: {
-        color: '#f1f5f9',
     },
     primaryBadge: {
         flexDirection: 'row',
@@ -346,11 +344,8 @@ const styles = StyleSheet.create({
     },
     profileMeta: {
         fontSize: 14,
-        color: '#64748b',
+        color: isDark ? '#94a3b8' : themeColors.textSecondary,
         textTransform: 'capitalize',
-    },
-    profileMetaDark: {
-        color: '#94a3b8',
     },
     actions: {
         flexDirection: 'row',
@@ -360,7 +355,7 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: '#f1f5f9',
+        backgroundColor: isDark ? '#334155' : themeColors.accentSoft,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -383,7 +378,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     modalContent: {
-        backgroundColor: '#ffffff',
+        backgroundColor: isDark ? '#1e293b' : themeColors.surface,
         borderRadius: 24,
         padding: 24,
         width: '100%',
@@ -391,9 +386,6 @@ const styles = StyleSheet.create({
     },
     modalScrollContent: {
         paddingBottom: 8,
-    },
-    modalContentDark: {
-        backgroundColor: '#1e293b',
     },
     modalHeader: {
         flexDirection: 'row',
@@ -404,10 +396,7 @@ const styles = StyleSheet.create({
     modalTitle: {
         fontSize: 22,
         fontWeight: '700',
-        color: '#0f172a',
-    },
-    modalTitleDark: {
-        color: '#f1f5f9',
+        color: isDark ? '#f1f5f9' : themeColors.textPrimary,
     },
     avatarPreview: {
         alignItems: 'center',
@@ -421,32 +410,24 @@ const styles = StyleSheet.create({
     changeAvatarText: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#14b8a6',
+        color: '#475569',
     },
     inputLabel: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#475569',
+        color: isDark ? '#cbd5e1' : themeColors.textSecondary,
         marginBottom: 8,
     },
-    inputLabelDark: {
-        color: '#cbd5e1',
-    },
     input: {
-        backgroundColor: '#f8fafc',
+        backgroundColor: isDark ? '#334155' : themeColors.inputBackground,
         borderRadius: 12,
         paddingVertical: 14,
         paddingHorizontal: 16,
         fontSize: 16,
-        color: '#0f172a',
+        color: isDark ? '#f1f5f9' : themeColors.textPrimary,
         marginBottom: 16,
         borderWidth: 1,
-        borderColor: '#e2e8f0',
-    },
-    inputDark: {
-        backgroundColor: '#334155',
-        color: '#f1f5f9',
-        borderColor: '#475569',
+        borderColor: isDark ? '#475569' : themeColors.border,
     },
     infoBox: {
         flexDirection: 'row',
@@ -473,21 +454,20 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     modalButtonCancel: {
-        backgroundColor: '#f1f5f9',
+        backgroundColor: isDark ? '#334155' : themeColors.backgroundMuted,
         borderWidth: 1,
-        borderColor: '#e2e8f0',
+        borderColor: isDark ? '#475569' : themeColors.border,
     },
-    modalButtonConfirm: {
-        backgroundColor: '#14b8a6',
-    },
+    modalButtonConfirm: {},
     modalButtonTextCancel: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#475569',
+        color: isDark ? '#e2e8f0' : themeColors.textSecondary,
     },
     modalButtonTextConfirm: {
         fontSize: 16,
         fontWeight: '600',
         color: '#ffffff',
     },
-});
+    });
+}

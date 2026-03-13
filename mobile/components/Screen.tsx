@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 
+import { useAppTheme } from '@/hooks/useAppTheme';
+
 type ScreenProps = {
   children: ReactNode;
   maxWidth?: number;
@@ -30,6 +32,7 @@ export function Screen({
   safeAreaStyle,
   safeAreaEdges = ['top', 'right', 'bottom', 'left'],
 }: ScreenProps) {
+  const { colors } = useAppTheme();
   const { width } = useWindowDimensions();
   const isWide = width >= 768;
   const horizontalPadding = padded ? (width < 380 ? 16 : isWide ? 32 : 24) : 0;
@@ -41,7 +44,10 @@ export function Screen({
   );
 
   return (
-    <SafeAreaView edges={safeAreaEdges} style={[styles.safeArea, safeAreaStyle]}>
+    <SafeAreaView
+      edges={safeAreaEdges}
+      style={[styles.safeArea, { backgroundColor: colors.background }, safeAreaStyle]}
+    >
       {scrollable ? (
         <ScrollView
           contentContainerStyle={[

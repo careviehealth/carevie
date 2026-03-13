@@ -298,6 +298,38 @@ const getErrorMessage = (error: unknown, fallback = "Please try again.") => {
   return fallback;
 };
 
+const parseDateAtBoundary = (value?: string, boundary: "start" | "end" = "start") => {
+  if (!value) return null;
+
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1]);
+    const month = Number(dateOnlyMatch[2]) - 1;
+    const day = Number(dateOnlyMatch[3]);
+    return boundary === "end"
+      ? new Date(year, month, day, 23, 59, 59, 999)
+      : new Date(year, month, day, 0, 0, 0, 0);
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const getLocalDateKey = (value = new Date()) =>
+  `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(
+    value.getDate()
+  ).padStart(2, "0")}`;
+
+const isUpdatedEndDateBeforeToday = (nextEndDate?: string, previousEndDate?: string) => {
+  if (!nextEndDate || nextEndDate === (previousEndDate || "")) return false;
+
+  const nextDate = parseDateAtBoundary(nextEndDate, "start");
+  const today = parseDateAtBoundary(getLocalDateKey(), "start");
+  if (!nextDate || !today) return false;
+
+  return nextDate.getTime() < today.getTime();
+};
+
 const logProfileActivity = async (payload: ProfileActivityPayload) => {
   try {
     await fetch("/api/profile/activity", {
@@ -1038,6 +1070,10 @@ function HomePageContent() {
     const medicationId = medication.id || existingMedication?.id || "";
     if (!medicationId) {
       alert("Medication ID is missing. Please reopen and try again.");
+      return;
+    }
+    if (isUpdatedEndDateBeforeToday(medication.endDate, existingMedication?.endDate)) {
+      alert("End date cannot be changed to a date before today.");
       return;
     }
     const normalizedMedication: Medication = {

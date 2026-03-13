@@ -14,9 +14,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 
 import { apiRequest } from '@/api/client';
+import { useAppTheme } from '@/hooks/useAppTheme';
 import { TypingIndicator } from './TypingIndicator';
 import { useColorScheme } from './useColorScheme';
 
@@ -31,15 +32,23 @@ const QUICK_PROMPTS = [
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
-function TypingBubble({ isDark }: { isDark: boolean }) {
+function TypingBubble({
+  isDark,
+  accentColor,
+  accentSoft,
+}: {
+  isDark: boolean;
+  accentColor: string;
+  accentSoft: string;
+}) {
   return (
     <Animated.View
       entering={FadeInUp.springify().damping(18)}
       exiting={FadeOutUp.springify()}
       style={[styles.messageRow, styles.messageRowBot]}
     >
-      <View style={styles.botAvatar}>
-        <MaterialCommunityIcons name="robot-outline" size={15} color="#14b8a6" />
+      <View style={[styles.botAvatar, { backgroundColor: accentSoft }]}>
+        <MaterialCommunityIcons name="robot-outline" size={15} color={accentColor} />
       </View>
       <View
         style={[styles.bubble, styles.bubbleBot, { backgroundColor: isDark ? '#1e293b' : '#e9f0f0' }]}
@@ -52,9 +61,10 @@ function TypingBubble({ isDark }: { isDark: boolean }) {
 
 export function ChatWidget() {
   const insets = useSafeAreaInsets();
+  const { colors: themeColors } = useAppTheme();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  const listRef = useRef<FlashList<Message>>(null);
+  const listRef = useRef<FlashListRef<Message>>(null);
 
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -65,11 +75,11 @@ export function ChatWidget() {
   const fabBottom = tabBarHeight + 16;
   const sheetHeight = SCREEN_HEIGHT * 0.7;
 
-  const bg = isDark ? '#0f172a' : '#f8fafc';
-  const surfaceBg = isDark ? '#1e293b' : '#ffffff';
-  const borderColor = isDark ? '#1e293b' : '#e2e8f0';
-  const textPrimary = isDark ? '#e2e8f0' : '#0f172a';
-  const textMuted = isDark ? '#64748b' : '#94a3b8';
+  const bg = isDark ? '#0f172a' : themeColors.background;
+  const surfaceBg = isDark ? '#1e293b' : themeColors.surface;
+  const borderColor = isDark ? '#1e293b' : themeColors.border;
+  const textPrimary = isDark ? '#e2e8f0' : themeColors.textPrimary;
+  const textMuted = isDark ? '#64748b' : themeColors.textSecondary;
 
   // ── Scroll ──────────────────────────────────────────────────
   const scrollToBottom = useCallback(() => {
@@ -143,13 +153,17 @@ export function ChatWidget() {
           style={[styles.messageRow, isUser ? styles.messageRowUser : styles.messageRowBot]}
         >
           {!isUser && (
-            <View style={styles.botAvatar}>
-              <MaterialCommunityIcons name="robot-outline" size={15} color="#14b8a6" />
+            <View style={[styles.botAvatar, { backgroundColor: themeColors.accentSoft }]}>
+              <MaterialCommunityIcons
+                name="robot-outline"
+                size={15}
+                color={themeColors.accentStrong}
+              />
             </View>
           )}
           {isUser ? (
             <LinearGradient
-              colors={['#14b8a6', '#0d9488']}
+              colors={[themeColors.accent, themeColors.accentStrong]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={[styles.bubble, styles.bubbleUser]}
@@ -166,7 +180,7 @@ export function ChatWidget() {
         </Animated.View>
       );
     },
-    [isDark, textPrimary]
+    [isDark, textPrimary, themeColors.accent, themeColors.accentSoft, themeColors.accentStrong]
   );
 
   // ── Empty state ─────────────────────────────────────────────
@@ -174,7 +188,7 @@ export function ChatWidget() {
     () => (
       <View style={styles.emptyState}>
         <LinearGradient
-          colors={['#14b8a6', '#0d9488']}
+          colors={[themeColors.accent, themeColors.accentStrong]}
           style={styles.emptyIconRing}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -193,20 +207,35 @@ export function ChatWidget() {
               style={({ pressed }) => [
                 styles.promptChip,
                 {
-                  backgroundColor: isDark ? '#1e293b' : '#e2f4f3',
-                  borderColor: isDark ? '#334155' : '#b2dada',
+                  backgroundColor: isDark ? '#1e293b' : themeColors.accentSoft,
+                  borderColor: isDark ? '#334155' : themeColors.border,
                 },
                 pressed && styles.promptChipActive,
               ]}
             >
-              <MaterialCommunityIcons name="arrow-right-circle-outline" size={15} color="#14b8a6" />
-              <Text style={styles.promptChipText}>{prompt}</Text>
+              <MaterialCommunityIcons
+                name="arrow-right-circle-outline"
+                size={15}
+                color={themeColors.accentStrong}
+              />
+              <Text style={[styles.promptChipText, { color: themeColors.accentStrong }]}>
+                {prompt}
+              </Text>
             </Pressable>
           ))}
         </View>
       </View>
     ),
-    [isDark, textPrimary, textMuted, sendMessage]
+    [
+      isDark,
+      sendMessage,
+      textPrimary,
+      textMuted,
+      themeColors.accent,
+      themeColors.accentSoft,
+      themeColors.accentStrong,
+      themeColors.border,
+    ]
   );
 
   const canSend = !loading && input.trim().length > 0;
@@ -228,7 +257,7 @@ export function ChatWidget() {
             accessibilityRole="button"
           >
             <LinearGradient
-              colors={['#1ec8b4', '#0d9488']}
+              colors={[themeColors.accent, themeColors.accentStrong]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.fab}
@@ -261,14 +290,14 @@ export function ChatWidget() {
           >
             {/* Drag pill */}
             <View style={styles.pillRow}>
-              <View style={[styles.pill, { backgroundColor: isDark ? '#334155' : '#c8d6d9' }]} />
+              <View style={[styles.pill, { backgroundColor: isDark ? '#334155' : themeColors.border }]} />
             </View>
 
             {/* Header */}
             <View style={[styles.header, { borderBottomColor: borderColor }]}>
               <View style={styles.headerLeft}>
                 <LinearGradient
-                  colors={['#14b8a6', '#0d9488']}
+                  colors={[themeColors.accent, themeColors.accentStrong]}
                   style={styles.headerIconWrap}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
@@ -277,7 +306,9 @@ export function ChatWidget() {
                 </LinearGradient>
                 <View>
                   <Text style={[styles.headerTitle, { color: textPrimary }]}>Vytara Assistant</Text>
-                  <Text style={styles.headerSubtitle}>Healthcare Support</Text>
+                  <Text style={[styles.headerSubtitle, { color: themeColors.accentStrong }]}>
+                    Healthcare Support
+                  </Text>
                 </View>
               </View>
               <View style={styles.headerActions}>
@@ -308,10 +339,17 @@ export function ChatWidget() {
               renderItem={renderMessage}
               contentContainerStyle={styles.messagesList}
               ListEmptyComponent={EmptyState}
-              ListFooterComponent={loading ? <TypingBubble isDark={isDark} /> : null}
+              ListFooterComponent={
+                loading ? (
+                  <TypingBubble
+                    isDark={isDark}
+                    accentColor={themeColors.accentStrong}
+                    accentSoft={themeColors.accentSoft}
+                  />
+                ) : null
+              }
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
-              estimatedItemSize={80}
             />
 
             {/* Input bar — sits below the FlatList, above keyboard */}
@@ -322,7 +360,7 @@ export function ChatWidget() {
                   {
                     backgroundColor: surfaceBg,
                     color: textPrimary,
-                    borderColor: isDark ? '#334155' : '#c8d6d9',
+                    borderColor: isDark ? '#334155' : themeColors.border,
                   },
                 ]}
                 placeholder="Ask about records, care, or appointments…"
@@ -342,7 +380,12 @@ export function ChatWidget() {
                 disabled={!canSend}
                 style={({ pressed }) => [
                   styles.sendBtn,
-                  pressed && styles.sendBtnPressed,
+                  {
+                    backgroundColor: canSend ? themeColors.accent : themeColors.border,
+                    shadowColor: themeColors.accentStrong,
+                  },
+                  pressed &&
+                    canSend && [styles.sendBtnPressed, { backgroundColor: themeColors.accentStrong }],
                   !canSend && styles.sendBtnDisabled,
                 ]}
                 accessibilityLabel="Send message"
@@ -350,7 +393,7 @@ export function ChatWidget() {
                 <MaterialCommunityIcons
                   name={loading ? 'dots-horizontal' : 'send'}
                   size={20}
-                  color={canSend ? '#fff' : textMuted}
+                  color={canSend ? themeColors.accentContrast : textMuted}
                 />
               </Pressable>
             </View>
@@ -382,7 +425,7 @@ const styles = StyleSheet.create({
     borderRadius: 29,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0d9488',
+    shadowColor: '#334155',
     shadowOpacity: 0.5,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
@@ -449,7 +492,7 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 12,
-    color: '#14b8a6',
+    color: '#475569',
     fontWeight: '500',
     marginTop: 1,
   },
@@ -495,7 +538,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(20,184,166,0.12)',
+    backgroundColor: 'rgba(100,116,139,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -569,7 +612,7 @@ const styles = StyleSheet.create({
   promptChipText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#14b8a6',
+    color: '#475569',
     flex: 1,
   },
 
@@ -599,10 +642,10 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#14b8a6',
+    backgroundColor: '#64748b',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0d9488',
+    shadowColor: '#334155',
     shadowOpacity: 0.4,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -611,7 +654,7 @@ const styles = StyleSheet.create({
   },
   sendBtnPressed: {
     transform: [{ scale: 0.93 }],
-    backgroundColor: '#0d9488',
+    backgroundColor: '#475569',
   },
   sendBtnDisabled: {
     backgroundColor: '#e2e8f0',
