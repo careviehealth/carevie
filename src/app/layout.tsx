@@ -37,7 +37,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased relative min-h-screen overflow-x-hidden`}
       >
         {measurementId ? (
-          <GoogleAnalytics measurementId={measurementId} />
+          <Suspense fallback={null}>
+            <GoogleAnalytics measurementId={measurementId} />
+          </Suspense>
         ) : null}
 
         {/* ConveyThis (loads once globally) */}
