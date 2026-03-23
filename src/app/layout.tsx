@@ -7,6 +7,7 @@ import "driver.js/dist/driver.css";
 
 import ChatWidget from "@/components/ChatWidget";
 import ConveyThisProvider from "@/components/ConveyThisProvider";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,11 +29,17 @@ export default function RootLayout({
 }: {
   children: ReactNode;
 }) {
+  const measurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased relative min-h-screen overflow-x-hidden`}
       >
+        {measurementId ? (
+          <GoogleAnalytics measurementId={measurementId} />
+        ) : null}
+
         {/* ConveyThis (loads once globally) */}
         <ConveyThisProvider />
 

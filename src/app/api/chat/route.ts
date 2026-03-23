@@ -9,9 +9,10 @@ import { createRateLimiter, getClientIP } from '@/lib/rateLimit';
 
 const chatLimiter = createRateLimiter({ windowMs: 60 * 1000, maxRequests: 20 });
 
+const PRODUCTION_CHATBOT_FALLBACK = 'https://chatbot-9fsv.onrender.com';
 const FLASK_API_URL =
   process.env.NEXT_PUBLIC_CHATBOT_URL ||
-  (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000');
+  (process.env.NODE_ENV === 'production' ? PRODUCTION_CHATBOT_FALLBACK : 'http://localhost:5000');
 
 function sanitizeBackendPayload(status: number, data: unknown): Record<string, unknown> {
   if (status < 500 && typeof data === 'object' && data !== null) {

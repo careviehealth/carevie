@@ -5,9 +5,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth';
 import { getBackendInternalHeaders, hasBackendInternalAuth } from '@/lib/backendInternalAuth';
-import { createRateLimiter, getClientIP } from '@/lib/rateLimit';
-
-const medicalLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, maxRequests: 5 });
 
 const PRODUCTION_BACKEND_FALLBACK = 'https://vytara-ssr-qzin.onrender.com';
 const FLASK_API_URL =
@@ -212,10 +209,6 @@ async function callFlask(endpoint: string, method: string, disallowedHosts: Set<
 
 export async function POST(request: NextRequest) {
   try {
-    const ip = getClientIP(request);
-    const block = medicalLimiter.check(ip);
-    if (block) return block;
-
     console.log('📥 [Next.js API] POST /api/medical');
 
     if (!(await getAuthenticatedUser(request))) {
