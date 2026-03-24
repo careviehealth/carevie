@@ -7,6 +7,7 @@ import "driver.js/dist/driver.css";
 
 import ChatWidget from "@/components/ChatWidget";
 import ConveyThisProvider from "@/components/ConveyThisProvider";
+import FeedbackTab from "@/components/FeedbackTab";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
 
 const geistSans = Geist({
@@ -51,6 +52,10 @@ export default function RootLayout({
         {/* Chat widget */}
         <Suspense fallback={null}>
           <ChatWidget />
+        </Suspense>
+
+        <Suspense fallback={null}>
+          <FeedbackTab />
         </Suspense>
       </body>
     </html>
