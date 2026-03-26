@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronDown, MoreVertical } from "lucide-react";
-import Plasma from "@/components/Plasma";
 import { supabase } from "@/lib/createClient";
 import {
   clearRememberedAccount,
