@@ -1,12 +1,12 @@
-import Plasma from "@/components/Plasma";
+
 import Link from "next/link";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative isolate min-h-screen overflow-hidden bg-slate-950">
+    <div className="relative isolate min-h-screen overflow-hidden bg-gradient-to-br from-teal-900 via-cyan-900 to-slate-900">
       {/* Background layer */}
       <div className="fixed inset-0 -z-10 pointer-events-none">
-        <Plasma />
+        
       </div>
 
       <div className="fixed left-4 top-4 z-20 sm:left-6 sm:top-6">
