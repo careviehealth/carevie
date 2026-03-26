@@ -11,8 +11,6 @@ Carevie is a healthcare-focused platform with:
 
 ## 1) Detailed code file and folder map
 
-> This section is focused on **code and config files**. Static assets (images/videos/icons) are summarized as asset folders.
-
 ## Repository root
 
 - `README.md` — this documentation file.
