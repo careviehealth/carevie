@@ -1,25 +1,20 @@
 # backend/rag_pipeline/embed_store.py
 #
-# REWRITTEN: TF-IDF replaced with sentence-transformers (all-MiniLM-L6-v2).
-# All public function signatures, return types, and the EMBEDDING_DIM constant
-# are 100% backward-compatible — no changes required in any other file.
+# Embedding and FAISS index layer for the medical RAG pipeline.
+# Uses sentence-transformers (all-MiniLM-L6-v2) for dense 384-d embeddings.
 #
-# Fixes applied:
-#   1. Zero-padding anti-pattern  — eliminated; model always emits exactly 384-d
-#   2. On-the-fly vectorizer fit  — eliminated; model is pre-trained, no fitting
-#   3. Sparse TF-IDF in FAISS     — eliminated; model produces dense vectors
-#   5. float64 → float32 cast     — eliminated; encode() returns float32 natively
+# Chunk contract: all callers must supply List[dict] from
+# clean_chunk.chunk_text_with_metadata().  Each dict has two keys:
+#   "text"   — the plain text string to embed
+#   "doc_id" — source filename, used by rag_query for per-document diversity
 #
-# External API that is preserved (unchanged call sites):
-#   EMBEDDING_DIM                       constant  (384)
-#   create_vectorizer()                 returns SentenceTransformerVectorizer
-#   embed_texts(texts, vectorizer=None) returns (List[np.ndarray], vectorizer)
-#   build_faiss_index(chunks, temp_dir) returns (index, chunks, vectorizer)
-#   load_index_and_chunks(temp_dir)     returns (index, chunks, vectorizer)
-#   search_similar(query, temp_dir, top_k=5) returns List[(chunk, score)]
-#
-# The "vectorizer" object returned/pickled is now a SentenceTransformerVectorizer
-# which exposes .transform(texts).toarray() — same call-site interface as sklearn.
+# Public API:
+#   EMBEDDING_DIM                            constant  (384)
+#   create_vectorizer()                      returns SentenceTransformerVectorizer
+#   embed_texts(texts, vectorizer=None)      returns (List[np.ndarray], vectorizer)
+#   build_faiss_index(chunks, temp_dir)      returns (index, chunks, vectorizer)
+#   load_index_and_chunks(temp_dir)          returns (index, chunks, vectorizer)
+#   search_similar(query, temp_dir, top_k=5) returns List[(text, score)]
 
 import os
 import pickle
@@ -174,16 +169,17 @@ def embed_texts(texts: List[str], vectorizer=None) -> tuple:
         raise
 
 
-def build_faiss_index(chunks: List[str], temp_dir: str) -> tuple:
+def build_faiss_index(chunks: List[dict], temp_dir: str) -> tuple:
     """
-    Build a FAISS IndexFlatIP from text chunks and persist to temp_dir.
+    Build a FAISS IndexFlatIP from metadata-aware chunks and persist to temp_dir.
 
     Args:
-        chunks:   List of text chunks.
+        chunks:   List[dict] produced by chunk_text_with_metadata().
+                  Each dict must have keys "text" (str) and "doc_id" (str).
         temp_dir: Temporary directory for this request.
 
     Returns:
-        (index, chunks, vectorizer) — same as before
+        (index, chunks, vectorizer)
     """
     if not chunks:
         raise ValueError("No chunks provided to index")
@@ -191,8 +187,11 @@ def build_faiss_index(chunks: List[str], temp_dir: str) -> tuple:
     print(f"\n🔧 Building FAISS index...", flush=True)
     print(f"   Chunks: {len(chunks)}", flush=True)
 
+    # Extract plain text strings for the embedding model
+    texts = [c["text"] for c in chunks]
+
     # Embed
-    embeddings, vectorizer = embed_texts(chunks)
+    embeddings, vectorizer = embed_texts(texts)
 
     # Stack → (n, 384) float32 matrix
     embedding_matrix = np.stack(embeddings)
@@ -214,7 +213,7 @@ def build_faiss_index(chunks: List[str], temp_dir: str) -> tuple:
     index.add(embedding_matrix)
     print(f"   ✅ Index created: {index.ntotal} vectors", flush=True)
 
-    # Persist to temp_dir (behaviour unchanged — disk I/O kept as-is)
+    # Persist to temp_dir
     index_path      = os.path.join(temp_dir, "index.faiss")
     chunks_path     = os.path.join(temp_dir, "chunks.pkl")
     vectorizer_path = os.path.join(temp_dir, "vectorizer.pkl")
@@ -256,6 +255,7 @@ def load_index_and_chunks(temp_dir: str):
 
     with open(chunks_path, "rb") as f:
         chunks = pickle.load(f)
+
     print(f"   ✅ Chunks loaded: {len(chunks)} chunks", flush=True)
 
     with open(vectorizer_path, "rb") as f:
@@ -264,39 +264,3 @@ def load_index_and_chunks(temp_dir: str):
 
     return index, chunks, vectorizer
 
-
-def search_similar(query: str, temp_dir: str, top_k: int = 5) -> List[tuple]:
-    """
-    Search for the top-k most similar chunks.
-    Signature and return type unchanged.
-
-    Returns:
-        List of (chunk_text, score) tuples.
-    """
-    index, chunks, vectorizer = load_index_and_chunks(temp_dir)
-
-    try:
-        # vectorizer.transform returns _DenseMatrix; .toarray()[0] → (384,)
-        query_embedding = vectorizer.transform([query]).toarray()[0].astype('float32')
-
-        # Padding guard kept for safety, but will never trigger with a
-        # sentence-transformer (always returns exactly EMBEDDING_DIM dims).
-        if len(query_embedding) < EMBEDDING_DIM:
-            padding = np.zeros(EMBEDDING_DIM - len(query_embedding), dtype='float32')
-            query_embedding = np.concatenate([query_embedding, padding])
-
-        query_embedding = query_embedding.reshape(1, -1)
-        faiss.normalize_L2(query_embedding)
-
-    except Exception as e:
-        print(f"❌ Query embedding failed: {e}", flush=True)
-        raise
-
-    scores, indices = index.search(query_embedding, min(top_k, len(chunks)))
-
-    results = []
-    for score, idx in zip(scores[0], indices[0]):
-        if idx < len(chunks):
-            results.append((chunks[idx], float(score)))
-
-    return results

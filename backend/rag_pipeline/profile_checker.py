@@ -207,38 +207,6 @@ def _similarity_normalized(n1: str, n2: str) -> float:
     return char_sim * 0.7
 
 
-def calculate_name_similarity(name1: str, name2: str) -> float:
-    """
-    Calculate similarity between two names (0.0 to 1.0).
-
-    Public API preserved for backward compatibility with callers outside
-    this module.  Normalises both inputs and delegates to the internal
-    ``_similarity_normalized`` core.
-
-    Strategies:
-      1. Exact match after normalization
-      2. Whole-word token-subset containment  [BUG-01 fixed]
-      3. Word-level Jaccard overlap + first/last anchor bonuses
-      4. Character-level similarity via rapidfuzz or SequenceMatcher
-
-    Args:
-        name1: First name string (raw).
-        name2: Second name string (raw).
-
-    Returns:
-        Similarity score as a float in [0.0, 1.0].
-    """
-    if not name1 or not name2:
-        return 0.0
-
-    # [BUG-03] Normalise here; _similarity_normalized never re-normalises.
-    n1: str = normalize_name(name1)
-    n2: str = normalize_name(name2)
-
-    if not n1 or not n2:
-        return 0.0
-
-    return _similarity_normalized(n1, n2)
 
 
 # ---------------------------------------------------------------------------

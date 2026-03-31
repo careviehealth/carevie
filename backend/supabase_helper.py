@@ -59,12 +59,12 @@ def list_user_files(profile_id: str, folder_type: str = None):
 
 def get_file_bytes(file_path: str) -> bytes:
     """
-    Get file content as bytes directly from Supabase Storage
-    NEVER downloads to disk
-    
+    Get file content as bytes directly from Supabase Storage.
+    NEVER downloads to disk.
+
     Args:
         file_path: Full path in storage (e.g., "user_id/reports/file.pdf")
-    
+
     Returns:
         File content as bytes (in memory)
     """
@@ -96,31 +96,69 @@ def get_file_bytes(file_path: str) -> bytes:
         raise
 
 
-def get_file_as_bytesio(file_path: str) -> io.BytesIO:
+# ============================================
+# PROFILE LOOKUPS
+# ============================================
+
+def get_profile_info(profile_id: str) -> dict:
     """
-    Get file as BytesIO object for in-memory processing
-    
-    Args:
-        file_path: Full path in storage
-    
-    Returns:
-        BytesIO object containing file data
+    Get profile info using profile_id.
+
+    Preferred source: profiles table  (display_name / name columns).
+    Fallback source:  personal table  (profile_id foreign key).
+
+    Returns a dict with at least a 'display_name' key on success,
+    or None if the profile cannot be found in either table.
     """
-    print(f"💾 Creating BytesIO for: {file_path}")
-    
+    if not profile_id:
+        return None
+
+    # Preferred source: profiles table (profile-scoped display_name)
     try:
-        # Get file bytes
-        file_bytes = get_file_bytes(file_path)
-        
-        # Wrap in BytesIO
-        bytes_io = io.BytesIO(file_bytes)
-        
-        print(f"✅ BytesIO created: {len(file_bytes)} bytes")
-        return bytes_io
-        
+        profile_result = (
+            supabase
+            .table('profiles')
+            .select('id, user_id, auth_id, name, display_name')
+            .eq('id', profile_id)
+            .limit(1)
+            .execute()
+        )
+
+        if profile_result.data:
+            profile = profile_result.data[0]
+            display_name = (
+                (profile.get('display_name') or '').strip()
+                or (profile.get('name') or '').strip()
+            )
+            if display_name:
+                profile['display_name'] = display_name
+                print(f"✅ Profile found (profiles table): {display_name}")
+                return profile
+
     except Exception as e:
-        print(f"❌ Error creating BytesIO: {e}")
-        raise
+        print(f"⚠️ Get profile info: profiles lookup failed: {e}")
+
+    # Fallback source: personal table by profile_id
+    try:
+        personal_result = (
+            supabase
+            .table('personal')
+            .select('*')
+            .eq('profile_id', profile_id)
+            .limit(1)
+            .execute()
+        )
+
+        if personal_result.data:
+            row = personal_result.data[0]
+            print(f"✅ Profile found (personal table): {row.get('display_name')}")
+            return row
+
+    except Exception as e:
+        print(f"⚠️ Get profile info: personal.profile_id lookup failed: {e}")
+
+    print(f"ℹ️  No profile found for id: {profile_id}")
+    return None
 
 
 # ============================================
@@ -136,10 +174,10 @@ def save_extracted_data(profile_id: str, file_path: str, file_name: str,
                        name_match_status: str = 'pending',
                        name_match_confidence: float = None):
     """
-    Save extracted text and metadata to database
-    FIXED: Removed undefined structured_data_json reference
-    
-    NOTE: profile_id is now the owner ID used for storage/report isolation.
+    Save extracted text and metadata to database.
+    FIXED: Removed undefined structured_data_json reference.
+
+    NOTE: profile_id is the owner ID used for storage/report isolation.
     Legacy compatibility: user_id (TEXT) is still populated with profile_id.
     """
     print(f"\n💾 Saving to database: {file_name}")
@@ -147,7 +185,6 @@ def save_extracted_data(profile_id: str, file_path: str, file_name: str,
     try:
         profile_id_str = str(profile_id)
 
-        # Prepare data - simple dict without any undefined variables
         data = {
             'user_id': profile_id_str,  # legacy compatibility
             'profile_id': profile_id_str,
@@ -233,8 +270,58 @@ def get_processed_reports(profile_id: str, folder_type: str = None):
         return []
 
 
+def delete_orphaned_report_records(profile_id: str, folder_type: str = None):
+    """
+    Delete all processed report records for a profile/folder that no longer
+    have a corresponding file in storage (bulk delete by profile scope).
+
+    Used when storage shows zero files — cleans up the entire DB scope.
+    Returns the number of deleted records.
+    """
+    print(f"\n🗑️  Deleting orphaned records for profile: {profile_id}")
+
+    try:
+        profile_id_str = str(profile_id)
+        query = (
+            supabase
+            .table('medical_reports_processed')
+            .delete()
+            .eq('profile_id', profile_id_str)
+        )
+        if folder_type:
+            query = query.eq('folder_type', folder_type)
+
+        result = query.execute()
+        deleted = len(result.data) if result.data else 0
+
+        print(f"✅ Deleted {deleted} orphaned record(s)")
+        return deleted
+
+    except Exception as e:
+        print(f"❌ Error deleting orphaned records: {e}")
+        raise
+
+
+def delete_report_record_by_id(record_id: str):
+    """
+    Delete a single processed report record by its primary-key ID.
+
+    Used during incremental orphan cleanup when iterating over stale records
+    that no longer match a file in storage.
+    """
+    print(f"🗑️  Deleting report record: {record_id}")
+
+    try:
+        supabase.table('medical_reports_processed').delete().eq('id', record_id).execute()
+        print(f"✅ Deleted record: {record_id}")
+
+    except Exception as e:
+        print(f"❌ Error deleting record {record_id}: {e}")
+        raise
+
+
 def compute_signature_from_reports(reports: list) -> str:
-    """Compute a stable signature for a list of processed reports"""
+    """Compute a stable signature for a list of processed reports."""
     try:
         items = []
         for r in reports:
@@ -255,132 +342,10 @@ def compute_signature_from_reports(reports: list) -> str:
         return ''
 
 
-def get_user_profile(user_id: str) -> dict:
-    """
-    Get user profile from database
-    
-    Args:
-        user_id: User ID (TEXT format)
-    
-    Returns:
-        Profile dict or None if not found
-    """
-    print(f"\n👤 Fetching user profile: {user_id}")
-    
-    try:
-        result = supabase.table('user_profiles').select('*').eq(
-            'user_id', str(user_id)
-        ).execute()
-        
-        if result.data and len(result.data) > 0:
-            profile = result.data[0]
-            print(f"✅ Profile found: {profile.get('full_name')}")
-            return profile
-        else:
-            print(f"⚠️  No profile found for user: {user_id}")
-            return None
-            
-    except Exception as e:
-        print(f"❌ Error fetching profile: {e}")
-        return None
-
-
-def create_user_profile(user_id: str, full_name: str, **kwargs) -> dict:
-    """
-    Create user profile
-    
-    Args:
-        user_id: User ID (TEXT format)
-        full_name: User's full name
-        **kwargs: Optional fields (email, phone, date_of_birth, gender)
-    
-    Returns:
-        Created profile dict
-    """
-    print(f"\n✨ Creating user profile for: {user_id}")
-    
-    try:
-        data = {
-            'user_id': str(user_id),
-            'full_name': full_name,
-            'email': kwargs.get('email'),
-            'phone': kwargs.get('phone'),
-            'date_of_birth': kwargs.get('date_of_birth'),
-            'gender': kwargs.get('gender')
-        }
-        
-        result = supabase.table('user_profiles').insert(data).execute()
-        
-        if result.data and len(result.data) > 0:
-            profile = result.data[0]
-            print(f"✅ Profile created: {profile.get('full_name')}")
-            return profile
-        else:
-            raise Exception("Profile creation returned no data")
-            
-    except Exception as e:
-        print(f"❌ Error creating profile: {e}")
-        raise
-
-
-def update_user_profile(user_id: str, **updates) -> dict:
-    """
-    Update user profile
-    
-    Args:
-        user_id: User ID (TEXT format)
-        **updates: Fields to update
-    
-    Returns:
-        Updated profile dict
-    """
-    print(f"\n🔄 Updating user profile: {user_id}")
-    
-    try:
-        result = supabase.table('user_profiles').update(updates).eq(
-            'user_id', str(user_id)
-        ).execute()
-        
-        if result.data and len(result.data) > 0:
-            profile = result.data[0]
-            print(f"✅ Profile updated")
-            return profile
-        else:
-            raise Exception("No profile found to update")
-            
-    except Exception as e:
-        print(f"❌ Error updating profile: {e}")
-        raise
-
-
-def ensure_user_profile(user_id: str, default_name: str = None) -> dict:
-    """
-    Get profile or create if doesn't exist
-    
-    Args:
-        user_id: User ID (TEXT format)
-        default_name: Default name if creating new profile
-    
-    Returns:
-        Profile dict
-    """
-    profile = get_user_profile(user_id)
-    
-    if profile:
-        return profile
-    
-    # Create default profile if doesn't exist
-    if default_name:
-        print(f"⚠️  Creating default profile with name: {default_name}")
-        return create_user_profile(user_id, default_name)
-    else:
-        return None
-
-
 def save_summary_cache(profile_id: str, folder_type: str, summary: str, 
                       report_count: int, reports_signature: str = None):
     """
-    Cache generated summary with signature
+    Cache generated summary with signature.
 
     NOTE: profile_id is the owner key. user_id is populated with profile_id
     for legacy compatibility with existing unique constraints.
@@ -424,8 +389,7 @@ def save_summary_cache(profile_id: str, folder_type: str, summary: str,
 
 def get_cached_summary(profile_id: str, folder_type: str = None, expected_signature: str = None):
     """
-    Get cached summary if exists and is valid
-
+    Get cached summary if it exists and its signature is still valid.
     Strictly scoped to profile_id.
     """
     print(f"\n🔍 Checking for cached summary...")
@@ -532,12 +496,12 @@ def clear_user_data(profile_id: str):
 # ============================================
 
 def test_connection():
-    """Test Supabase connection"""
+    """Test Supabase connection."""
     print("\n🧪 Testing Supabase connection...")
     
     try:
         # Test database
-        result = supabase.table('medical_reports_processed').select('id').limit(1).execute()
+        supabase.table('medical_reports_processed').select('id').limit(1).execute()
         
         # Test storage
         buckets = supabase.storage.list_buckets()
@@ -555,7 +519,6 @@ def test_connection():
 
 
 if __name__ == "__main__":
-    # Run this to test connection
     print("\n" + "="*60)
     test_connection()
     print("="*60)

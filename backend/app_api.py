@@ -15,7 +15,7 @@ from datetime import datetime
 import io
 
 # Import RAG pipeline
-from rag_pipeline.clean_chunk import clean_text, chunk_text
+from rag_pipeline.clean_chunk import clean_text, chunk_text, chunk_text_with_metadata
 from rag_pipeline.embed_store import build_faiss_index
 from rag_pipeline.rag_query import ask_rag_improved
 from rag_pipeline.extract_metadata import extract_metadata_with_llm
@@ -99,7 +99,6 @@ def require_internal_api_auth():
     return authorize_internal_request()
 
 
-
 # ---------------------------------------------------------------------------
 # Name similarity / patient verification
 # ---------------------------------------------------------------------------
@@ -123,50 +122,6 @@ def resolve_profile_id(data: dict) -> str:
 
     profile_id = str(raw_profile_id).strip()
     return profile_id or None
-
-
-def get_profile_info(profile_id: str) -> dict:
-    """Get profile info using profile_id (prefer profiles.display_name)."""
-    if not profile_id:
-        return None
-
-    # Preferred source: profiles table (profile-scoped display_name)
-    try:
-        profile_result = (
-            sb.supabase
-            .table('profiles')
-            .select('id, user_id, auth_id, name, display_name')
-            .eq('id', profile_id)
-            .limit(1)
-            .execute()
-        )
-
-        if profile_result.data:
-            profile = profile_result.data[0]
-            display_name = (profile.get('display_name') or '').strip() or (profile.get('name') or '').strip()
-            if display_name:
-                profile['display_name'] = display_name
-                return profile
-    except Exception as e:
-        log_step("Get profile info", "warning", f"profiles lookup failed: {e}")
-
-    # Fallback source: personal table by profile_id
-    try:
-        personal_result = (
-            sb.supabase
-            .table('personal')
-            .select('*')
-            .eq('profile_id', profile_id)
-            .limit(1)
-            .execute()
-        )
-
-        if personal_result.data:
-            return personal_result.data[0]
-    except Exception as e:
-        log_step("Get profile info", "warning", f"personal.profile_id lookup failed: {e}")
-
-    return None
 
 
 # ============================================
@@ -196,7 +151,7 @@ def process_files():
         
         # Get profile info
         log_step("Fetching profile info", "start")
-        user_info = get_profile_info(profile_id)
+        user_info = sb.get_profile_info(profile_id)
         
         if not user_info:
             return jsonify({
@@ -225,12 +180,7 @@ def process_files():
             
             # Clean up orphaned records
             try:
-                query = sb.supabase.table('medical_reports_processed').delete().eq('profile_id', profile_id)
-                if folder_type:
-                    query = query.eq('folder_type', folder_type)
-                result = query.execute()
-                
-                deleted = len(result.data) if result.data else 0
+                deleted = sb.delete_orphaned_report_records(profile_id, folder_type)
                 log_step("Cleanup", "success", f"Deleted {deleted} orphaned records")
             except Exception as e:
                 log_step("Cleanup", "error", str(e))
@@ -250,7 +200,7 @@ def process_files():
         storage_paths = set(f"{profile_id}/{folder_type}/{f.get('name')}" for f in files)
         existing_paths = set(r['file_path'] for r in existing_records)
         
-        # Delete orphaned records
+        # Delete orphaned records (files removed from storage but still in DB)
         orphaned = [r for r in existing_records if r['file_path'] not in storage_paths]
         deleted_count = 0
         
@@ -258,7 +208,7 @@ def process_files():
             log_step("Removing orphaned", "start")
             for record in orphaned:
                 try:
-                    sb.supabase.table('medical_reports_processed').delete().eq('id', record['id']).execute()
+                    sb.delete_report_record_by_id(record['id'])
                     log_step("Deleted", "success", record['file_name'])
                     deleted_count += 1
                 except Exception as e:
@@ -527,7 +477,7 @@ def generate_summary():
         
         # Get profile info
         log_step("Fetching profile info", "start")
-        user_info = get_profile_info(profile_id)
+        user_info = sb.get_profile_info(profile_id)
         
         if not user_info:
             return jsonify({
@@ -679,7 +629,18 @@ def generate_summary():
                 continue
             
             cleaned = clean_text(extracted)
-            chunks = chunk_text(cleaned, max_words=500, overlap_words=100)
+            # Use chunk_text_with_metadata so every chunk carries its source
+            # filename as doc_id.  embed_store.build_faiss_index() persists
+            # this through chunks.pkl; rag_query.smart_context_assembly() uses
+            # it for exact per-document diversity grouping instead of the old
+            # integer-division boundary approximation.
+            doc_id = report.get('file_name') or f"report_{idx}"
+            chunks = chunk_text_with_metadata(
+                cleaned,
+                doc_id=doc_id,
+                max_words=500,
+                overlap_words=100,
+            )
             
             print(f"  Report {idx}/{len(reports)}: {report.get('file_name')}", flush=True)
             print(f"    Patient: {report.get('patient_name')} ✅", flush=True)
@@ -846,16 +807,9 @@ def health_check():
     log_step("Health check", "start")
     
     try:
-        supabase_ok = True
         openai_ok = bool(os.getenv("OPENAI_API_KEY"))
-        
-        try:
-            sb.supabase.table('medical_reports_processed').select('id').limit(1).execute()
-            log_step("Supabase", "success", "Connected")
-        except Exception as e:
-            supabase_ok = False
-            log_step("Supabase", "error", str(e))
-        
+        supabase_ok = sb.test_connection()
+
         if not openai_ok:
             log_step("OpenAI API", "warning", "API key not set")
         
@@ -893,7 +847,7 @@ def get_reports(profile_id):
         reports = sb.get_processed_reports(profile_id, folder_type)
         
         # Get profile info
-        user_info = get_profile_info(profile_id)
+        user_info = sb.get_profile_info(profile_id)
         user_display_name = user_info.get('display_name', 'User') if user_info else 'User'
         
         # Simplify for list view
@@ -1000,7 +954,7 @@ def debug_user(profile_id):
     
     try:
         # Get profile info
-        user_info = get_profile_info(profile_id)
+        user_info = sb.get_profile_info(profile_id)
         
         # Get reports
         reports = sb.get_processed_reports(profile_id)

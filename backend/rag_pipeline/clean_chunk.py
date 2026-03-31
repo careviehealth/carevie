@@ -407,6 +407,42 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
+def chunk_text_with_metadata(
+    text: str,
+    doc_id: str,
+    max_words: int = 300,
+    overlap_words: int = 50,
+) -> list[dict]:
+    """
+    Identical to chunk_text() but attaches source-document identity to every chunk.
+
+    Returns List[dict] instead of List[str]:
+        [{"text": "...", "doc_id": "report_1.pdf"}, ...]
+
+    The doc_id travels with each chunk through embed_store.build_faiss_index()
+    and is preserved in chunks.pkl.  rag_query.smart_context_assembly() uses it
+    to group chunks by actual document rather than relying on integer division,
+    eliminating the boundary-guessing problem when reports have unequal lengths.
+
+    Args:
+        text:          Cleaned input text (same as chunk_text).
+        doc_id:        Source document identifier — typically the filename,
+                       e.g. "blood_test_jan25.pdf".
+        max_words:     Soft token ceiling per chunk (passed through to chunk_text).
+        overlap_words: Overlap token budget (passed through to chunk_text).
+
+    Returns:
+        List of dicts, each with keys "text" and "doc_id".
+        Empty list if chunk_text returns no chunks.
+
+    BACKWARD COMPATIBILITY:
+        chunk_text() is unchanged — callers that do not need metadata continue
+        to work without modification.  This function is additive-only.
+    """
+    raw_chunks = chunk_text(text, max_words=max_words, overlap_words=overlap_words)
+    return [{"text": chunk, "doc_id": doc_id} for chunk in raw_chunks]
+
+
 def chunk_text(text: str, max_words: int = 300, overlap_words: int = 50) -> list[str]:
     """
     Intelligent chunking for medical documents.
