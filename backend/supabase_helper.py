@@ -103,10 +103,8 @@ def get_file_bytes(file_path: str) -> bytes:
 def get_profile_info(profile_id: str) -> dict:
     """
     Get profile info using profile_id.
-
     Preferred source: profiles table  (display_name / name columns).
     Fallback source:  personal table  (profile_id foreign key).
-
     Returns a dict with at least a 'display_name' key on success,
     or None if the profile cannot be found in either table.
     """
@@ -274,7 +272,6 @@ def delete_orphaned_report_records(profile_id: str, folder_type: str = None):
     """
     Delete all processed report records for a profile/folder that no longer
     have a corresponding file in storage (bulk delete by profile scope).
-
     Used when storage shows zero files — cleans up the entire DB scope.
     Returns the number of deleted records.
     """
@@ -305,9 +302,7 @@ def delete_orphaned_report_records(profile_id: str, folder_type: str = None):
 def delete_report_record_by_id(record_id: str):
     """
     Delete a single processed report record by its primary-key ID.
-
-    Used during incremental orphan cleanup when iterating over stale records
-    that no longer match a file in storage.
+    Used for incremental cleanup.
     """
     print(f"🗑️  Deleting report record: {record_id}")
 
@@ -317,6 +312,24 @@ def delete_report_record_by_id(record_id: str):
 
     except Exception as e:
         print(f"❌ Error deleting record {record_id}: {e}")
+        raise
+
+
+def delete_report_records_bulk(record_ids: list) -> int:
+    """
+    Delete multiple processed report records by their primary-key IDs in a single network request.
+    """
+    if not record_ids:
+        return 0
+
+    print(f"🗑️  Bulk deleting {len(record_ids)} report records...")
+    try:
+        result = supabase.table('medical_reports_processed').delete().in_('id', record_ids).execute()
+        deleted = len(result.data) if result.data else 0
+        print(f"✅ Bulk deleted {deleted} records")
+        return deleted
+    except Exception as e:
+        print(f"❌ Error bulk deleting records: {e}")
         raise
 
 
@@ -347,7 +360,8 @@ def save_summary_cache(profile_id: str, folder_type: str, summary: str,
     """
     Cache generated summary with signature.
 
-    NOTE: profile_id is the owner key. user_id is populated with profile_id
+    NOTE: profile_id is the owner key.
+    user_id is populated with profile_id
     for legacy compatibility with existing unique constraints.
     """
     print(f"\n💾 Caching summary for profile: {profile_id}")
@@ -422,6 +436,7 @@ def get_cached_summary(profile_id: str, folder_type: str = None, expected_signat
             print(f"   Reports: {record.get('report_count')}")
             print(f"   Folder: {record.get('folder_type')}")
             
+        
             return record
 
         print(f"ℹ️  No cached summary found")

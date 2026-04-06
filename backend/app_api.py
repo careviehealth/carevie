@@ -206,13 +206,13 @@ def process_files():
         
         if orphaned:
             log_step("Removing orphaned", "start")
-            for record in orphaned:
-                try:
-                    sb.delete_report_record_by_id(record['id'])
-                    log_step("Deleted", "success", record['file_name'])
-                    deleted_count += 1
-                except Exception as e:
-                    log_step("Delete failed", "error", str(e))
+            orphaned_ids = [record['id'] for record in orphaned]
+            try:
+                # Use ONLY pure bulk deletion logic
+                deleted_count = sb.delete_report_records_bulk(orphaned_ids)
+                log_step("Bulk deleted", "success", f"{deleted_count} orphaned records removed")
+            except Exception as e:
+                log_step("Bulk delete failed", "error", str(e))
         
         # Process new files
         log_step("Processing new files", "start")
@@ -630,7 +630,7 @@ def generate_summary():
             
             cleaned = clean_text(extracted)
             # Use chunk_text_with_metadata so every chunk carries its source
-            # filename as doc_id.  embed_store.build_faiss_index() persists
+            # filename as doc_id. embed_store.build_faiss_index() persists
             # this through chunks.pkl; rag_query.smart_context_assembly() uses
             # it for exact per-document diversity grouping instead of the old
             # integer-division boundary approximation.
@@ -770,7 +770,7 @@ def build_mismatch_warning(mismatched_reports: list, user_display_name: str) -> 
 
 """
     
-    for report in mismatched_reports[:10]:  # Limit to 10
+    for report in mismatched_reports[:10]: # Limit to 10
         patient_name = report.get('patient_name', 'Unknown Patient')
         file_name = report.get('file_name', 'Unknown File')
         report_date = report.get('report_date', 'Unknown Date')
@@ -791,7 +791,6 @@ These reports appear to belong to other people. If they are not yours:
 
 **Your Medical Summary (Below):**
 The following summary contains ONLY reports that match your name ({}).
-
 """.format(user_display_name)
     
     return warning
