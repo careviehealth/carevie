@@ -1,6 +1,6 @@
 # Carevie
 
-Carevie is a healthcare-focused platform with:
+Carevie is a healthcare-focused platform with-
 
 - A **Next.js web app** (`src/`) for patient profiles, family/care-circle access, emergency SOS, and medical vault management.
 - A **Flask AI backend** (`backend/`) for OCR + RAG processing of medical reports.
