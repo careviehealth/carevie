@@ -1,5 +1,3 @@
-# backend/app.py
-
 from dotenv import load_dotenv
 import os
 
@@ -16,7 +14,6 @@ app = Flask(__name__)
 
 PROTECTED_API_PATHS = {"/api/chat"}
 
-# CORS configuration
 CORS(app, resources={
     r"/api/*": {
         "origins": [
@@ -26,14 +23,12 @@ CORS(app, resources={
             "https://*.vercel.app",
             "https://*.ngrok.io",
             "https://ophthalmoscopic-starchlike-yuk.ngrok-free.dev"
-                # Allow all ngrok tunnel URLs
         ],
         "methods": ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True
     }
 })
-
 
 @app.before_request
 def require_internal_api_auth():
