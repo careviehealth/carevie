@@ -538,6 +538,23 @@ def get_health_medication_data(profile_id: str) -> dict:
         print(f"❌ get_health_medication_data failed for profile {profile_id}: {e}")
         return {}
 
+def get_appointments(profile_id: str) -> list:
+    """Return the appointments JSONB array for a profile, or an empty list."""
+    try:
+        result = (
+            supabase
+            .table("user_appointments")
+            .select("appointments")
+            .eq("profile_id", str(profile_id))
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return rows[0].get("appointments") or [] if rows else []
+    except Exception as e:
+        print(f"❌ get_appointments failed for profile {profile_id}: {e}")
+        return []
+    
 if __name__ == "__main__":
     print("\n" + "="*60)
     test_connection()
