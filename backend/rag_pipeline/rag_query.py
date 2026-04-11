@@ -414,6 +414,28 @@ def call_openai_api(
     except Exception as exc:
         raise Exception(f"OpenAI API call failed: {exc}") from exc
 
+def call_llm(
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int = 1024,
+) -> str:
+    """
+    General-purpose synchronous LLM call with a caller-specified token budget.
+ 
+    Use this instead of call_openai_api when the caller owns the token budget
+    (e.g. structured-data pipelines that do not scale by report count).
+    Raises on failure so the caller can handle errors in context.
+    """
+    if not OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY not set in environment")
+ 
+    try:
+        return _run_openai_call(system_prompt, user_prompt, max_tokens)
+    except RuntimeError as exc:
+        raise Exception(f"OpenAI call failed — event loop conflict: {exc}") from exc
+    except Exception as exc:
+        raise Exception(f"OpenAI API call failed: {exc}") from exc
+    
 def ask_rag_improved(
     question: str,
     temp_dir: str,

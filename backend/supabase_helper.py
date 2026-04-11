@@ -457,6 +457,87 @@ def test_connection():
         return False
 
 
+def get_medications(profile_id: str) -> list:
+    """Return the medications JSONB array for a profile, or an empty list."""
+    try:
+        result = (
+            supabase
+            .table("user_medications")
+            .select("medications")
+            .eq("profile_id", str(profile_id))
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return rows[0].get("medications") or [] if rows else []
+    except Exception as e:
+        print(f"❌ get_medications failed for profile {profile_id}: {e}")
+        return []
+ 
+ 
+def get_medication_logs(profile_id: str) -> list:
+    """Return the logs JSONB array from user_medication_logs for a profile."""
+    try:
+        result = (
+            supabase
+            .table("user_medication_logs")
+            .select("logs")
+            .eq("profile_id", str(profile_id))
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return rows[0].get("logs") or [] if rows else []
+    except Exception as e:
+        print(f"❌ get_medication_logs failed for profile {profile_id}: {e}")
+        return []
+ 
+ 
+def get_medical_team(profile_id: str) -> list:
+    """Return the doctors JSONB array from user_medical_team for a profile."""
+    try:
+        result = (
+            supabase
+            .table("user_medical_team")
+            .select("doctors")
+            .eq("profile_id", str(profile_id))
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return rows[0].get("doctors") or [] if rows else []
+    except Exception as e:
+        print(f"❌ get_medical_team failed for profile {profile_id}: {e}")
+        return []
+ 
+ 
+def get_health_medication_data(profile_id: str) -> dict:
+    """
+    Return medication-relevant fields from the health table for a profile.
+    Selected columns: allergies, current_medication, ongoing_treatments,
+    long_term_treatments, current_diagnosed_condition.
+    """
+    try:
+        result = (
+            supabase
+            .table("health")
+            .select(
+                "allergies,"
+                "current_medication,"
+                "ongoing_treatments,"
+                "long_term_treatments,"
+                "current_diagnosed_condition"
+            )
+            .eq("profile_id", str(profile_id))
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return rows[0] if rows else {}
+    except Exception as e:
+        print(f"❌ get_health_medication_data failed for profile {profile_id}: {e}")
+        return {}
+
 if __name__ == "__main__":
     print("\n" + "="*60)
     test_connection()
