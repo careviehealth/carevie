@@ -26,8 +26,8 @@ EXEMPT_INTERNAL_AUTH_PATHS = {"/api/health"}
 CORS(app, resources={
     r"/api/*": {
         "origins": [
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
             "https://vytara-official.vercel.app",
             "https://*.vercel.app",
             "https://sauncier-instigative-yolande.ngrok-free.dev",

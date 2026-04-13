@@ -12,6 +12,7 @@ import { Menu, X, Play } from 'lucide-react';
 import Link from 'next/link';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import BrandLogo from '@/components/BrandLogo';
 gsap.registerPlugin(ScrollTrigger);
 
 const shouldReduceMotion = () =>
@@ -47,17 +48,27 @@ function Background() {
 
 const ScrollFloat = ({ children }: { children: React.ReactNode }) => {
   const ref = useRef<HTMLHeadingElement | null>(null);
-  const chars = useMemo(() => {
+  const words = useMemo(() => {
     const text = typeof children === 'string' ? children : '';
-    return text.split('').map((c, i) => (
-      <span key={i} className="inline-block">{c === ' ' ? '\u00A0' : c}</span>
+    const splitWords = text.split(' ');
+    return splitWords.map((word, wordIndex) => (
+      <React.Fragment key={wordIndex}>
+        <span className="inline-block whitespace-nowrap">
+          {word.split('').map((char, charIndex) => (
+            <span key={`${wordIndex}-${charIndex}`} className="float-char inline-block">
+              {char}
+            </span>
+          ))}
+        </span>
+        {wordIndex < splitWords.length - 1 ? ' ' : null}
+      </React.Fragment>
     ));
   }, [children]);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el || shouldReduceMotion()) return;
     const ctx = gsap.context(() => {
-      const chars = el.querySelectorAll('span');
+      const chars = el.querySelectorAll('.float-char');
       gsap.fromTo(chars,
         { opacity: 0, yPercent: 120, scaleY: 2, scaleX: 0.6 },
         { opacity: 1, yPercent: 0, scaleY: 1, scaleX: 1, stagger: 0.05, ease: 'back.inOut(2)',
@@ -70,7 +81,7 @@ const ScrollFloat = ({ children }: { children: React.ReactNode }) => {
   return (
     <h2 ref={ref} style={{ fontFamily:"'Playfair Display', serif" }}
       className="text-4xl md:text-6xl font-bold text-white text-center overflow-hidden leading-tight">
-      {chars}
+      {words}
     </h2>
   );
 };
@@ -365,9 +376,8 @@ export default function Landing() {
         {/* NAV */}
         <nav className="nav-shell" style={{ position:'sticky', top:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'space-between',
           padding:'14px 20px', background:'rgba(250,250,249,0.88)', backdropFilter:'blur(16px)', borderBottom:'1px solid rgba(13,148,136,0.12)' }}>
-          <div className="nav-brand" style={{ display:'flex', alignItems:'center', gap:10, fontFamily:"'Playfair Display', serif", fontSize:'1.4rem', fontWeight:700, color:'#0f1a17' }}>
-            <div style={{ width:34, height:34, borderRadius:8, background:'linear-gradient(135deg,#0d9488,#134e4a)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'0.78rem', fontWeight:700, boxShadow:'0 4px 14px rgba(13,148,136,0.4)' }}>G1</div>
-            G1 Health
+          <div className="nav-brand" style={{ display:'flex', alignItems:'center' }}>
+            <BrandLogo width={158} priority />
           </div>
           <div className="hidden md:flex" style={{ gap:36 }}>
             {navItems.map(([t, id]) => (
@@ -534,9 +544,9 @@ export default function Landing() {
         {/* ══ PAIN POINTS ══ */}
         <section className="pain-section" style={{ padding:'72px 24px' }}>
           <div className="reveal-section" style={{ maxWidth:1200, margin:'0 auto' }}>
-            <p className="pain-eyebrow" style={{ fontSize:'0.75rem', fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color:'#0d9488', marginBottom:12, textAlign:'center' }}>Why G1 Exists</p>
+            <p className="pain-eyebrow" style={{ fontSize:'0.75rem', fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color:'#0d9488', marginBottom:12, textAlign:'center' }}>Why Carevie Exists</p>
             <h2 className="pain-heading" style={{ fontFamily:"'Playfair Display', serif", fontSize:'clamp(2rem,4vw,3.2rem)', fontWeight:800, lineHeight:1.12, textAlign:'center', marginBottom:24 }}>
-              Healthcare is fragmented.<br /><em style={{ fontStyle:'italic', color:'#0d9488' }}>G1</em> brings it together.
+              Healthcare is fragmented.<br /><em style={{ fontStyle:'italic', color:'#0d9488' }}>Carevie</em> brings it together.
             </h2>
             <div className="pain-grid-mobile stagger-group" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14 }}>
               {[
@@ -562,7 +572,7 @@ export default function Landing() {
           <div className="reveal-section" style={{ maxWidth:900, margin:'0 auto' }}>
             <p style={{ fontSize:'0.75rem', fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color:'#0d9488', marginBottom:16 }}>See It In Action</p>
             <h2 style={{ fontFamily:"'Playfair Display', serif", fontSize:'clamp(1.8rem,3.5vw,2.6rem)', fontWeight:800, maxWidth:500, margin:'0 auto 48px', lineHeight:1.2 }}>
-              Watch how G1 works for your family
+              Watch how Carevie works for your family
             </h2>
             <div className="video-shell" style={{ position:'relative', borderRadius:24, overflow:'hidden', boxShadow:'0 30px 80px rgba(13,78,74,0.25)' }}>
               <video 
@@ -624,18 +634,18 @@ export default function Landing() {
               <p style={{ fontSize:'0.75rem', fontWeight:700, letterSpacing:'0.15em', textTransform:'uppercase', color:'#0d9488', marginBottom:24 }}>Our Mission</p>
               <div className="mission-statement" style={{ display:'flex', alignItems:'flex-start', gap:48, flexWrap:'wrap', marginBottom:48 }}>
                 <div style={{ flex:'1 1 280px', minWidth:0 }}>
-                  <ScrollFloat>Why we built G1</ScrollFloat>
+                  <ScrollFloat>Why we built Carevie</ScrollFloat>
                 </div>
                 <div style={{ flex:'1 1 340px', minWidth:0, paddingTop:8 }}>
                   <p style={{ fontSize:'1.05rem', color:'rgba(255,255,255,0.65)', lineHeight:1.85, marginBottom:28 }}>
                     Medical records are scattered. Families are unprepared for emergencies. Most people don&apos;t understand their own health reports.
                   </p>
                   <p style={{ fontSize:'1.05rem', color:'rgba(255,255,255,0.65)', lineHeight:1.85, marginBottom:28 }}>
-                    G1 fixes all three — one platform to store records, manage family health, stay prepared, and stay connected.
+                    Carevie fixes all three — one platform to store records, manage family health, stay prepared, and stay connected.
                   </p>
                   <div style={{ borderLeft:'3px solid #0d9488', paddingLeft:20 }}>
                     <p style={{ fontSize:'0.88rem', color:'rgba(255,255,255,0.3)', lineHeight:1.7, fontStyle:'italic' }}>&quot;We&apos;re building the health platform we wish our families had.&quot;</p>
-                    <p style={{ fontSize:'0.78rem', color:'#0d9488', fontWeight:600, marginTop:8 }}>— G1 Team, Mumbai</p>
+                    <p style={{ fontSize:'0.78rem', color:'#0d9488', fontWeight:600, marginTop:8 }}>— Carevie Team, Mumbai</p>
                   </div>
                 </div>
               </div>
@@ -644,7 +654,7 @@ export default function Landing() {
               {[
                 { num:'01', icon:'🧠', title:'Clarity',   sub:'Understand your health',    text:'AI turns medical reports and prescriptions into plain language — no jargon, no confusion.', accent:'#0d9488' },
                 { num:'02', icon:'⚡', title:'Readiness', sub:'Prepared for emergencies',   text:'Your profile is always ready to share. One tap reaches your Care Circle and emergency services.', accent:'#14b8a6' },
-                { num:'03', icon:'🤝', title:'Together',  sub:'One account, whole family',  text:'Manage profiles for children, elderly parents, and yourself — all from a single G1 account.', accent:'#5eead4' },
+                { num:'03', icon:'🤝', title:'Together',  sub:'One account, whole family',  text:'Manage profiles for children, elderly parents, and yourself — all from a single Carevie account.', accent:'#5eead4' },
               ].map(({ num, icon, title, sub, text, accent }, i) => (
                 <div key={num} className="stagger-item mission-card-hover" style={{ padding:'36px 32px', borderTop:`3px solid ${accent}`, background: i===1 ? 'rgba(13,148,136,0.06)' : 'transparent' }}>
                   <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
@@ -666,7 +676,7 @@ export default function Landing() {
           <div style={{ maxWidth:1200, margin:'0 auto' }}>
             <div style={{ textAlign:'center', marginBottom:72 }}>
               <p style={{ fontSize:'0.75rem', fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color:'#0d9488', marginBottom:16 }}>What We Do</p>
-              <FeaturesHeading>Everything G1 does for you</FeaturesHeading>
+              <FeaturesHeading>Everything Carevie does for you</FeaturesHeading>
             </div>
 
             {/* GROUP 1 */}
@@ -748,7 +758,7 @@ export default function Landing() {
                     Ideal for children under 18, elderly parents without smartphones, or anyone who needs help managing their health.
                   </p>
                   <div style={{ padding:'11px 15px', borderRadius:12, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', fontSize:'0.79rem', color:'rgba(255,255,255,0.38)', lineHeight:1.6 }}>
-                    <span style={{ color:'#5eead4', fontWeight:600 }}>💡 Tip: </span>If the family member has their own phone number, create a separate G1 account for them instead.
+                    <span style={{ color:'#5eead4', fontWeight:600 }}>💡 Tip: </span>If the family member has their own phone number, create a separate Carevie account for them instead.
                   </div>
                 </div>
                 <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -824,16 +834,15 @@ export default function Landing() {
           <div style={{ maxWidth:1200, margin:'0 auto' }}>
             <div className="hidden md:grid stagger-group" style={{ gridTemplateColumns:'2fr 1fr 1fr', gap:48, marginBottom:48 }}>
               <div className="stagger-item">
-                <div style={{ display:'flex', alignItems:'center', gap:10, fontFamily:"'Playfair Display', serif", fontSize:'1.3rem', fontWeight:700, marginBottom:14 }}>
-                  <div style={{ width:32, height:32, borderRadius:8, background:'linear-gradient(135deg,#0d9488,#134e4a)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'0.75rem', fontWeight:700 }}>G1</div>
-                  G1 Health
+                <div style={{ marginBottom:16 }}>
+                  <BrandLogo width={196} surface="dark" />
                 </div>
                 <p style={{ color:'rgba(255,255,255,0.5)', fontSize:'0.9rem', lineHeight:1.7, maxWidth:260 }}>Healthcare, beautifully reimagined. Your health. Your family. Your control.</p>
               </div>
               <div className="stagger-item">
                 <h4 style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase', color:'rgba(255,255,255,0.4)', marginBottom:16 }}>Contact Us</h4>
                 <div style={{ color:'rgba(255,255,255,0.65)', fontSize:'0.9rem', lineHeight:2 }}>
-                  <p>Email : hello@G1.com</p>
+                  <p>Email : hello@carevie.com</p>
                   <p>Phone : 09511701519</p>
                   <p>Address : 327, 3rd Floor,<br />Ajmera Sikova,<br />ICRC, Ghatkopar West,<br />Mumbai 400086</p>
                 </div>
@@ -847,15 +856,14 @@ export default function Landing() {
             </div>
 
             <div className="md:hidden reveal-section">
-              <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:16 }}>
-                <div style={{ width:24, height:24, background:'linear-gradient(135deg,#0d9488,#134e4a)', borderRadius:6 }} />
-                <p style={{ fontFamily:"'Playfair Display', serif", fontWeight:700, color:'#14b8a6', fontSize:'1.1rem' }}>G1</p>
+              <div style={{ marginBottom:16 }}>
+                <BrandLogo width={156} surface="dark" />
               </div>
               <div style={{ display:'flex', gap:16 }}>
                 <div style={{ flex:1 }}>
                   <h3 style={{ fontWeight:600, fontSize:'0.7rem', marginBottom:4, color:'rgba(255,255,255,0.5)' }}>Contact Us</h3>
                   <div style={{ color:'rgba(255,255,255,0.5)', fontSize:'0.7rem', lineHeight:1.9 }}>
-                    <p>Email: hello@G1.com</p><p>Phone: 09511701519</p>
+                    <p>Email: hello@carevie.com</p><p>Phone: 09511701519</p>
                     <p>327, 3rd Floor, Ajmera Sikova, ICRC, Ghatkopar West, Mumbai 400086</p>
                   </div>
                 </div>
@@ -869,7 +877,7 @@ export default function Landing() {
             </div>
 
             <div className="hidden md:flex" style={{ borderTop:'1px solid rgba(255,255,255,0.08)', paddingTop:28, justifyContent:'space-between', alignItems:'center' }}>
-              <p style={{ color:'rgba(255,255,255,0.35)', fontSize:'0.8rem' }}>© {new Date().getFullYear()} G1. All rights reserved.</p>
+              <p style={{ color:'rgba(255,255,255,0.35)', fontSize:'0.8rem' }}>© {new Date().getFullYear()} Carevie. All rights reserved.</p>
             </div>
           </div>
         </footer>

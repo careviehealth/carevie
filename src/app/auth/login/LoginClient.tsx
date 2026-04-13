@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
 import { ChevronDown, MoreVertical } from "lucide-react";
 import { supabase } from "@/lib/createClient";
+import BrandLogo from "@/components/BrandLogo";
 import {
   clearRememberedAccount,
   pickRememberedAccountName,
@@ -413,14 +413,7 @@ export default function LoginClient({ returnTo }: LoginClientProps) {
 
           <div className="p-8">
             <div className="flex justify-center mb-6">
-              <Image
-                src="/vytara-logo.png"
-                alt="G1 Logo"
-                width={96}
-                height={96}
-                className="w-24 h-24"
-                priority
-              />
+              <BrandLogo width={210} priority />
             </div>
 
             <h1 className="text-center text-[#14b8a6] text-3xl font-bold mb-1">

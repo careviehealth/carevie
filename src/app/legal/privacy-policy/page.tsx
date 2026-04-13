@@ -3,18 +3,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Menu, X } from 'lucide-react';
 import Link from 'next/link';
+import BrandLogo from '@/components/BrandLogo';
 
 /**
  * Centralized legal/contact configuration.
  * Update these values once and they will reflect across this page.
  */
 const LEGAL = {
-  appName: 'G1',
-  companyLegalName: 'G1 Technologies Private Limited', // <-- replace with your legal entity name
-  contactEmail: 'hello@g1.com', // <-- replace with your official privacy/support email
-  grievanceEmail: 'hello@g1.com', // <-- grievance redressal email (can be same)
+  appName: 'Carevie',
+  companyLegalName: 'Carevie Technologies Private Limited', // <-- replace with your legal entity name
+  contactEmail: 'hello@carevie.com', // <-- replace with your official privacy/support email
+  grievanceEmail: 'hello@carevie.com', // <-- grievance redressal email (can be same)
   cityState: 'Mumbai, Maharashtra, India',
-  websiteUrl: 'https://g1-ssr.vercel.app', // <-- replace with your real domain
+  websiteUrl: 'https://carevie.com', // <-- replace with your real domain
   effectiveDate: '2026-02-26', // <-- set your effective date
   lastUpdated: '2026-02-26', // <-- update when you change content
 };
@@ -87,12 +88,11 @@ const PrivacyPolicyLayout = () => {
       <nav className="sticky top-0 z-50 bg-white">
         <div className="flex items-center justify-between px-6 py-4 md:grid md:grid-cols-3 md:gap-0">
           {/* LOGO */}
-          <div className="flex gap-2 items-center md:justify-start">
-            <div className="w-8 h-8 bg-gradient-to-r from-[#14b8a6] to-[#134E4A] rounded-lg" />
-            <p className="font-bold text-[#14b8a6] text-xl">{LEGAL.appName}</p>
+          <div className="flex gap-3 items-center md:justify-start">
+            <BrandLogo width={136} priority />
             <Link
               href="/landing-page"
-              className="inline-flex whitespace-nowrap text-xs font-semibold text-[#134E4A] transition hover:text-[#14b8a6] sm:text-sm"
+              className="hidden whitespace-nowrap text-xs font-semibold text-[#134E4A] transition hover:text-[#14b8a6] sm:inline-flex sm:text-sm"
             >
               ← Back to Landing Page
             </Link>

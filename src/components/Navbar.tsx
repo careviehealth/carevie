@@ -21,6 +21,7 @@ import {
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePathname } from 'next/navigation';
+import BrandLogo from '@/components/BrandLogo';
 import { supabase } from '@/lib/createClient';
 import { useAppProfile, type AppProfile } from '@/components/AppProfileProvider';
 import { syncRememberedAccountName } from '@/lib/rememberedAccount';
@@ -430,16 +431,10 @@ export default function Navbar() {
       >
         <div className="flex items-center justify-between px-4 py-3">
           <button
-            className="flex items-center gap-2 text-left"
+            className="flex items-center text-left"
             onClick={() => router.push('/app/homepage')}
           >
-            <div className="w-9 h-9 bg-white rounded-full flex items-center justify-center shadow-md p-2">
-              <div className="w-full h-full rounded-full" style={brandDotStyle}></div>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.25em] text-teal-200/70">G1</p>
-              <p className="text-sm font-semibold leading-tight">Patient Hub</p>
-            </div>
+            <BrandLogo width={118} surface="dark" className="shrink-0" />
           </button>
           <button
             type="button"
@@ -536,16 +531,12 @@ export default function Navbar() {
               className="flex items-center gap-3 text-left"
               onClick={() => router.push('/app/homepage')}
             >
-              <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-md p-2">
-                <div className="w-full h-full rounded-full" style={brandDotStyle}></div>
-              </div>
-              {!effectiveCollapsed && (
-                <div>
-                  <p className="text-sm uppercase tracking-[0.25em] text-teal-200/70">
-                    G1
-                  </p>
-                  <p className="text-lg font-semibold leading-tight">Patient Hub</p>
+              {effectiveCollapsed ? (
+                <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-md p-2">
+                  <div className="w-full h-full rounded-full" style={brandDotStyle}></div>
                 </div>
+              ) : (
+                <BrandLogo width={134} surface="dark" className="shrink-0" />
               )}
             </button>
             <button

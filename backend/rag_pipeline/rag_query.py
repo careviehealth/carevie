@@ -22,21 +22,49 @@ OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
 MODEL_NAME: str = "gpt-4.1-nano"
 OPENAI_CHAT_URL: str = "https://api.openai.com/v1/chat/completions"
 
-def _build_tokenizer() -> tiktoken.Encoding:
-    """Return a tiktoken encoder for MODEL_NAME, falling back to cl100k_base."""
+class _WhitespaceEncoding:
+    """Fallback tokenizer when tiktoken encodings cannot be resolved offline."""
+
+    def encode(self, text: str) -> list[str]:
+        return text.split()
+
+    def decode(self, tokens: list[str]) -> str:
+        return " ".join(tokens)
+
+
+def _build_tokenizer() -> object:
+    """Return a tokenizer for MODEL_NAME, tolerating offline tiktoken cache misses."""
     try:
         enc = tiktoken.encoding_for_model(MODEL_NAME)
         print(f"✅ tiktoken: loaded encoding for '{MODEL_NAME}'", flush=True)
         return enc
-    except KeyError:
+    except Exception as exc:
         print(
-            f"⚠️  tiktoken: '{MODEL_NAME}' not in registry "
-            f"— using cl100k_base (GPT-4 family encoding)",
+            f"⚠️  tiktoken: unable to load encoding for '{MODEL_NAME}' "
+            f"({exc})",
             flush=True,
         )
-        return tiktoken.get_encoding("cl100k_base")
 
-_TOKENIZER: tiktoken.Encoding = _build_tokenizer()
+    for encoding_name, label in [
+        ("o200k_base", "GPT-4o family"),
+        ("cl100k_base", "GPT-4/GPT-3.5 family"),
+    ]:
+        try:
+            enc = tiktoken.get_encoding(encoding_name)
+            print(f"⚠️  tiktoken: using {encoding_name} ({label})", flush=True)
+            return enc
+        except Exception as exc:
+            print(
+                f"⚠️  tiktoken: unable to load fallback encoding '{encoding_name}' "
+                f"({exc})",
+                flush=True,
+            )
+
+    print("⚠️  tiktoken unavailable; using whitespace tokenizer fallback", flush=True)
+    return _WhitespaceEncoding()
+
+
+_TOKENIZER = _build_tokenizer()
 
 def count_tokens(text: str) -> int:
     """Return exact token count for text."""

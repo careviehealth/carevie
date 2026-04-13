@@ -491,7 +491,7 @@ export default function HealthOnboardingScreen() {
     return '';
   };
   const getQuestionText = (question: QuestionConfig, index: number) => {
-    if (index === 0) return `Welcome to G1. ${question.question}`;
+    if (index === 0) return `Welcome to Carevie. ${question.question}`;
     const prefix = QUESTION_PREFIXES[(index - 1) % QUESTION_PREFIXES.length];
     return `${prefix} ${question.question}`;
   };
@@ -1033,7 +1033,7 @@ export default function HealthOnboardingScreen() {
                             <View style={styles.botAvatar}>
                               <Text style={styles.botAvatarText}>V</Text>
                             </View>
-                            <Text style={styles.botLabel}>G1</Text>
+                            <Text style={styles.botLabel}>Carevie</Text>
                           </View>
                           <Text style={styles.botText}>{getQuestionText(question, index)}</Text>
                         </View>
@@ -1067,7 +1067,7 @@ export default function HealthOnboardingScreen() {
                       <View style={styles.botAvatar}>
                         <Text style={styles.botAvatarText}>V</Text>
                       </View>
-                      <Text style={styles.botLabel}>G1</Text>
+                      <Text style={styles.botLabel}>Carevie</Text>
                     </View>
                     <Text style={styles.botText}>{getQuestionText(currentQ, step)}</Text>
                     {isRequired && (

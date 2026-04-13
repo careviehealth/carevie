@@ -812,7 +812,7 @@ export default function ProfileScreen() {
             <div class="header">
               <div class="brand">
                 <div class="logo">V</div>
-                <div class="brand-text">G1</div>
+                <div class="brand-text">Carevie</div>
               </div>
               <div class="title">Medical Information Report</div>
               <div class="subtitle">Generated on ${escapeHtml(new Date().toLocaleDateString('en-US'))}</div>

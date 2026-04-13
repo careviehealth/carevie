@@ -36,8 +36,11 @@ def _get_encoder():
             )
             _TIKTOKEN_AVAILABLE = True
             return _enc
-        except KeyError:
-            logger.debug("tiktoken: model '%s' not in registry.", _TARGET_MODEL)
+        except Exception as exc:
+            logger.debug(
+                "tiktoken: unable to load model '%s' encoding (%s).",
+                _TARGET_MODEL, exc,
+            )
 
         # Tier 2: GPT-4o / GPT-4.1 family fallback
         try:
@@ -45,13 +48,18 @@ def _get_encoder():
             logger.info("tiktoken ready: o200k_base (GPT-4o family).")
             _TIKTOKEN_AVAILABLE = True
             return _enc
-        except Exception:
-            logger.debug("tiktoken: o200k_base not available.")
+        except Exception as exc:
+            logger.debug("tiktoken: unable to load o200k_base (%s).", exc)
 
         # Tier 3: GPT-4 / GPT-3.5 family fallback
-        _enc = tiktoken.get_encoding("cl100k_base")
-        logger.warning("tiktoken ready: cl100k_base (GPT-4/GPT-3.5 family).")
-        _TIKTOKEN_AVAILABLE = True
+        try:
+            _enc = tiktoken.get_encoding("cl100k_base")
+            logger.warning("tiktoken ready: cl100k_base (GPT-4/GPT-3.5 family).")
+            _TIKTOKEN_AVAILABLE = True
+        except Exception as exc:
+            _enc = None
+            _TIKTOKEN_AVAILABLE = False
+            logger.warning("tiktoken unavailable (%s). Using whitespace word counts.", exc)
 
     except ImportError as exc:
         # Tier 4: No tiktoken installed, fallback to whitespace counts

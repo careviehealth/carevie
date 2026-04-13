@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import BrandLogo from "@/components/BrandLogo";
 
 interface AuthLayoutProps {
   title: string;
@@ -24,14 +24,7 @@ export default function AuthLayout({
           <div className="p-8">
             {/* Logo */}
             <div className="flex justify-center mb-6">
-              <Image
-                src="/vytara-logo.png"
-                alt="G1 Logo"
-                width={96}
-                height={96}
-                className="w-24 h-24"
-                priority
-              />
+              <BrandLogo width={210} priority />
             </div>
 
             {/* Title */}

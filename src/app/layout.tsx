@@ -21,8 +21,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "G1 Heath",
-  description: "G1 Health a platform for all your healthcare related work",
+  title: "Carevie Health",
+  description: "Carevie Health a platform for all your healthcare related work",
 };
 
 export default function RootLayout({

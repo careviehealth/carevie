@@ -881,7 +881,7 @@ export default function HealthOnboardingChatbot() {
         <div>
           <div style={styles.kicker}>Health Setup</div>
           <h1 style={titleStyle}>Welcome, let’s build your profile.</h1>
-          <p style={subtitleStyle}>This helps G1 organize your medical history securely.</p>
+          <p style={subtitleStyle}>This helps Carevie organize your medical history securely.</p>
         </div>
         <div style={headerActionsStyle}>
           {isNewProfileOnboarding && !isSaved && (
@@ -926,7 +926,7 @@ export default function HealthOnboardingChatbot() {
                     ...(msg.role === "user" ? styles.userBubble : styles.botBubble),
                   }}
                 >
-                  <div style={styles.bubbleMeta}>{msg.role === "user" ? "You" : "G1"}</div>
+                  <div style={styles.bubbleMeta}>{msg.role === "user" ? "You" : "Carevie"}</div>
                   <div>{msg.text}</div>
                 </div>
               ))}
