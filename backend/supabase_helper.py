@@ -555,6 +555,46 @@ def get_appointments(profile_id: str) -> list:
         print(f"❌ get_appointments failed for profile {profile_id}: {e}")
         return []
     
+def get_user_card_data(profile_id: str) -> dict:
+    """
+    Fetch and merge user card fields from the profiles and health tables.
+
+    profiles  → name, gender, phone, address
+    health    → date_of_birth, blood_group, bmi, age
+    """
+    card: dict = {}
+    profile_id_str = str(profile_id)
+
+    try:
+        result = (
+            supabase
+            .table("profiles")
+            .select("name, gender, phone, address")
+            .eq("id", profile_id_str)
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            card.update(result.data[0])
+    except Exception as e:
+        print(f"❌ get_user_card_data: profiles lookup failed for {profile_id}: {e}")
+
+    try:
+        result = (
+            supabase
+            .table("health")
+            .select("date_of_birth, blood_group, bmi, age")
+            .eq("profile_id", profile_id_str)
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            card.update(result.data[0])
+    except Exception as e:
+        print(f"❌ get_user_card_data: health lookup failed for {profile_id}: {e}")
+
+    return card
+
 if __name__ == "__main__":
     print("\n" + "="*60)
     test_connection()
