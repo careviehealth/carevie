@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import styles from "./ChatWidget.module.css";
+import { useAppProfile } from "./AppProfileProvider";
 
 export default function ChatWidget() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { userId, selectedProfile } = useAppProfile();
   const [isEmbeddedInIframe, setIsEmbeddedInIframe] = useState(false);
   const [hiddenByParentModal, setHiddenByParentModal] = useState(false);
   const [open, setOpen] = useState(false);
@@ -61,12 +63,16 @@ export default function ChatWidget() {
     setMessages(prev => [...prev, userMsg]);
     setInput("");
     setLoading(true);
+    const profileId = userId ? (selectedProfile?.id ?? "") : "";
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input }),
+        body: JSON.stringify({
+          message: input,
+          profile_id: profileId,
+        }),
       });
 
       const data = await res.json();

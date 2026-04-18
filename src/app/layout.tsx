@@ -9,6 +9,7 @@ import ChatWidget from "@/components/ChatWidget";
 import ConveyThisProvider from "@/components/ConveyThisProvider";
 import FeedbackTab from "@/components/FeedbackTab";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
+import { AppProfileProvider } from "@/components/AppProfileProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,26 +38,28 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased relative min-h-screen overflow-x-hidden`}
       >
-        {measurementId ? (
+        <AppProfileProvider>
+          {measurementId ? (
+            <Suspense fallback={null}>
+              <GoogleAnalytics measurementId={measurementId} />
+            </Suspense>
+          ) : null}
+
+          {/* ConveyThis (loads once globally) */}
+          <ConveyThisProvider />
+
+          {/* App pages */}
+          {children}
+
+          {/* Chat widget */}
           <Suspense fallback={null}>
-            <GoogleAnalytics measurementId={measurementId} />
+            <ChatWidget />
           </Suspense>
-        ) : null}
 
-        {/* ConveyThis (loads once globally) */}
-        <ConveyThisProvider />
-
-        {/* App pages */}
-        {children}
-
-        {/* Chat widget */}
-        <Suspense fallback={null}>
-          <ChatWidget />
-        </Suspense>
-
-        <Suspense fallback={null}>
-          <FeedbackTab />
-        </Suspense>
+          <Suspense fallback={null}>
+            <FeedbackTab />
+          </Suspense>
+        </AppProfileProvider>
       </body>
     </html>
   );
