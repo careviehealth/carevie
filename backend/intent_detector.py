@@ -62,62 +62,99 @@ greeting
 unknown
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-GOLDEN RULE (apply first)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- "my / mera / meri / mujhe" + topic  →  user_* intent (personal data)
-- "what is / how does / kya hota hai" + topic  →  platform (general info)
-- When in doubt between two intents, pick the one that matches the PRIMARY action.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-INTENT DEFINITIONS + EXAMPLES
+CORE CLASSIFICATION RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. greeting
-   Trigger: casual hello/hi with no real question.
-   Examples: "hi", "hello", "hey", "namaste", "good morning", "hii", "yo"
-   NOT: "hi, what is my appointment?" → user_appointment (has a real query)
-
-2. user_appointment
-   Trigger: user asking about THEIR OWN appointments or schedule.
-   Examples: "show my appointments", "when is my next doctor visit?", "mera appointment kab hai?", "cancel my booking", "reschedule my checkup"
-   NOT: "what is an appointment?" → platform
-
-3. user_medication
-   Trigger: user asking about THEIR OWN medicines or prescriptions.
-   Examples: "what medicines am I taking?", "show my prescriptions", "meri dawai kaunsi hai?", "my tablet dosage"
-   NOT: "what is metformin?" → platform, "how does insulin work?" → platform
-
-4. user_insurance
-   Trigger: user asking about THEIR OWN insurance or claims.
-   Examples: "what is my insurance coverage?", "mera claim status kya hai?", "show my policy details", "my reimbursement status"
-   NOT: "what is health insurance?" → platform, "how does a claim work?" → platform
-
-5. profile_card
-   Trigger: user asking about THEIR OWN personal/demographic details.
-   Examples: "show my profile", "what is my age on record?", "mera address kya hai?", "my height and weight", "update my contact number"
-   NOT: "what details does the app store?" → platform, "show my health report" → summary
-
-6. summary
-   Trigger: user asking for a health overview or lab/test results.
-   Examples: "show my health summary", "my blood test results", "mera WBC level kya hai?", "hemoglobin report dikhao", "give me a full health report"
-   NOT: "what is hemoglobin?" → platform, "my profile" → profile_card
-
-7. platform
-   Trigger: ANY general/informational question not about the user's own data.
-   Examples: "what is an insurance claim?", "how do I add a medication?", "appointment kaise book karte hain?", "insurance kya hota hai?", "what does this app do?", "how does the summary section work?"
-
-8. unknown
-   Trigger: gibberish, empty input, or completely off-topic messages.
-   Examples: "asdfgh", "12345", "what is cricket?", (empty message)
+2. If the user asks GENERAL / HOW-TO / INFORMATION → use platform
+3. If the user asks about REPORTS / TEST RESULTS → use summary
+4. If the user asks about PERSONAL DETAILS → use profile_card
+5. Greeting + real question → IGNORE greeting, classify the real intent
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CONFLICT RESOLUTION
+INTENT DEFINITIONS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- personal possessive ("my/mera") → prefer user_* over platform
-- general/definition question → always platform, even if topic matches a user_* category
-- profile vs summary: profile = who you are (name, age, address); summary = health data (reports, labs)
-- greeting + real question → ignore greeting, classify the real question
-"""
+
+1. greeting  
+Casual greeting ONLY, no real question  
+Examples:  
+"hi", "hello", "hey", "namaste"  
+
+
+2. user_appointment  
+User asking about THEIR OWN appointments  
+Examples:  
+"my appointment kab hai"  
+"show my appointments"  
+"reschedule my booking"  
+
+
+3. user_medication  
+User asking about THEIR OWN medicines  
+Examples:  
+"my medicines"  
+"meri dawai kya hai"  
+"what medicines am I taking"  
+
+
+4. user_insurance  
+User asking about THEIR OWN insurance  
+Examples:  
+"my insurance details"  
+"claim status kya hai"  
+"my policy"  
+
+
+5. profile_card  
+User asking about THEIR OWN personal info  
+(name, phone, age, address)  
+Examples:  
+"my profile"  
+"mera phone number kya hai"    
+
+6. summary  
+User asking about THEIR OWN health reports / lab results  
+Examples:  
+"my report"  
+"mera WBC kya hai"  
+"blood test result"  
+"health summary"  
+
+
+7. platform  
+ANY general question, explanation, or HOW-TO  
+NOT about user's own data  
+
+Examples:  
+"what is WBC?"  
+"how to add appointment?"  
+"insurance kya hota hai?"  
+"how to upload report?"  
+"how does this app work?"  
+
+IMPORTANT:  
+If the question is "how to add / how to use / what is" → ALWAYS platform  
+
+8. unknown  
+Gibberish or unrelated input  
+Examples:  
+"asdfgh"  
+"12345"  
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STRICT DECISION LOGIC
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  
+- Reports / lab values → summary  
+- Personal identity info → profile_card  
+- How-to / explanation → platform  
+- No clear meaning → unknown  
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FINAL RULE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Return ONLY one word from VALID INTENTS.
+No explanation. No extra text."""
 
 
 def _get_client() -> Groq:
@@ -181,7 +218,7 @@ def detect_intent_with_response(message: str):
     if intent == "greeting":
         return {
             "intent": intent,
-            "answer": get_greeting_response()
+            "answer": get_greeting_response(message)
         }
 
     if intent == "unknown":
