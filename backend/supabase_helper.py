@@ -595,68 +595,7 @@ def get_user_card_data(profile_id: str) -> dict:
 
     return card
 
-def get_insurance_documents_for_profile(profile_id: str) -> list[dict]:
-    """
-    Fetch all successfully processed insurance documents for a profile.
- 
-    Queries ``medical_reports_processed`` where:
-      • ``profile_id``        = <profile_id>
-      • ``folder_type``       = 'insurance'
-      • ``processing_status`` = 'completed'
- 
-    Results are ordered oldest-first (``processed_at ASC``) for a stable,
-    reproducible ordering that keeps the document-set signature consistent
-    across multiple calls when the document set has not changed.
- 
-    Only the columns required by the RAG pipeline are selected; ``extracted_text``
-    is included so the pipeline can take the fast path (no OCR download) when
-    text is already stored.
- 
-    Args:
-        profile_id: Supabase profile UUID (string or UUID object).
- 
-    Returns:
-        List of dicts with keys:
-          id, file_path, file_name, extracted_text,
-          source_file_hash, processed_at, report_type
- 
-        Returns ``[]`` on error (error is logged but not re-raised so the
-        caller can handle a graceful "no documents" response).
-    """
-    print(f"\n🔍 Fetching insurance documents for profile: {profile_id}")
-    try:
-        result = (
-            supabase
-            .table("medical_reports_processed")
-            .select(
-                "id, "
-                "file_path, "
-                "file_name, "
-                "extracted_text, "
-                "source_file_hash, "
-                "processed_at, "
-                "report_type"
-            )
-            .eq("profile_id", str(profile_id))
-            .eq("folder_type", "insurance")
-            .eq("processing_status", "completed")
-            .order("processed_at", desc=False)
-            .execute()
-        )
-        docs: list[dict] = result.data or []
-        print(f"✅ Found {len(docs)} insurance document(s)")
-        for d in docs:
-            doc_id_preview = str(d.get("id", ""))[:8]
-            print(f"   • {d.get('file_name')}  (id={doc_id_preview}…)")
-        return docs
- 
-    except Exception as e:
-        print(
-            f"❌ get_insurance_documents_for_profile failed "
-            f"for profile {profile_id}: {e}"
-        )
-        return []
-    
+
 if __name__ == "__main__":
     print("\n" + "="*60)
     test_connection()
