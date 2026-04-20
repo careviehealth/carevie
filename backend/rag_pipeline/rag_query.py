@@ -12,7 +12,7 @@ import numpy as np
 import tiktoken
 from openai import AsyncOpenAI
 
-from rag_pipeline.embed_store import load_index_and_chunks, EMBEDDING_DIM
+from rag_pipeline.embed_store import EMBEDDING_DIM, embed_texts, load_index_and_chunks
 from rag_pipeline.extract_metadata import (
     extract_metadata_with_llm,
     extract_metadata_fallback,
@@ -135,7 +135,8 @@ def smart_context_assembly(
     print(f"   Chunks/report: {chunks_per_rep}", flush=True)
 
     try:
-        query_emb = vectorizer.transform([query]).toarray()[0].astype("float32")
+        query_embeddings, _ = embed_texts([query], vectorizer=vectorizer, mode="query")
+        query_emb = np.asarray(query_embeddings[0], dtype="float32")
 
         # Pad embedding if necessary
         if len(query_emb) < EMBEDDING_DIM:

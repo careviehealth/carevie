@@ -1,6 +1,7 @@
 """
 Embedding and FAISS index layer for the medical RAG pipeline.
-Uses sentence-transformers (all-MiniLM-L6-v2) for dense 384-d embeddings.
+Uses sentence-transformers (intfloat/multilingual-e5-small) for dense
+384-d multilingual embeddings.
 """
 
 import os
@@ -12,7 +13,30 @@ from functools import lru_cache
 from sentence_transformers import SentenceTransformer
 
 EMBEDDING_DIM = 384
-_MODEL_NAME   = "all-MiniLM-L6-v2"
+EMBEDDING_SCHEMA_VERSION = "e5_v1"
+_MODEL_NAME   = "intfloat/multilingual-e5-small"
+_PASSAGE_PREFIX = "passage: "
+_QUERY_PREFIX   = "query: "
+
+
+def _prefix_for_mode(mode: str) -> str:
+    if mode == "query":
+        return _QUERY_PREFIX
+    if mode == "passage":
+        return _PASSAGE_PREFIX
+    raise ValueError(f"Unsupported embedding mode: {mode}")
+
+
+def _prepare_texts_for_mode(texts: List[str], mode: str) -> List[str]:
+    prefix = _prefix_for_mode(mode)
+    prepared: List[str] = []
+    for text in texts:
+        stripped = (text or "").strip()
+        if stripped:
+            prepared.append(f"{prefix}{stripped}")
+    return prepared
+
+
 @lru_cache(maxsize=1)
 def _get_global_sentence_transformer(model_name: str) -> SentenceTransformer:
     """Loads the model exactly once per process and holds it in memory."""
@@ -39,16 +63,24 @@ class SentenceTransformerVectorizer:
         return _get_global_sentence_transformer(self.model_name)
 
     def fit_transform(self, texts: List[str]) -> _DenseMatrix:
-        return self._encode(texts)
+        # Indexing path: treat chunks as passages for E5 models.
+        return self._encode(texts, mode="passage")
 
     def transform(self, texts: List[str]) -> _DenseMatrix:
-        return self._encode(texts)
+        # Backwards-compatible default. Query callsites should use transform_query.
+        return self._encode(texts, mode="passage")
 
-    def _encode(self, texts: List[str]) -> _DenseMatrix:
+    def transform_query(self, texts: List[str]) -> _DenseMatrix:
+        return self._encode(texts, mode="query")
+
+    def _encode(self, texts: List[str], mode: str = "passage") -> _DenseMatrix:
         model = self._get_model()
+        prepared_texts = _prepare_texts_for_mode(texts, mode=mode)
+        if not prepared_texts:
+            raise ValueError("All texts are empty after preprocessing")
         # normalize_embeddings=False since FAISS normalize_L2 handles normalisation
         embeddings = model.encode(
-            texts,
+            prepared_texts,
             normalize_embeddings=False,
             show_progress_bar=False,
             convert_to_numpy=True,
@@ -57,16 +89,25 @@ class SentenceTransformerVectorizer:
 
     def __getstate__(self):
         # Drop the live model; only the name is needed to reconstruct it post-unpickle
-        return {'model_name': self.model_name}
+        return {"model_name": self.model_name}
 
     def __setstate__(self, state):
-        self.model_name = state['model_name']
+        self.model_name = state.get("model_name", _MODEL_NAME)
         self._model = None
+
 
 def create_vectorizer() -> SentenceTransformerVectorizer:
     return SentenceTransformerVectorizer(_MODEL_NAME)
 
-def embed_texts(texts: List[str], vectorizer=None) -> tuple:
+def get_embedding_metadata() -> dict:
+    return {
+        "model_name": _MODEL_NAME,
+        "schema_version": EMBEDDING_SCHEMA_VERSION,
+        "embedding_dim": EMBEDDING_DIM,
+    }
+
+
+def embed_texts(texts: List[str], vectorizer=None, mode: str = "passage") -> tuple:
     """Embed a list of text chunks into 384-d float32 vectors."""
     print(f"\n📊 Embedding {len(texts)} chunks...", flush=True)
 
@@ -83,7 +124,10 @@ def embed_texts(texts: List[str], vectorizer=None) -> tuple:
     try:
         print("   🔧 Encoding with sentence-transformer...", flush=True)
 
-        embeddings_matrix = vectorizer.fit_transform(valid_texts).toarray()
+        if mode == "query":
+            embeddings_matrix = vectorizer.transform_query(valid_texts).toarray()
+        else:
+            embeddings_matrix = vectorizer.fit_transform(valid_texts).toarray()
 
         # Ensure model returns exactly EMBEDDING_DIM dimensions
         assert embeddings_matrix.shape[1] == EMBEDDING_DIM, (

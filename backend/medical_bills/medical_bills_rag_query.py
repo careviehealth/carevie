@@ -56,7 +56,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from rag_pipeline.clean_chunk import chunk_text_with_metadata, clean_text
-from rag_pipeline.embed_store import EMBEDDING_DIM, embed_texts, create_vectorizer
+from rag_pipeline.embed_store import (
+    EMBEDDING_DIM,
+    create_vectorizer,
+    embed_texts,
+    get_embedding_metadata,
+)
 from rag_pipeline.rag_query import call_llm
 
 
@@ -70,7 +75,7 @@ VECTOR_BASE_DIR: str = os.getenv(
 )
 
 TOP_K:                int   = int(os.getenv("MEDICAL_BILLS_RAG_TOP_K", "8"))
-MIN_SIMILARITY_SCORE: float = float(os.getenv("MEDICAL_BILLS_RAG_MIN_SCORE", "0.25"))
+MIN_SIMILARITY_SCORE: float = float(os.getenv("MEDICAL_BILLS_RAG_MIN_SCORE", "0.20"))
 
 # Smallest chunks in the suite — medical bills are the most line-item-dense
 CHUNK_MAX_WORDS:    int = 150
@@ -99,10 +104,14 @@ def _load_manifest(profile_id: str) -> dict:
     try:
         if os.path.exists(path):
             with open(path, "r", encoding="utf-8") as fh:
-                return json.load(fh)
+                raw = json.load(fh)
+                raw.setdefault("docs", {})
+                raw.setdefault("next_id", 0)
+                raw.setdefault("embedding", {})
+                return raw
     except Exception as exc:
         logger.warning("_load_manifest: failed for profile %s: %s", profile_id, exc)
-    return {"docs": {}, "next_id": 0}
+    return {"docs": {}, "next_id": 0, "embedding": {}}
 
 
 def _save_manifest(profile_id: str, manifest: dict) -> None:
@@ -112,6 +121,7 @@ def _save_manifest(profile_id: str, manifest: dict) -> None:
     dest = _manifest_path(profile_id)
     tmp  = dest + ".tmp"
     try:
+        manifest["embedding"] = get_embedding_metadata()
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(manifest, fh, indent=2)
         os.replace(tmp, dest)
@@ -129,6 +139,16 @@ def _doc_sig(doc: dict) -> str:
     return "{path}:{hash}".format(
         path=doc.get("file_path", ""),
         hash=doc.get("source_file_hash") or doc.get("id", ""),
+    )
+
+
+def _manifest_embedding_matches_current(manifest: dict) -> bool:
+    current = get_embedding_metadata()
+    stored = manifest.get("embedding") or {}
+    return (
+        stored.get("model_name") == current["model_name"]
+        and stored.get("schema_version") == current["schema_version"]
+        and int(stored.get("embedding_dim", -1)) == current["embedding_dim"]
     )
 
 
@@ -267,10 +287,14 @@ def _extract_text_for_doc(doc: dict, file_paths: dict[str, str]) -> str:
 # Embedding helper
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _embed_to_matrix(texts: list[str], vectorizer) -> tuple[np.ndarray, object]:
+def _embed_to_matrix(
+    texts: list[str],
+    vectorizer,
+    mode: str = "passage",
+) -> tuple[np.ndarray, object]:
     if vectorizer is None:
         vectorizer = create_vectorizer()
-    raw_embeddings, vectorizer = embed_texts(texts, vectorizer)
+    raw_embeddings, vectorizer = embed_texts(texts, vectorizer, mode=mode)
     matrix = np.stack(raw_embeddings).astype("float32")
     faiss.normalize_L2(matrix)
     return matrix, vectorizer
@@ -312,7 +336,7 @@ def _embed_and_add_docs(
             continue
 
         texts  = [c["text"] for c in doc_chunks]
-        matrix, vectorizer = _embed_to_matrix(texts, vectorizer)
+        matrix, vectorizer = _embed_to_matrix(texts, vectorizer, mode="passage")
 
         if index is None:
             base  = faiss.IndexFlatIP(EMBEDDING_DIM)
@@ -357,21 +381,39 @@ def update_medical_bills_index(
     -------
     (index, chunks_dict, vectorizer)
     """
-    to_add, to_remove = get_docs_delta(profile_id, docs)
+    manifest: dict = _load_manifest(profile_id)
+    embedding_mismatch = not _manifest_embedding_matches_current(manifest)
 
-    if not to_add and not to_remove and _index_artifacts_exist(profile_id):
+    if embedding_mismatch:
+        logger.info(
+            "update_medical_bills_index [profile=%s]: embedding metadata mismatch; "
+            "forcing full rebuild with current model.",
+            profile_id,
+        )
+        to_add, to_remove = list(docs), []
+    else:
+        to_add, to_remove = get_docs_delta(profile_id, docs)
+
+    if (
+        not embedding_mismatch
+        and not to_add
+        and not to_remove
+        and _index_artifacts_exist(profile_id)
+    ):
         logger.info(
             "update_medical_bills_index [profile=%s]: index up-to-date, loading from disk.",
             profile_id,
         )
         return _load_index(profile_id)
 
-    manifest:    dict            = _load_manifest(profile_id)
+    if embedding_mismatch:
+        manifest = {"docs": {}, "next_id": 0, "embedding": get_embedding_metadata()}
+
     chunks_dict: dict[int, dict] = {}
     vectorizer                   = None
     index: Optional[faiss.Index] = None
 
-    if _index_artifacts_exist(profile_id):
+    if _index_artifacts_exist(profile_id) and not embedding_mismatch:
         logger.info(
             "update_medical_bills_index [profile=%s]: loading existing index for incremental update.",
             profile_id,
@@ -452,7 +494,7 @@ def search_index(
     if not query or not query.strip():
         return []
 
-    query_matrix, _ = _embed_to_matrix([query.strip()], vectorizer)
+    query_matrix, _ = _embed_to_matrix([query.strip()], vectorizer, mode="query")
 
     actual_k = min(top_k, index.ntotal)
     if actual_k == 0:
