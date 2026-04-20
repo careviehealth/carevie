@@ -10,26 +10,22 @@ Usage:
 """
 
 import logging
-from platform_rag_query import run_platform_rag
+
+try:
+    from .platform_rag_query import run_platform_rag
+except ImportError:  # pragma: no cover - supports script-style execution
+    from platform_related.platform_rag_query import run_platform_rag
 
 logger = logging.getLogger(__name__)
 
 
 def handle_platform_query(user_question: str) -> dict:
-
     if not user_question or not user_question.strip():
         return {"success": False, "message": "Please type a question."}
 
     try:
         answer = run_platform_rag(user_question.strip())
         return {"success": True, "message": answer}
-    
-    except FileNotFoundError as exc:
-        logger.error("Vector store not found. Please run platform_rag_query.py first: %s", exc)
-        return {
-            "success": False,
-            "message": "System is not ready yet. Please contact support."
-        }    
 
     except Exception as exc:
         logger.exception("handle_platform_query error: %s", exc)

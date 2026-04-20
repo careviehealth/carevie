@@ -214,9 +214,22 @@ def handle_summary_related(message: str, profile_id: str) -> dict:
 
 
 def handle_platform_related(message: str) -> dict:
-    """Placeholder: Answer platform/FAQ queries about CareVie. No auth required."""
-    # TODO: Query FAQ knowledge base or platform support service
-    return {"success": True, "message": f"[PLACEHOLDER] Handling platform query: '{message}'"}
+    """Answer CareVie platform queries from the platform knowledge-base RAG."""
+    try:
+        from platform_related.platform_handler import handle_platform_query
+
+        result = handle_platform_query(message)
+        if isinstance(result, dict):
+            return result
+        return {"success": False, "message": "Platform pipeline returned an invalid response."}
+    except Exception as exc:
+        return {
+            "success": False,
+            "message": (
+                "I was unable to process your platform request right now. "
+                f"Please try again. (Error: {exc})"
+            ),
+        }
 
 
 def handle_greeting(message: str) -> dict:
