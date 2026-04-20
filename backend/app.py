@@ -5,8 +5,8 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from llm import get_reply
 import requests
+from intent_detector import detect_intent
 
 from internal_auth import authorize_internal_request
 
@@ -60,10 +60,22 @@ def chat():
         if not data or 'message' not in data:
             return jsonify({'success': False, 'reply': 'No message provided'}), 400
 
-        message = data['message']
-        reply = get_reply(message)
+        message = data.get('message', '')
+        profile_id = data.get('profile_id')
+        result = detect_intent(message=message, profile_id=profile_id)
 
-        return jsonify({'success': True, 'reply': reply}), 200
+        if not isinstance(result, dict):
+            return jsonify({
+                'success': False,
+                'reply': 'Assistant returned an invalid response format'
+            }), 500
+
+        success = bool(result.get('success', False))
+        reply = result.get('message')
+        if not isinstance(reply, str) or not reply.strip():
+            reply = 'Unable to process request'
+
+        return jsonify({'success': success, 'reply': reply}), 200
     except Exception as e:
         print(f"Error in chat endpoint: {e}")
         return jsonify({'success': False, 'reply': 'Unable to process request'}), 500
