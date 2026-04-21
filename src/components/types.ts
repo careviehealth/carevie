@@ -45,7 +45,12 @@ export interface HealthProfile {
   dateOfBirth: string; // YYYY-MM-DD
   bloodGroup: string;
   heightCm: number;
+  heightUnit?: HeightUnit;
+  heightFeet?: number | null;
+  heightInches?: number | null;
   weightKg: number;
+  weightUnit?: WeightUnit;
+  weightLbs?: number | null;
 
   // Multi-entry (optional)
   medications: Medication[];
@@ -69,3 +74,4 @@ export interface Editable<T> {
   data: T;
   isDirty: boolean;
 }
+import type { HeightUnit, WeightUnit } from "@/lib/healthMeasurements";

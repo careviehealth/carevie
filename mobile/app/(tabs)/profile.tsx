@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
+  StyleProp,
   StyleSheet,
   TextInput,
   View,
+  ViewStyle,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { MotiView } from 'moti';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { apiRequest } from '@/api/client';
 import { Text } from '@/components/Themed';
 import { Screen } from '@/components/Screen';
 import { MedicationsModal, type Medication } from '@/components/MedicationsModal';
@@ -36,6 +38,20 @@ import {
   logProfileActivity,
 } from '@/lib/profileActivity';
 import { toast } from '@/lib/toast';
+import {
+  cmToFeetAndInches,
+  computeBmiFromMetrics,
+  decimalFeetToFeetAndInches,
+  feetInchesToCm,
+  feetInchesToDecimalFeet,
+  inferHeightUnit,
+  inferWeightUnit,
+  kgToLbs,
+  lbsToKg,
+  sanitizeBoundedWholeNumberInput,
+  type HeightUnit,
+  type WeightUnit,
+} from '@/lib/healthMeasurements';
 import { profileRepository } from '@/repositories/profileRepository';
 import { TourAnchor } from '@/providers/OnboardingTourProvider';
 import { supabase, type User } from '@/lib/supabase';
@@ -150,7 +166,42 @@ function parseDOBToISO(value: string | null | undefined): string {
   return trimmed;
 }
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+function computeAgeFromDob(dobISO: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dobISO)) return null;
+  const birthDate = new Date(`${dobISO}T00:00:00`);
+  if (Number.isNaN(birthDate.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDelta = today.getMonth() - birthDate.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+  if (age < 0 || age > 130) return null;
+  return age;
+}
+
+function parseNullablePositiveNumber(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed <= 0) return Number.NaN;
+  return parsed;
+}
+
+function parseNullableWholeNumber(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^\d+$/.test(trimmed)) return Number.NaN;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0) return Number.NaN;
+  return parsed;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error && typeof error === 'object' && 'message' in error
+    ? String((error as { message: unknown }).message)
+    : fallback;
+}
 
 function AnimatedCard({
   children,
@@ -160,7 +211,7 @@ function AnimatedCard({
 }: {
   children: React.ReactNode;
   onPress?: () => void;
-  style?: any;
+  style?: StyleProp<ViewStyle>;
   delay?: number;
 }) {
   return (
@@ -196,6 +247,12 @@ export default function ProfileScreen() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [bloodGroup, setBloodGroup] = useState('');
   const [address, setAddress] = useState('');
+  const [heightCm, setHeightCm] = useState('');
+  const [heightFt, setHeightFt] = useState('');
+  const [heightUnit, setHeightUnit] = useState<HeightUnit>('cm');
+  const [weightKg, setWeightKg] = useState('');
+  const [weightLbs, setWeightLbs] = useState('');
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>('kg');
   const [bmi, setBmi] = useState('');
   const [age, setAge] = useState('');
 
@@ -225,6 +282,13 @@ export default function ProfileScreen() {
     phoneNumber: '',
     bloodGroup: '',
     address: '',
+    heightUnit: 'cm' as HeightUnit,
+    heightCm: '',
+    heightFeet: '',
+    heightInches: '',
+    weightUnit: 'kg' as WeightUnit,
+    weightKg: '',
+    weightLbs: '',
   });
 
   // Fetch from DB: profile-level fields from profiles + health fields from health
@@ -261,7 +325,7 @@ export default function ProfileScreen() {
       const { data: healthData, error: healthError } = await supabase
         .from('health')
         .select(
-          'date_of_birth, blood_group, current_diagnosed_condition, allergies, ongoing_treatments, bmi, age, previous_diagnosed_conditions, past_surgeries, childhood_illness, long_term_treatments, family_history'
+          'date_of_birth, blood_group, height_cm, height_ft, weight_kg, weight_lbs, current_diagnosed_condition, allergies, ongoing_treatments, bmi, age, previous_diagnosed_conditions, past_surgeries, childhood_illness, long_term_treatments, family_history'
         )
         .eq('profile_id', profileId)
         .maybeSingle();
@@ -272,6 +336,12 @@ export default function ProfileScreen() {
       if (healthData) {
         setDob(healthData.date_of_birth ?? '');
         setBloodGroup(healthData.blood_group ?? '');
+        setHeightCm(healthData.height_cm != null ? String(healthData.height_cm) : '');
+        setHeightFt(healthData.height_ft != null ? String(healthData.height_ft) : '');
+        setHeightUnit(inferHeightUnit(healthData.height_ft ?? null));
+        setWeightKg(healthData.weight_kg != null ? String(healthData.weight_kg) : '');
+        setWeightLbs(healthData.weight_lbs != null ? String(healthData.weight_lbs) : '');
+        setWeightUnit(inferWeightUnit(healthData.weight_lbs ?? null));
         setBmi(healthData.bmi != null ? String(healthData.bmi) : '');
         setAge(healthData.age != null ? String(healthData.age) : '');
         setConditions((healthData.current_diagnosed_condition as string[]) ?? []);
@@ -289,7 +359,7 @@ export default function ProfileScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user, userId, profileId, user?.phone]);
+  }, [user, userId, profileId]);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -343,7 +413,154 @@ export default function ProfileScreen() {
     return styles.badgeNeutral;
   }, [gender]);
 
+  const getPersonalDraftMeasurements = () => {
+    if (personalDraft.heightUnit === 'cm') {
+      const parsedHeightCm = parseNullablePositiveNumber(personalDraft.heightCm);
+      if (Number.isNaN(parsedHeightCm) || parsedHeightCm === null) {
+        return { error: 'Please enter a valid height in cm.' } as const;
+      }
+
+      if (personalDraft.weightUnit === 'kg') {
+        const parsedWeightKg = parseNullablePositiveNumber(personalDraft.weightKg);
+        if (Number.isNaN(parsedWeightKg) || parsedWeightKg === null) {
+          return { error: 'Please enter a valid weight in kg.' } as const;
+        }
+
+        return {
+          heightCm: parsedHeightCm,
+          heightFt: null,
+          weightKg: parsedWeightKg,
+          weightLbs: null,
+        } as const;
+      }
+
+      const parsedWeightLbs = parseNullablePositiveNumber(personalDraft.weightLbs);
+      if (Number.isNaN(parsedWeightLbs) || parsedWeightLbs === null) {
+        return { error: 'Please enter a valid weight in lbs.' } as const;
+      }
+
+      return {
+        heightCm: parsedHeightCm,
+        heightFt: null,
+        weightKg: lbsToKg(parsedWeightLbs),
+        weightLbs: parsedWeightLbs,
+      } as const;
+    }
+
+    const parsedHeightFeet = parseNullableWholeNumber(personalDraft.heightFeet);
+    const parsedHeightInches = personalDraft.heightInches.trim()
+      ? parseNullableWholeNumber(personalDraft.heightInches)
+      : 0;
+    if (
+      Number.isNaN(parsedHeightFeet) ||
+      Number.isNaN(parsedHeightInches) ||
+      parsedHeightFeet === null ||
+      parsedHeightInches === null ||
+      parsedHeightInches >= 12 ||
+      (parsedHeightFeet === 0 && parsedHeightInches === 0)
+    ) {
+      return { error: 'Please enter a valid height in feet and inches.' } as const;
+    }
+
+    if (personalDraft.weightUnit === 'kg') {
+      const parsedWeightKg = parseNullablePositiveNumber(personalDraft.weightKg);
+      if (Number.isNaN(parsedWeightKg) || parsedWeightKg === null) {
+        return { error: 'Please enter a valid weight in kg.' } as const;
+      }
+
+      return {
+        heightCm: feetInchesToCm(parsedHeightFeet, parsedHeightInches),
+        heightFt: feetInchesToDecimalFeet(parsedHeightFeet, parsedHeightInches),
+        weightKg: parsedWeightKg,
+        weightLbs: null,
+      } as const;
+    }
+
+    const parsedWeightLbs = parseNullablePositiveNumber(personalDraft.weightLbs);
+    if (Number.isNaN(parsedWeightLbs) || parsedWeightLbs === null) {
+      return { error: 'Please enter a valid weight in lbs.' } as const;
+    }
+
+    return {
+      heightCm: feetInchesToCm(parsedHeightFeet, parsedHeightInches),
+      heightFt: feetInchesToDecimalFeet(parsedHeightFeet, parsedHeightInches),
+      weightKg: lbsToKg(parsedWeightLbs),
+      weightLbs: parsedWeightLbs,
+    } as const;
+  };
+
+  const updatePersonalDraftHeightUnit = (nextUnit: HeightUnit) => {
+    if (nextUnit === personalDraft.heightUnit) return;
+    if (nextUnit === 'ft_in') {
+      const parsedHeightCm = parseNullablePositiveNumber(personalDraft.heightCm);
+      if (parsedHeightCm && !Number.isNaN(parsedHeightCm)) {
+        const converted = cmToFeetAndInches(parsedHeightCm);
+        setPersonalDraft((prev) => ({
+          ...prev,
+          heightUnit: nextUnit,
+          heightFeet: String(converted.feet),
+          heightInches: String(converted.inches),
+        }));
+        return;
+      }
+    } else {
+      const parsedHeightFeet = parseNullableWholeNumber(personalDraft.heightFeet);
+      const parsedHeightInches = personalDraft.heightInches.trim()
+        ? parseNullableWholeNumber(personalDraft.heightInches)
+        : 0;
+      if (
+        parsedHeightFeet !== null &&
+        parsedHeightInches !== null &&
+        !Number.isNaN(parsedHeightFeet) &&
+        !Number.isNaN(parsedHeightInches) &&
+        parsedHeightInches < 12
+      ) {
+        setPersonalDraft((prev) => ({
+          ...prev,
+          heightUnit: nextUnit,
+          heightCm: String(feetInchesToCm(parsedHeightFeet, parsedHeightInches)),
+        }));
+        return;
+      }
+    }
+    setPersonalDraft((prev) => ({ ...prev, heightUnit: nextUnit }));
+  };
+
+  const updatePersonalDraftWeightUnit = (nextUnit: WeightUnit) => {
+    if (nextUnit === personalDraft.weightUnit) return;
+    if (nextUnit === 'lbs') {
+      const parsedWeightKg = parseNullablePositiveNumber(personalDraft.weightKg);
+      if (parsedWeightKg && !Number.isNaN(parsedWeightKg)) {
+        setPersonalDraft((prev) => ({
+          ...prev,
+          weightUnit: nextUnit,
+          weightLbs: String(kgToLbs(parsedWeightKg)),
+        }));
+        return;
+      }
+    } else {
+      const parsedWeightLbs = parseNullablePositiveNumber(personalDraft.weightLbs);
+      if (parsedWeightLbs && !Number.isNaN(parsedWeightLbs)) {
+        setPersonalDraft((prev) => ({
+          ...prev,
+          weightUnit: nextUnit,
+          weightKg: String(lbsToKg(parsedWeightLbs)),
+        }));
+        return;
+      }
+    }
+    setPersonalDraft((prev) => ({ ...prev, weightUnit: nextUnit }));
+  };
+
   const openPersonalModal = () => {
+    const parsedHeightFt = parseNullablePositiveNumber(heightFt);
+    const parsedHeightCm = parseNullablePositiveNumber(heightCm);
+    const heightParts =
+      parsedHeightFt && !Number.isNaN(parsedHeightFt)
+        ? decimalFeetToFeetAndInches(parsedHeightFt)
+        : parsedHeightCm && !Number.isNaN(parsedHeightCm)
+          ? cmToFeetAndInches(parsedHeightCm)
+          : { feet: 0, inches: 0 };
     setPersonalDraft({
       userName,
       gender,
@@ -351,6 +568,13 @@ export default function ProfileScreen() {
       phoneNumber,
       bloodGroup,
       address,
+      heightUnit,
+      heightCm,
+      heightFeet: heightParts.feet ? String(heightParts.feet) : '',
+      heightInches: heightParts.inches ? String(heightParts.inches) : '',
+      weightUnit,
+      weightKg,
+      weightLbs,
     });
     setPersonalModalOpen(true);
   };
@@ -361,6 +585,11 @@ export default function ProfileScreen() {
       return;
     }
     const dobISO = parseDOBToISO(personalDraft.dob);
+    const measurements = getPersonalDraftMeasurements();
+    if ('error' in measurements) {
+      toast.error('Error', measurements.error);
+      return;
+    }
     const { error: profileError } = await supabase
       .from('profiles')
       .update({
@@ -371,16 +600,57 @@ export default function ProfileScreen() {
         updated_at: new Date().toISOString(),
       })
       .eq('id', profileId);
-    const { error: healthError } = await supabase
-      .from('health')
-      .update({
-        date_of_birth: dobISO || null,
-        blood_group: personalDraft.bloodGroup.trim() || null,
-      })
-      .eq('profile_id', profileId);
+    if (profileError) {
+      toast.error('Error', profileError.message);
+      return;
+    }
+    const healthPayload = {
+      profileId,
+      dateOfBirth: dobISO || '',
+      bloodGroup: personalDraft.bloodGroup.trim() || '',
+      heightUnit: personalDraft.heightUnit,
+      heightCm: measurements.heightCm,
+      heightFeet:
+        personalDraft.heightUnit === 'ft_in'
+          ? parseNullableWholeNumber(personalDraft.heightFeet)
+          : null,
+      heightInches:
+        personalDraft.heightUnit === 'ft_in'
+          ? personalDraft.heightInches.trim()
+            ? parseNullableWholeNumber(personalDraft.heightInches)
+            : 0
+          : null,
+      weightUnit: personalDraft.weightUnit,
+      weightKg: measurements.weightKg,
+      weightLbs:
+        personalDraft.weightUnit === 'lbs'
+          ? parseNullablePositiveNumber(personalDraft.weightLbs)
+          : null,
+      currentDiagnosedCondition: conditions.map((item) => item.trim()).filter(Boolean),
+      allergies: allergy.map((item) => item.trim()).filter(Boolean),
+      ongoingTreatments: treatment.map((item) => item.trim()).filter(Boolean),
+      currentMedication: currentMedications,
+      previousDiagnosedConditions: previousDiagnosedCondition.map((item) => item.trim()).filter(Boolean),
+      pastSurgeries,
+      childhoodIllness: childhoodIllness.map((item) => item.trim()).filter(Boolean),
+      longTermTreatments: longTermTreatments.map((item) => item.trim()).filter(Boolean),
+    };
 
-    if (profileError || healthError) {
-      toast.error('Error', (profileError ?? healthError)?.message ?? 'Failed to save');
+    let healthErrorMessage: string | null = null;
+    try {
+      await apiRequest<{ ok: boolean }>('/api/health-profile', {
+        method: 'POST',
+        body: healthPayload,
+      });
+    } catch (error) {
+      healthErrorMessage =
+        error && typeof error === 'object' && 'message' in error
+          ? String((error as { message: unknown }).message)
+          : 'Failed to save health profile';
+    }
+
+    if (healthErrorMessage) {
+      toast.error('Error', healthErrorMessage);
       return;
     }
     setUserName(personalDraft.userName.trim());
@@ -389,6 +659,18 @@ export default function ProfileScreen() {
     setPhoneNumber(personalDraft.phoneNumber);
     setBloodGroup(personalDraft.bloodGroup);
     setAddress(personalDraft.address);
+    setHeightCm(String(measurements.heightCm));
+    setHeightFt(measurements.heightFt != null ? String(measurements.heightFt) : '');
+    setHeightUnit(personalDraft.heightUnit);
+    setWeightKg(String(measurements.weightKg));
+    setWeightLbs(measurements.weightLbs != null ? String(measurements.weightLbs) : '');
+    setWeightUnit(personalDraft.weightUnit);
+    setAge(computeAgeFromDob(dobISO) != null ? String(computeAgeFromDob(dobISO)) : '');
+    setBmi(
+      computeBmiFromMetrics(measurements.heightCm, measurements.weightKg) != null
+        ? String(computeBmiFromMetrics(measurements.heightCm, measurements.weightKg))
+        : ''
+    );
     setPersonalModalOpen(false);
     toast.success('Saved', 'Personal information updated.');
   };
@@ -478,9 +760,9 @@ export default function ProfileScreen() {
       });
 
       setCurrentMedications(updatedMedications);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Add medication error:', error);
-      toast.error('Save failed', error?.message || 'Please try again.');
+      toast.error('Save failed', getErrorMessage(error, 'Please try again.'));
     }
   };
 
@@ -549,9 +831,9 @@ export default function ProfileScreen() {
       });
 
       setCurrentMedications(updatedMedications);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Update medication error:', error);
-      toast.error('Update failed', error?.message || 'Please try again.');
+      toast.error('Update failed', getErrorMessage(error, 'Please try again.'));
     }
   };
 
@@ -591,9 +873,9 @@ export default function ProfileScreen() {
       });
 
       setCurrentMedications(updatedMedications);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Delete medication error:', error);
-      toast.error('Delete failed', error?.message || 'Please try again.');
+      toast.error('Delete failed', getErrorMessage(error, 'Please try again.'));
     }
   };
 
@@ -657,9 +939,9 @@ export default function ProfileScreen() {
       if (error) throw error;
 
       setCurrentMedications(updatedMedications);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to log dose:', error);
-      toast.error('Log failed', error?.message || 'Please try again.');
+      toast.error('Log failed', getErrorMessage(error, 'Please try again.'));
     }
   };
 
@@ -870,9 +1152,9 @@ export default function ProfileScreen() {
       } else {
         toast.success('Exported', `PDF saved to: ${uri}`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Export PDF error:', error);
-      toast.error('Export failed', error?.message || 'Unable to export PDF.');
+      toast.error('Export failed', getErrorMessage(error, 'Unable to export PDF.'));
     }
   };
 
@@ -1220,6 +1502,8 @@ export default function ProfileScreen() {
         draft={personalDraft}
         setDraft={setPersonalDraft}
         bmi={bmi}
+        onHeightUnitChange={updatePersonalDraftHeightUnit}
+        onWeightUnitChange={updatePersonalDraftWeightUnit}
         onClose={() => setPersonalModalOpen(false)}
         onSave={savePersonal}
       />
@@ -1304,6 +1588,13 @@ type PersonalDraft = {
   phoneNumber: string;
   bloodGroup: string;
   address: string;
+  heightUnit: HeightUnit;
+  heightCm: string;
+  heightFeet: string;
+  heightInches: string;
+  weightUnit: WeightUnit;
+  weightKg: string;
+  weightLbs: string;
 };
 
 function PersonalInfoModal({
@@ -1311,6 +1602,8 @@ function PersonalInfoModal({
   draft,
   setDraft,
   bmi,
+  onHeightUnitChange,
+  onWeightUnitChange,
   onClose,
   onSave,
 }: {
@@ -1318,6 +1611,8 @@ function PersonalInfoModal({
   draft: PersonalDraft;
   setDraft: React.Dispatch<React.SetStateAction<PersonalDraft>>;
   bmi: string;
+  onHeightUnitChange: (unit: HeightUnit) => void;
+  onWeightUnitChange: (unit: WeightUnit) => void;
   onClose: () => void;
   onSave: () => void;
 }) {
@@ -1329,27 +1624,18 @@ function PersonalInfoModal({
   const [dobYearOpen, setDobYearOpen] = useState(false);
   const [dobMonth, setDobMonth] = useState<number | null>(null);
   const [dobYear, setDobYear] = useState<number | null>(null);
-  const [calendarKey, setCalendarKey] = useState(0);
-  const [calendarCurrentOverride, setCalendarCurrentOverride] = useState<string | null>(null);
 
   const selectedDobIso = useMemo(() => parseDOBToISO(draft.dob), [draft.dob]);
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], []);
-  useEffect(() => {
-    if (!dobOpen) return;
+  const openDobPicker = () => {
     const source = selectedDobIso || todayIso;
     const [y, m] = source.split('-').map((part) => parseInt(part, 10));
     if (!Number.isNaN(y) && !Number.isNaN(m)) {
       setDobYear(y);
       setDobMonth(m);
     }
-  }, [dobOpen, selectedDobIso, todayIso]);
-
-  useEffect(() => {
-    if (!dobOpen || !dobYear || !dobMonth) return;
-    const next = `${dobYear}-${String(dobMonth).padStart(2, '0')}-01`;
-    setCalendarCurrentOverride((prev) => (prev === next ? prev : next));
-    setCalendarKey((k) => k + 1);
-  }, [dobMonth, dobOpen, dobYear]);
+    setDobOpen(true);
+  };
 
   const markedDates = useMemo(() => {
     if (!selectedDobIso) return undefined;
@@ -1358,8 +1644,11 @@ function PersonalInfoModal({
     } as Record<string, { selected: boolean; selectedColor: string }>;
   }, [selectedDobIso, themeColors.accentStrong]);
   const calendarCurrent = useMemo(() => {
-    return calendarCurrentOverride || selectedDobIso || todayIso;
-  }, [calendarCurrentOverride, selectedDobIso, todayIso]);
+    if (dobOpen && dobYear && dobMonth) {
+      return `${dobYear}-${String(dobMonth).padStart(2, '0')}-01`;
+    }
+    return selectedDobIso || todayIso;
+  }, [dobMonth, dobOpen, dobYear, selectedDobIso, todayIso]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -1382,7 +1671,7 @@ function PersonalInfoModal({
             </View>
             <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
             <InputRow label="Full name" value={draft.userName} onChange={(v) => setDraft((p) => ({ ...p, userName: v }))} placeholder="Full name" />
-            <Pressable onPress={() => setDobOpen(true)}>
+            <Pressable onPress={openDobPicker}>
               <View pointerEvents="none">
                 <InputRow label="Date of birth" value={draft.dob} placeholder="DD-MM-YYYY" editable={false} />
               </View>
@@ -1423,6 +1712,145 @@ function PersonalInfoModal({
             </View>
             <InputRow label="Address" value={draft.address} onChange={(v) => setDraft((p) => ({ ...p, address: v }))} placeholder="Address" multiline />
             <InputRow label="Phone (read-only)" value={draft.phoneNumber} placeholder="Phone" editable={false} />
+            <View style={styles.inputRow}>
+              <Text style={[styles.inputLabel, { color: themeColors.accentStrong }]}>Height</Text>
+              <View style={styles.unitToggleRow}>
+                {(['cm', 'ft_in'] as HeightUnit[]).map((unit) => {
+                  const active = draft.heightUnit === unit;
+                  return (
+                    <Pressable
+                      key={unit}
+                      onPress={() => onHeightUnitChange(unit)}
+                      style={[
+                        styles.unitToggleBtn,
+                        active && {
+                          backgroundColor: themeColors.accentSoft,
+                          borderColor: themeColors.accentStrong,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.unitToggleBtnText,
+                          active && { color: themeColors.accentStrong },
+                        ]}
+                      >
+                        {unit === 'cm' ? 'cm' : 'ft/in'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {draft.heightUnit === 'cm' ? (
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      borderColor: themeColors.border,
+                      backgroundColor: themeColors.inputBackground,
+                      color: themeColors.textPrimary,
+                    },
+                  ]}
+                  value={draft.heightCm}
+                  onChangeText={(value) => setDraft((prev) => ({ ...prev, heightCm: value }))}
+                  placeholder="e.g. 170"
+                  placeholderTextColor={themeColors.textTertiary}
+                  keyboardType="decimal-pad"
+                />
+              ) : (
+                <View style={styles.dualInputRow}>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      styles.dualInput,
+                      {
+                        borderColor: themeColors.border,
+                        backgroundColor: themeColors.inputBackground,
+                        color: themeColors.textPrimary,
+                      },
+                    ]}
+                    value={draft.heightFeet}
+                    onChangeText={(value) =>
+                      setDraft((prev) => ({ ...prev, heightFeet: value.replace(/\D/g, '') }))
+                    }
+                    placeholder="Feet"
+                    placeholderTextColor={themeColors.textTertiary}
+                    keyboardType="number-pad"
+                  />
+                  <TextInput
+                    style={[
+                      styles.input,
+                      styles.dualInput,
+                      {
+                        borderColor: themeColors.border,
+                        backgroundColor: themeColors.inputBackground,
+                        color: themeColors.textPrimary,
+                      },
+                    ]}
+                    value={draft.heightInches}
+                    onChangeText={(value) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        heightInches: sanitizeBoundedWholeNumberInput(value, 11),
+                      }))
+                    }
+                    placeholder="Inches"
+                    placeholderTextColor={themeColors.textTertiary}
+                    keyboardType="number-pad"
+                  />
+                </View>
+              )}
+            </View>
+            <View style={styles.inputRow}>
+              <Text style={[styles.inputLabel, { color: themeColors.accentStrong }]}>Weight</Text>
+              <View style={styles.unitToggleRow}>
+                {(['kg', 'lbs'] as WeightUnit[]).map((unit) => {
+                  const active = draft.weightUnit === unit;
+                  return (
+                    <Pressable
+                      key={unit}
+                      onPress={() => onWeightUnitChange(unit)}
+                      style={[
+                        styles.unitToggleBtn,
+                        active && {
+                          backgroundColor: themeColors.accentSoft,
+                          borderColor: themeColors.accentStrong,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.unitToggleBtnText,
+                          active && { color: themeColors.accentStrong },
+                        ]}
+                      >
+                        {unit}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    borderColor: themeColors.border,
+                    backgroundColor: themeColors.inputBackground,
+                    color: themeColors.textPrimary,
+                  },
+                ]}
+                value={draft.weightUnit === 'kg' ? draft.weightKg : draft.weightLbs}
+                onChangeText={(value) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    ...(prev.weightUnit === 'kg' ? { weightKg: value } : { weightLbs: value }),
+                  }))
+                }
+                placeholder={draft.weightUnit === 'kg' ? 'e.g. 65' : 'e.g. 143'}
+                placeholderTextColor={themeColors.textTertiary}
+                keyboardType="decimal-pad"
+              />
+            </View>
             <InputRow label="BMI (read-only)" value={bmi} editable={false} />
           </ScrollView>
           <View style={styles.modalFooter}>
@@ -1579,7 +2007,6 @@ function PersonalInfoModal({
                 </View>
               </View>
               <Calendar
-                key={`dob-cal-${calendarKey}`}
                 current={calendarCurrent}
                 markedDates={markedDates}
                 onDayPress={(day) => {
@@ -2583,6 +3010,28 @@ const styles = StyleSheet.create({
     color: '#334155',
     marginBottom: 6,
   },
+  unitToggleRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  unitToggleBtn: {
+    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+  },
+  unitToggleBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#475569',
+  },
   input: {
     borderWidth: 1,
     borderColor: '#cbd5e1',
@@ -2592,6 +3041,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#111827',
     backgroundColor: '#f8fafc',
+  },
+  dualInputRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  dualInput: {
+    flex: 1,
   },
   inputMultiline: {
     minHeight: 72,

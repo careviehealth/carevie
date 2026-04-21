@@ -13,6 +13,20 @@ import jsPDF from 'jspdf';
 import { useAppProfile } from '@/components/AppProfileProvider';
 import { syncRememberedAccountName } from '@/lib/rememberedAccount';
 import {
+  cmToFeetAndInches,
+  computeBmiFromMetrics,
+  decimalFeetToFeetAndInches,
+  feetInchesToCm,
+  feetInchesToDecimalFeet,
+  inferHeightUnit,
+  inferWeightUnit,
+  kgToLbs,
+  lbsToKg,
+  sanitizeBoundedWholeNumberInput,
+  type HeightUnit,
+  type WeightUnit,
+} from '@/lib/healthMeasurements';
+import {
   MEDICATION_MEAL_OPTIONS,
   countMedicationMealTiming,
   deriveMedicationMealTiming,
@@ -101,7 +115,11 @@ export default function ProfilePageUI() {
   const [bloodGroup, setBloodGroup] = useState("");
   const [address, setAddress] = useState("");
   const [heightCm, setHeightCm] = useState("");
+  const [heightFt, setHeightFt] = useState("");
+  const [heightUnit, setHeightUnit] = useState<HeightUnit>("cm");
   const [weightKg, setWeightKg] = useState("");
+  const [weightLbs, setWeightLbs] = useState("");
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
   const [bmi, setBmi] = useState("");
   const [age, setAge] = useState("");
   const [personalDraft, setPersonalDraft] = useState({
@@ -111,8 +129,13 @@ export default function ProfilePageUI() {
     phoneNumber: "",
     bloodGroup: "",
     address: "",
+    heightUnit: "cm" as HeightUnit,
     heightCm: "",
+    heightFeet: "",
+    heightInches: "",
+    weightUnit: "kg" as WeightUnit,
     weightKg: "",
+    weightLbs: "",
   });
 
   const normalizedGender = gender.trim().toLowerCase();
@@ -431,6 +454,15 @@ export default function ProfilePageUI() {
     return parsed;
   };
 
+  const parseNullableWholeNumber = (raw: string): number | null => {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    if (!/^\d+$/.test(trimmed)) return Number.NaN;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) return Number.NaN;
+    return parsed;
+  };
+
   const computeAgeFromDob = (dobISO: string): number | null => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dobISO)) return null;
     const birthDate = new Date(`${dobISO}T00:00:00`);
@@ -445,15 +477,151 @@ export default function ProfilePageUI() {
     return computedAge;
   };
 
-  const computeBmiFromMetrics = (nextHeightCm: number | null, nextWeightKg: number | null): number | null => {
-    if (!nextHeightCm || !nextWeightKg) return null;
-    if (nextHeightCm < 50 || nextHeightCm > 260) return null;
-    if (nextWeightKg < 10 || nextWeightKg > 400) return null;
-    const h = nextHeightCm / 100;
-    return Math.round((nextWeightKg / (h * h)) * 10) / 10;
+  const getPersonalDraftMeasurements = () => {
+    if (personalDraft.heightUnit === "cm") {
+      const parsedHeightCm = parseNullablePositiveNumber(personalDraft.heightCm);
+      if (Number.isNaN(parsedHeightCm)) {
+        return { error: "Please enter a valid height in cm." } as const;
+      }
+
+      if (personalDraft.weightUnit === "kg") {
+        const parsedWeightKg = parseNullablePositiveNumber(personalDraft.weightKg);
+        if (Number.isNaN(parsedWeightKg)) {
+          return { error: "Please enter a valid weight in kg." } as const;
+        }
+
+        return {
+          heightCm: parsedHeightCm,
+          heightFt: null,
+          weightKg: parsedWeightKg,
+          weightLbs: null,
+        } as const;
+      }
+
+      const parsedWeightLbs = parseNullablePositiveNumber(personalDraft.weightLbs);
+      if (Number.isNaN(parsedWeightLbs)) {
+        return { error: "Please enter a valid weight in lbs." } as const;
+      }
+
+      return {
+        heightCm: parsedHeightCm,
+        heightFt: null,
+        weightKg: parsedWeightLbs !== null ? lbsToKg(parsedWeightLbs) : null,
+        weightLbs: parsedWeightLbs,
+      } as const;
+    }
+
+    const parsedHeightFeet = parseNullableWholeNumber(personalDraft.heightFeet);
+    const parsedHeightInches = personalDraft.heightInches.trim()
+      ? parseNullableWholeNumber(personalDraft.heightInches)
+      : 0;
+    if (
+      Number.isNaN(parsedHeightFeet) ||
+      Number.isNaN(parsedHeightInches) ||
+      parsedHeightFeet === null ||
+      parsedHeightInches === null ||
+      parsedHeightInches >= 12 ||
+      (parsedHeightFeet === 0 && parsedHeightInches === 0)
+    ) {
+      return { error: "Please enter a valid height in feet and inches." } as const;
+    }
+
+    if (personalDraft.weightUnit === "kg") {
+      const parsedWeightKg = parseNullablePositiveNumber(personalDraft.weightKg);
+      if (Number.isNaN(parsedWeightKg)) {
+        return { error: "Please enter a valid weight in kg." } as const;
+      }
+
+      return {
+        heightCm: feetInchesToCm(parsedHeightFeet, parsedHeightInches),
+        heightFt: feetInchesToDecimalFeet(parsedHeightFeet, parsedHeightInches),
+        weightKg: parsedWeightKg,
+        weightLbs: null,
+      } as const;
+    }
+
+    const parsedWeightLbs = parseNullablePositiveNumber(personalDraft.weightLbs);
+    if (Number.isNaN(parsedWeightLbs)) {
+      return { error: "Please enter a valid weight in lbs." } as const;
+    }
+
+    return {
+      heightCm: feetInchesToCm(parsedHeightFeet, parsedHeightInches),
+      heightFt: feetInchesToDecimalFeet(parsedHeightFeet, parsedHeightInches),
+      weightKg: parsedWeightLbs !== null ? lbsToKg(parsedWeightLbs) : null,
+      weightLbs: parsedWeightLbs,
+    } as const;
+  };
+
+  const handlePersonalDraftHeightUnitChange = (nextUnit: HeightUnit) => {
+    if (nextUnit === personalDraft.heightUnit) return;
+    if (nextUnit === "ft_in") {
+      const parsedHeightCm = parseNullablePositiveNumber(personalDraft.heightCm);
+      if (parsedHeightCm && !Number.isNaN(parsedHeightCm)) {
+        const converted = cmToFeetAndInches(parsedHeightCm);
+        updatePersonalDraft({
+          heightUnit: nextUnit,
+          heightFeet: String(converted.feet),
+          heightInches: String(converted.inches),
+        });
+        return;
+      }
+    } else {
+      const parsedHeightFeet = parseNullableWholeNumber(personalDraft.heightFeet);
+      const parsedHeightInches = personalDraft.heightInches.trim()
+        ? parseNullableWholeNumber(personalDraft.heightInches)
+        : 0;
+      if (
+        parsedHeightFeet !== null &&
+        parsedHeightInches !== null &&
+        !Number.isNaN(parsedHeightFeet) &&
+        !Number.isNaN(parsedHeightInches) &&
+        parsedHeightInches < 12
+      ) {
+        updatePersonalDraft({
+          heightUnit: nextUnit,
+          heightCm: String(feetInchesToCm(parsedHeightFeet, parsedHeightInches)),
+        });
+        return;
+      }
+    }
+    updatePersonalDraft({ heightUnit: nextUnit });
+  };
+
+  const handlePersonalDraftWeightUnitChange = (nextUnit: WeightUnit) => {
+    if (nextUnit === personalDraft.weightUnit) return;
+    if (nextUnit === "lbs") {
+      const parsedWeightKg = parseNullablePositiveNumber(personalDraft.weightKg);
+      if (parsedWeightKg && !Number.isNaN(parsedWeightKg)) {
+        updatePersonalDraft({
+          weightUnit: nextUnit,
+          weightLbs: String(kgToLbs(parsedWeightKg)),
+        });
+        return;
+      }
+    } else {
+      const parsedWeightLbs = parseNullablePositiveNumber(personalDraft.weightLbs);
+      if (parsedWeightLbs && !Number.isNaN(parsedWeightLbs)) {
+        updatePersonalDraft({
+          weightUnit: nextUnit,
+          weightKg: String(lbsToKg(parsedWeightLbs)),
+        });
+        return;
+      }
+    }
+    updatePersonalDraft({ weightUnit: nextUnit });
   };
 
   const openPersonalInfoModal = () => {
+    const parsedHeightFt = parseNullablePositiveNumber(heightFt);
+    const fallbackHeightCm = parseNullablePositiveNumber(heightCm);
+    const heightParts =
+      parsedHeightFt && !Number.isNaN(parsedHeightFt)
+        ? decimalFeetToFeetAndInches(parsedHeightFt)
+        : fallbackHeightCm && !Number.isNaN(fallbackHeightCm)
+          ? cmToFeetAndInches(fallbackHeightCm)
+          : { feet: 0, inches: 0 };
+
     setPersonalDraft({
       userName,
       gender,
@@ -461,8 +629,13 @@ export default function ProfilePageUI() {
       phoneNumber,
       bloodGroup,
       address,
+      heightUnit,
       heightCm,
+      heightFeet: heightParts.feet ? String(heightParts.feet) : "",
+      heightInches: heightParts.inches ? String(heightParts.inches) : "",
+      weightUnit,
       weightKg,
+      weightLbs,
     });
     setIsPersonalInfoModalOpen(true);
   };
@@ -677,7 +850,9 @@ useEffect(() => {
         medications: Medication[] | null;
         current_medication: Medication[] | null;
         height_cm: number | string | null;
+        height_ft: number | string | null;
         weight_kg: number | string | null;
+        weight_lbs: number | string | null;
         bmi: number | string | null;
         age: number | string | null;
         previous_diagnosed_conditions: string[] | null;
@@ -700,11 +875,31 @@ useEffect(() => {
             ? String(cachedHealth.height_cm)
             : ''
         );
+        setHeightFt(
+          cachedHealth.height_ft !== null && cachedHealth.height_ft !== undefined
+            ? String(cachedHealth.height_ft)
+            : ''
+        );
+        setHeightUnit(inferHeightUnit(
+          cachedHealth.height_ft !== null && cachedHealth.height_ft !== undefined
+            ? Number(cachedHealth.height_ft)
+            : null
+        ));
         setWeightKg(
           cachedHealth.weight_kg !== null && cachedHealth.weight_kg !== undefined
             ? String(cachedHealth.weight_kg)
             : ''
         );
+        setWeightLbs(
+          cachedHealth.weight_lbs !== null && cachedHealth.weight_lbs !== undefined
+            ? String(cachedHealth.weight_lbs)
+            : ''
+        );
+        setWeightUnit(inferWeightUnit(
+          cachedHealth.weight_lbs !== null && cachedHealth.weight_lbs !== undefined
+            ? Number(cachedHealth.weight_lbs)
+            : null
+        ));
         setBmi(
           cachedHealth.bmi !== null && cachedHealth.bmi !== undefined
             ? String(cachedHealth.bmi)
@@ -733,7 +928,9 @@ useEffect(() => {
             ongoing_treatments,
             current_medication,
             height_cm,
+            height_ft,
             weight_kg,
+            weight_lbs,
             bmi,
             age,
             previous_diagnosed_conditions,
@@ -791,9 +988,17 @@ useEffect(() => {
         setHeightCm(
           data.height_cm !== null && data.height_cm !== undefined ? String(data.height_cm) : ""
         );
+        setHeightFt(
+          data.height_ft !== null && data.height_ft !== undefined ? String(data.height_ft) : ""
+        );
+        setHeightUnit(inferHeightUnit(data.height_ft ?? null));
         setWeightKg(
           data.weight_kg !== null && data.weight_kg !== undefined ? String(data.weight_kg) : ""
         );
+        setWeightLbs(
+          data.weight_lbs !== null && data.weight_lbs !== undefined ? String(data.weight_lbs) : ""
+        );
+        setWeightUnit(inferWeightUnit(data.weight_lbs ?? null));
         setBmi(data.bmi !== null && data.bmi !== undefined ? String(data.bmi) : "");
         setAge(data.age !== null && data.age !== undefined ? String(data.age) : "");
         setBloodGroup(data.blood_group || "");
@@ -812,7 +1017,9 @@ useEffect(() => {
           medications: resolvedMedicationList,
           current_medication: legacyMedicationList,
           height_cm: data.height_cm ?? null,
+          height_ft: data.height_ft ?? null,
           weight_kg: data.weight_kg ?? null,
+          weight_lbs: data.weight_lbs ?? null,
           bmi: data.bmi ?? null,
           age: data.age ?? null,
           previous_diagnosed_conditions: (data.previous_diagnosed_conditions as string[]) || [],
@@ -1425,18 +1632,16 @@ useEffect(() => {
                     alert("Please select a profile first.");
                     return;
                   }
-                  const parsedHeightCm = parseNullablePositiveNumber(personalDraft.heightCm);
-                  const parsedWeightKg = parseNullablePositiveNumber(personalDraft.weightKg);
-                  if (Number.isNaN(parsedHeightCm)) {
-                    alert("Please enter a valid height in cm.");
-                    return;
-                  }
-                  if (Number.isNaN(parsedWeightKg)) {
-                    alert("Please enter a valid weight in kg.");
+                  const measurements = getPersonalDraftMeasurements();
+                  if ("error" in measurements) {
+                    alert(measurements.error);
                     return;
                   }
                   const computedAge = computeAgeFromDob(personalDraft.dob);
-                  const computedBmi = computeBmiFromMetrics(parsedHeightCm, parsedWeightKg);
+                  const computedBmi = computeBmiFromMetrics(
+                    measurements.heightCm,
+                    measurements.weightKg
+                  );
                   const personalData = {
                     display_name: personalDraft.userName,
                     phone: personalDraft.phoneNumber,
@@ -1447,26 +1652,79 @@ useEffect(() => {
                     .from("profiles")
                     .update(personalData)
                     .eq("id", profileId);
-                  const { error: healthError } = await supabase
-                    .from("health")
-                    .upsert(
-                      {
-                        profile_id: profileId,
-                        user_id: userId,
-                        date_of_birth: personalDraft.dob,
-                        blood_group: personalDraft.bloodGroup,
-                        height_cm: parsedHeightCm,
-                        weight_kg: parsedWeightKg,
-                        age: computedAge,
-                        bmi: computedBmi,
-                        updated_at: new Date().toISOString(),
-                      },
-                      { onConflict: "profile_id" }
-                    );
                   if (profileError) {
                     alert("Error: " + profileError.message);
-                  } else if (healthError) {
-                    alert("Error: " + healthError.message);
+                    return;
+                  }
+                  const normalizedMedications = currentMedications
+                    .map((med) => {
+                      const normalizedMealTiming = deriveMedicationMealTiming(
+                        med.mealTiming,
+                        med.frequency
+                      );
+                      const frequencyValue = resolveMedicationFrequency(
+                        med.frequency,
+                        normalizedMealTiming
+                      );
+                      return {
+                        id: med.id?.trim() || crypto.randomUUID(),
+                        name: (med.name || "").trim(),
+                        dosage: normalizeMedicationDosage(med.dosage),
+                        purpose: (med.purpose || "").trim(),
+                        frequency: frequencyValue,
+                        mealTiming:
+                          Object.keys(normalizedMealTiming).length > 0
+                            ? normalizedMealTiming
+                            : undefined,
+                        timesPerDay: resolveMedicationTimesPerDay(
+                          frequencyValue,
+                          med.timesPerDay,
+                          normalizedMealTiming
+                        ),
+                        startDate: med.startDate || new Date().toISOString().split("T")[0],
+                        endDate: med.endDate || undefined,
+                        logs: Array.isArray(med.logs) ? med.logs : [],
+                      };
+                    })
+                    .filter((med) => med.name && med.dosage && med.frequency);
+                  const healthResponse = await fetch("/api/health-profile", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      profileId,
+                      dateOfBirth: personalDraft.dob,
+                      bloodGroup: personalDraft.bloodGroup,
+                      heightUnit: personalDraft.heightUnit,
+                      heightCm: measurements.heightCm,
+                      heightFeet:
+                        personalDraft.heightUnit === "ft_in"
+                          ? parseNullableWholeNumber(personalDraft.heightFeet)
+                          : null,
+                      heightInches:
+                        personalDraft.heightUnit === "ft_in"
+                          ? parseNullableWholeNumber(personalDraft.heightInches)
+                          : null,
+                      weightUnit: personalDraft.weightUnit,
+                      weightKg: measurements.weightKg,
+                      weightLbs:
+                        personalDraft.weightUnit === "lbs"
+                          ? parseNullablePositiveNumber(personalDraft.weightLbs)
+                          : null,
+                      currentDiagnosedCondition: conditions.map((item) => item.trim()).filter(Boolean),
+                      allergies: allergy.map((item) => item.trim()).filter(Boolean),
+                      ongoingTreatments: treatment.map((item) => item.trim()).filter(Boolean),
+                      currentMedication: normalizedMedications,
+                      previousDiagnosedConditions: previousDiagnosedCondition.map((item) => item.trim()).filter(Boolean),
+                      pastSurgeries,
+                      childhoodIllness: childhoodIllness.map((item) => item.trim()).filter(Boolean),
+                      longTermTreatments: longTermTreatments.map((item) => item.trim()).filter(Boolean),
+                    }),
+                  });
+                  const healthPayload = (await healthResponse.json().catch(() => null)) as
+                    | { error?: string; message?: string }
+                    | null;
+                  if (!healthResponse.ok) {
+                    alert("Error: " + (healthPayload?.message || healthPayload?.error || "Failed to save health profile."));
                   } else {
                     if (selectedProfile?.is_primary && personalDraft.userName.trim()) {
                       syncRememberedAccountName(userId, personalDraft.userName.trim());
@@ -1477,8 +1735,12 @@ useEffect(() => {
                     setPhoneNumber(personalDraft.phoneNumber);
                     setBloodGroup(personalDraft.bloodGroup);
                     setAddress(personalDraft.address);
-                    setHeightCm(parsedHeightCm !== null ? String(parsedHeightCm) : "");
-                    setWeightKg(parsedWeightKg !== null ? String(parsedWeightKg) : "");
+                    setHeightCm(measurements.heightCm !== null ? String(measurements.heightCm) : "");
+                    setHeightFt(measurements.heightFt !== null ? String(measurements.heightFt) : "");
+                    setHeightUnit(personalDraft.heightUnit);
+                    setWeightKg(measurements.weightKg !== null ? String(measurements.weightKg) : "");
+                    setWeightLbs(measurements.weightLbs !== null ? String(measurements.weightLbs) : "");
+                    setWeightUnit(personalDraft.weightUnit);
                     setAge(computedAge !== null ? String(computedAge) : "");
                     setBmi(computedBmi !== null ? String(computedBmi) : "");
                     setIsPersonalInfoModalOpen(false);
@@ -1564,28 +1826,92 @@ useEffect(() => {
                       </div>
 
                       <div>
-                        <label className="block text-[var(--theme-button-primary)] mb-2">Height (cm)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.1"
-                          value={personalDraft.heightCm}
-                          onChange={(e) => updatePersonalDraft({ heightCm: e.target.value })}
-                          className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
-                          placeholder="eg: 170"
-                        />
+                        <label className="block text-[var(--theme-button-primary)] mb-2">Height</label>
+                        <div className="flex gap-2 mb-3">
+                          {(["cm", "ft_in"] as HeightUnit[]).map((unit) => (
+                            <button
+                              key={unit}
+                              type="button"
+                              onClick={() => handlePersonalDraftHeightUnitChange(unit)}
+                              className={`px-3 py-2 rounded-full border text-sm font-semibold transition ${
+                                personalDraft.heightUnit === unit
+                                  ? "bg-blue-50 text-blue-700 border-blue-300"
+                                  : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
+                              }`}
+                            >
+                              {unit === "cm" ? "cm" : "ft/in"}
+                            </button>
+                          ))}
+                        </div>
+                        {personalDraft.heightUnit === "cm" ? (
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={personalDraft.heightCm}
+                            onChange={(e) => updatePersonalDraft({ heightCm: e.target.value })}
+                            className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
+                            placeholder="eg: 170"
+                          />
+                        ) : (
+                          <div className="grid grid-cols-2 gap-3">
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={personalDraft.heightFeet}
+                              onChange={(e) => updatePersonalDraft({ heightFeet: e.target.value.replace(/\D/g, "") })}
+                              className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
+                              placeholder="Feet"
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              max="11"
+                              step="1"
+                              value={personalDraft.heightInches}
+                              onChange={(e) =>
+                                updatePersonalDraft({
+                                  heightInches: sanitizeBoundedWholeNumberInput(e.target.value, 11),
+                                })
+                              }
+                              className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
+                              placeholder="Inches"
+                            />
+                          </div>
+                        )}
                       </div>
 
                       <div>
-                        <label className="block text-[var(--theme-button-primary)] mb-2">Weight (kg)</label>
+                        <label className="block text-[var(--theme-button-primary)] mb-2">Weight</label>
+                        <div className="flex gap-2 mb-3">
+                          {(["kg", "lbs"] as WeightUnit[]).map((unit) => (
+                            <button
+                              key={unit}
+                              type="button"
+                              onClick={() => handlePersonalDraftWeightUnitChange(unit)}
+                              className={`px-3 py-2 rounded-full border text-sm font-semibold transition ${
+                                personalDraft.weightUnit === unit
+                                  ? "bg-blue-50 text-blue-700 border-blue-300"
+                                  : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
+                              }`}
+                            >
+                              {unit}
+                            </button>
+                          ))}
+                        </div>
                         <input
                           type="number"
                           min="0"
                           step="0.1"
-                          value={personalDraft.weightKg}
-                          onChange={(e) => updatePersonalDraft({ weightKg: e.target.value })}
+                          value={personalDraft.weightUnit === "kg" ? personalDraft.weightKg : personalDraft.weightLbs}
+                          onChange={(e) =>
+                            personalDraft.weightUnit === "kg"
+                              ? updatePersonalDraft({ weightKg: e.target.value })
+                              : updatePersonalDraft({ weightLbs: e.target.value })
+                          }
                           className="w-full px-4 py-2 rounded-lg border-2 border-[var(--theme-border)] text-gray-800"
-                          placeholder="eg: 65"
+                          placeholder={personalDraft.weightUnit === "kg" ? "eg: 65" : "eg: 143"}
                         />
                       </div>
                     </div>

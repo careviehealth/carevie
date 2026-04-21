@@ -10,6 +10,10 @@ type PersonalProfile = {
 type HealthProfile = {
   date_of_birth: string | null;
   blood_group: string | null;
+  height_cm: number | null;
+  height_ft: number | null;
+  weight_kg: number | null;
+  weight_lbs: number | null;
   bmi: number | null;
   age: number | null;
   current_diagnosed_condition: unknown;
@@ -34,7 +38,7 @@ export const profileApi = {
     supabase
       .from('health')
       .select(
-        'date_of_birth, blood_group, bmi, age, current_diagnosed_condition, allergies, ongoing_treatments, current_medication, previous_diagnosed_conditions, past_surgeries, childhood_illness, long_term_treatments'
+        'date_of_birth, blood_group, height_cm, height_ft, weight_kg, weight_lbs, bmi, age, current_diagnosed_condition, allergies, ongoing_treatments, current_medication, previous_diagnosed_conditions, past_surgeries, childhood_illness, long_term_treatments'
       )
       .eq('profile_id', profileId)
       .maybeSingle<HealthProfile>(),

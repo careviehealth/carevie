@@ -21,6 +21,17 @@ import { apiRequest } from '@/api/client';
 import { type AppThemeColors } from '@/constants/appThemes';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useProfile } from '@/hooks/useProfile';
+import {
+  cmToFeetAndInches,
+  feetInchesToCm,
+  formatHeightValue,
+  formatWeightValue,
+  kgToLbs,
+  lbsToKg,
+  sanitizeBoundedWholeNumberInput,
+  type HeightUnit,
+  type WeightUnit,
+} from '@/lib/healthMeasurements';
 import { supabase } from '@/lib/supabase';
 import { useOnboardingTour } from '@/providers/OnboardingTourProvider';
 
@@ -101,14 +112,14 @@ const QUESTIONS: QuestionConfig[] = [
   },
   {
     key: 'heightCm',
-    question: "What is your height (in cm)?",
+    question: 'What is your height?',
     inputType: 'text',
     required: true,
     placeholder: 'e.g. 175',
   },
   {
     key: 'weightKg',
-    question: "What is your weight (in kg)?",
+    question: 'What is your weight?',
     inputType: 'text',
     required: true,
     placeholder: 'e.g. 83',
@@ -213,6 +224,20 @@ const getMaxDayForMonth = (month: number | null, year: number | null) => {
   return 31;
 };
 
+const parsePositiveNumberInput = (raw: string) => {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const parseWholeNumberInput = (raw: string) => {
+  const trimmed = raw.trim();
+  if (!trimmed || !/^\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 export default function HealthOnboardingScreen() {
   const router = useRouter();
   const { colors: themeColors } = useAppTheme();
@@ -267,6 +292,13 @@ export default function HealthOnboardingScreen() {
     childhoodIllness: [],
     longTermTreatments: [],
   });
+  const [heightUnit, setHeightUnit] = useState<HeightUnit>('cm');
+  const [heightCmInput, setHeightCmInput] = useState('');
+  const [heightFeetInput, setHeightFeetInput] = useState('');
+  const [heightInchesInput, setHeightInchesInput] = useState('');
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>('kg');
+  const [weightKgInput, setWeightKgInput] = useState('');
+  const [weightLbsInput, setWeightLbsInput] = useState('');
 
   const currentQ = QUESTIONS[step];
   const canSkip = !currentQ?.required;
@@ -289,6 +321,8 @@ export default function HealthOnboardingScreen() {
       case 'multi-surgery':
         return 'Name, month and year for each.';
       default:
+        if (currentQ.key === 'heightCm') return 'Choose cm or ft/in before entering your height.';
+        if (currentQ.key === 'weightKg') return 'Choose kg or lbs before entering your weight.';
         return '';
     }
   }, [currentQ]);
@@ -324,8 +358,8 @@ export default function HealthOnboardingScreen() {
       gender: 'Gender',
       dateOfBirth: 'Date of birth',
       bloodGroup: 'Blood group',
-      heightCm: 'Height (cm)',
-      weightKg: 'Weight (kg)',
+      heightCm: 'Height',
+      weightKg: 'Weight',
       currentDiagnosedCondition: 'Current diagnosed condition',
       allergies: 'Allergies',
       ongoingTreatments: 'Ongoing treatments',
@@ -355,10 +389,23 @@ export default function HealthOnboardingScreen() {
         return profile.bloodGroup || 'Not provided';
       }
       if (key === 'heightCm') {
-        return profile.heightCm != null ? String(profile.heightCm) : 'Not provided';
+        return profile.heightCm != null
+          ? formatHeightValue({
+              unit: heightUnit,
+              heightCm: profile.heightCm,
+              heightFeet: parseWholeNumberInput(heightFeetInput),
+              heightInches: parseWholeNumberInput(heightInchesInput),
+            })
+          : 'Not provided';
       }
       if (key === 'weightKg') {
-        return profile.weightKg != null ? String(profile.weightKg) : 'Not provided';
+        return profile.weightKg != null
+          ? formatWeightValue({
+              unit: weightUnit,
+              weightKg: profile.weightKg,
+              weightLbs: parsePositiveNumberInput(weightLbsInput),
+            })
+          : 'Not provided';
       }
       if (key === 'currentDiagnosedCondition') {
         return formatList(profile.currentDiagnosedCondition);
@@ -411,7 +458,7 @@ export default function HealthOnboardingScreen() {
       label: labels[question.key] ?? question.question,
       value: formatValue(question.key),
     }));
-  }, [profile]);
+  }, [heightFeetInput, heightInchesInput, heightUnit, profile, weightLbsInput, weightUnit]);
 
   const formatDobLabel = (dateString: string) => {
     if (!dateString) return '';
@@ -459,10 +506,23 @@ export default function HealthOnboardingScreen() {
     if (key === 'dateOfBirth') return profile.dateOfBirth ? formatDobLabel(profile.dateOfBirth) : '';
     if (key === 'bloodGroup') return profile.bloodGroup;
     if (key === 'heightCm') {
-      return profile.heightCm != null ? `${profile.heightCm} cm` : '';
+      return profile.heightCm != null
+        ? formatHeightValue({
+            unit: heightUnit,
+            heightCm: profile.heightCm,
+            heightFeet: parseWholeNumberInput(heightFeetInput),
+            heightInches: parseWholeNumberInput(heightInchesInput),
+          })
+        : '';
     }
     if (key === 'weightKg') {
-      return profile.weightKg != null ? `${profile.weightKg} kg` : '';
+      return profile.weightKg != null
+        ? formatWeightValue({
+            unit: weightUnit,
+            weightKg: profile.weightKg,
+            weightLbs: parsePositiveNumberInput(weightLbsInput),
+          })
+        : '';
     }
     if (key === 'currentDiagnosedCondition') {
       return sanitizeTextList(profile.currentDiagnosedCondition).join(', ');
@@ -526,6 +586,16 @@ export default function HealthOnboardingScreen() {
 
   useEffect(() => {
     if (!currentQ) return;
+    if (currentQ.inputType === 'text' && currentQ.key !== 'heightCm' && currentQ.key !== 'weightKg') {
+      const value = profile[currentQ.key];
+      if (typeof value === 'number') {
+        setInputValue(Number.isFinite(value) ? String(value) : '');
+      } else {
+        setInputValue((value as string) ?? '');
+      }
+    } else {
+      setInputValue('');
+    }
     if (currentQ.inputType === 'multi-text') {
       const key = currentQ.key as keyof Profile;
       const values = profile[key] as string[];
@@ -545,6 +615,7 @@ export default function HealthOnboardingScreen() {
         pastSurgeries: [{ name: '', month: null, year: null }],
       }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   const resolveTargetProfileId = () =>
@@ -587,6 +658,123 @@ export default function HealthOnboardingScreen() {
       value = key === 'heightCm' || key === 'weightKg' ? null : '';
     }
     setProfile((prev) => ({ ...prev, [key]: value } as Profile));
+  };
+
+  const setHeightUnitWithConversion = (nextUnit: HeightUnit) => {
+    if (nextUnit === heightUnit) return;
+    if (nextUnit === 'ft_in') {
+      const cmValue = parsePositiveNumberInput(heightCmInput) ?? profile.heightCm;
+      if (cmValue) {
+        const converted = cmToFeetAndInches(cmValue);
+        setHeightFeetInput(String(converted.feet));
+        setHeightInchesInput(String(converted.inches));
+      }
+    } else {
+      const feet = parseWholeNumberInput(heightFeetInput);
+      const inches = parseWholeNumberInput(heightInchesInput);
+      if (feet !== null || inches !== null) {
+        const converted = feetInchesToCm(feet ?? 0, inches ?? 0);
+        if (converted > 0) {
+          setHeightCmInput(String(converted));
+        }
+      }
+    }
+    setHeightUnit(nextUnit);
+  };
+
+  const setWeightUnitWithConversion = (nextUnit: WeightUnit) => {
+    if (nextUnit === weightUnit) return;
+    if (nextUnit === 'lbs') {
+      const kgValue = parsePositiveNumberInput(weightKgInput) ?? profile.weightKg;
+      if (kgValue) {
+        setWeightLbsInput(String(kgToLbs(kgValue)));
+      }
+    } else {
+      const lbsValue = parsePositiveNumberInput(weightLbsInput);
+      if (lbsValue) {
+        setWeightKgInput(String(lbsToKg(lbsValue)));
+      }
+    }
+    setWeightUnit(nextUnit);
+  };
+
+  const getHeightSubmission = () => {
+    if (heightUnit === 'cm') {
+      const parsedHeightCm = parsePositiveNumberInput(heightCmInput);
+      if (parsedHeightCm === null) {
+        return { error: 'Please enter a valid height in cm.' } as const;
+      }
+      return {
+        heightCm: parsedHeightCm,
+        heightFeet: null,
+        heightInches: null,
+      } as const;
+    }
+
+    const parsedFeet = parseWholeNumberInput(heightFeetInput);
+    const parsedInches = heightInchesInput.trim() ? parseWholeNumberInput(heightInchesInput) : 0;
+    if (
+      parsedFeet === null ||
+      parsedInches === null ||
+      parsedInches >= 12 ||
+      (parsedFeet === 0 && parsedInches === 0)
+    ) {
+      return { error: 'Please enter a valid height in feet and inches.' } as const;
+    }
+
+    return {
+      heightCm: feetInchesToCm(parsedFeet, parsedInches),
+      heightFeet: parsedFeet,
+      heightInches: parsedInches,
+    } as const;
+  };
+
+  const getWeightSubmission = () => {
+    if (weightUnit === 'kg') {
+      const parsedWeightKg = parsePositiveNumberInput(weightKgInput);
+      if (parsedWeightKg === null) {
+        return { error: 'Please enter a valid weight in kg.' } as const;
+      }
+      return {
+        weightKg: parsedWeightKg,
+        weightLbs: null,
+      } as const;
+    }
+
+    const parsedWeightLbs = parsePositiveNumberInput(weightLbsInput);
+    if (parsedWeightLbs === null) {
+      return { error: 'Please enter a valid weight in lbs.' } as const;
+    }
+
+    return {
+      weightKg: lbsToKg(parsedWeightLbs),
+      weightLbs: parsedWeightLbs,
+    } as const;
+  };
+
+  const handleHeightNext = () => {
+    const submission = getHeightSubmission();
+    if ('error' in submission) return;
+    setProfile((prev) => ({ ...prev, heightCm: submission.heightCm }));
+    if (heightUnit === 'cm') {
+      setHeightCmInput(String(submission.heightCm));
+    } else {
+      setHeightFeetInput(String(submission.heightFeet));
+      setHeightInchesInput(String(submission.heightInches));
+    }
+    advanceStep();
+  };
+
+  const handleWeightNext = () => {
+    const submission = getWeightSubmission();
+    if ('error' in submission) return;
+    setProfile((prev) => ({ ...prev, weightKg: submission.weightKg }));
+    if (weightUnit === 'kg') {
+      setWeightKgInput(String(submission.weightKg));
+    } else {
+      setWeightLbsInput(String(submission.weightLbs));
+    }
+    advanceStep();
   };
 
   const validateRequired = (key: keyof Profile, raw: string) => {
@@ -702,6 +890,24 @@ export default function HealthOnboardingScreen() {
   };
 
   const handleTextSubmit = () => {
+    if (currentQ.key === 'heightCm') {
+      const submission = getHeightSubmission();
+      if ('error' in submission) {
+        Alert.alert('Invalid height', submission.error);
+        return;
+      }
+      handleHeightNext();
+      return;
+    }
+    if (currentQ.key === 'weightKg') {
+      const submission = getWeightSubmission();
+      if ('error' in submission) {
+        Alert.alert('Invalid weight', submission.error);
+        return;
+      }
+      handleWeightNext();
+      return;
+    }
     if (isRequired && !inputValue.trim()) return;
     if (!inputValue.trim() && !canSkip) return;
     handleSingleNext(inputValue);
@@ -841,6 +1047,18 @@ export default function HealthOnboardingScreen() {
         return;
       }
 
+      const heightSubmission = getHeightSubmission();
+      if ('error' in heightSubmission) {
+        setSaveError(heightSubmission.error);
+        return;
+      }
+
+      const weightSubmission = getWeightSubmission();
+      if ('error' in weightSubmission) {
+        setSaveError(weightSubmission.error);
+        return;
+      }
+
       const currentDiagnosedCondition = sanitizeTextList(profile.currentDiagnosedCondition);
       const allergies = sanitizeTextList(profile.allergies);
       const ongoingTreatments = sanitizeTextList(profile.ongoingTreatments);
@@ -862,8 +1080,13 @@ export default function HealthOnboardingScreen() {
         profileId: targetProfileId,
         dateOfBirth: profile.dateOfBirth,
         bloodGroup: profile.bloodGroup,
-        heightCm: profile.heightCm,
-        weightKg: profile.weightKg,
+        heightUnit,
+        heightCm: heightSubmission.heightCm,
+        heightFeet: heightUnit === 'ft_in' ? heightSubmission.heightFeet : null,
+        heightInches: heightUnit === 'ft_in' ? heightSubmission.heightInches : null,
+        weightUnit,
+        weightKg: weightSubmission.weightKg,
+        weightLbs: weightUnit === 'lbs' ? weightSubmission.weightLbs : null,
         currentDiagnosedCondition,
         allergies,
         ongoingTreatments,
@@ -1082,8 +1305,10 @@ export default function HealthOnboardingScreen() {
                 <View style={styles.chatRowRight}>
                   <View style={styles.userComposer}>
                     <Text style={styles.userLabel}>You</Text>
-                    {/* Text input (displayName, heightCm, weightKg) */}
-                    {currentQ.inputType === 'text' && (
+                    {/* Text input */}
+                    {currentQ.inputType === 'text' &&
+                      currentQ.key !== 'heightCm' &&
+                      currentQ.key !== 'weightKg' && (
                       <>
                         <TextInput
                           style={styles.input}
@@ -1097,6 +1322,136 @@ export default function HealthOnboardingScreen() {
                               ? 'numeric'
                               : 'default'
                           }
+                          returnKeyType="next"
+                          onSubmitEditing={handleTextSubmit}
+                        />
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.primaryBtn,
+                            styles.sendBtn,
+                            pressed && styles.primaryBtnPressed,
+                          ]}
+                          onPress={handleTextSubmit}
+                        >
+                          <Text style={styles.primaryBtnText}>Send</Text>
+                          <MaterialCommunityIcons name="send" size={18} color="#fff" />
+                        </Pressable>
+                      </>
+                    )}
+
+                    {currentQ.inputType === 'text' && currentQ.key === 'heightCm' && (
+                      <>
+                        <View style={styles.unitToggleRow}>
+                          {(['cm', 'ft_in'] as HeightUnit[]).map((unit) => {
+                            const active = heightUnit === unit;
+                            return (
+                              <Pressable
+                                key={unit}
+                                onPress={() => setHeightUnitWithConversion(unit)}
+                                style={[
+                                  styles.unitToggleBtn,
+                                  active && {
+                                    backgroundColor: themeColors.accentSoft,
+                                    borderColor: themeColors.accentStrong,
+                                  },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.unitToggleBtnText,
+                                    active && { color: themeColors.accentStrong },
+                                  ]}
+                                >
+                                  {unit === 'cm' ? 'cm' : 'ft/in'}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                        {heightUnit === 'cm' ? (
+                          <TextInput
+                            style={styles.input}
+                            value={heightCmInput}
+                            onChangeText={setHeightCmInput}
+                            placeholder="e.g. 175"
+                            placeholderTextColor="#94a3b8"
+                            keyboardType="decimal-pad"
+                            returnKeyType="next"
+                            onSubmitEditing={handleTextSubmit}
+                          />
+                        ) : (
+                          <View style={styles.dualInputRow}>
+                            <TextInput
+                              style={[styles.input, styles.dualInput]}
+                              value={heightFeetInput}
+                              onChangeText={(value) => setHeightFeetInput(value.replace(/\D/g, ''))}
+                              placeholder="Feet"
+                              placeholderTextColor="#94a3b8"
+                              keyboardType="number-pad"
+                              returnKeyType="next"
+                            />
+                            <TextInput
+                              style={[styles.input, styles.dualInput]}
+                              value={heightInchesInput}
+                              onChangeText={(value) => setHeightInchesInput(sanitizeBoundedWholeNumberInput(value, 11))}
+                              placeholder="Inches"
+                              placeholderTextColor="#94a3b8"
+                              keyboardType="number-pad"
+                              returnKeyType="next"
+                              onSubmitEditing={handleTextSubmit}
+                            />
+                          </View>
+                        )}
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.primaryBtn,
+                            styles.sendBtn,
+                            pressed && styles.primaryBtnPressed,
+                          ]}
+                          onPress={handleTextSubmit}
+                        >
+                          <Text style={styles.primaryBtnText}>Send</Text>
+                          <MaterialCommunityIcons name="send" size={18} color="#fff" />
+                        </Pressable>
+                      </>
+                    )}
+
+                    {currentQ.inputType === 'text' && currentQ.key === 'weightKg' && (
+                      <>
+                        <View style={styles.unitToggleRow}>
+                          {(['kg', 'lbs'] as WeightUnit[]).map((unit) => {
+                            const active = weightUnit === unit;
+                            return (
+                              <Pressable
+                                key={unit}
+                                onPress={() => setWeightUnitWithConversion(unit)}
+                                style={[
+                                  styles.unitToggleBtn,
+                                  active && {
+                                    backgroundColor: themeColors.accentSoft,
+                                    borderColor: themeColors.accentStrong,
+                                  },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.unitToggleBtnText,
+                                    active && { color: themeColors.accentStrong },
+                                  ]}
+                                >
+                                  {unit}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                        <TextInput
+                          style={styles.input}
+                          value={weightUnit === 'kg' ? weightKgInput : weightLbsInput}
+                          onChangeText={weightUnit === 'kg' ? setWeightKgInput : setWeightLbsInput}
+                          placeholder={weightUnit === 'kg' ? 'e.g. 83' : 'e.g. 183'}
+                          placeholderTextColor="#94a3b8"
+                          keyboardType="decimal-pad"
                           returnKeyType="next"
                           onSubmitEditing={handleTextSubmit}
                         />
@@ -2172,6 +2527,28 @@ function createStyles(themeColors: AppThemeColors) {
     color: '#64748b',
     marginBottom: 14,
   },
+  unitToggleRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 14,
+  },
+  unitToggleBtn: {
+    minWidth: 74,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: themeColors.border,
+    backgroundColor: themeColors.surface,
+  },
+  unitToggleBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#475569',
+  },
   inlineHint: {
     fontSize: 12,
     fontWeight: '600',
@@ -2189,6 +2566,13 @@ function createStyles(themeColors: AppThemeColors) {
     fontSize: 16,
     color: '#0f172a',
     marginBottom: 14,
+  },
+  dualInputRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  dualInput: {
+    flex: 1,
   },
   primaryBtn: {
     flexDirection: 'row',

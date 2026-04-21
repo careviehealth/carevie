@@ -6,6 +6,17 @@ import { supabase } from "@/lib/createClient";
 import { useAppProfile } from "@/components/AppProfileProvider";
 import { syncRememberedAccountName } from "@/lib/rememberedAccount";
 import {
+  cmToFeetAndInches,
+  feetInchesToCm,
+  formatHeightValue,
+  formatWeightValue,
+  kgToLbs,
+  lbsToKg,
+  sanitizeBoundedWholeNumberInput,
+  type HeightUnit,
+  type WeightUnit,
+} from "@/lib/healthMeasurements";
+import {
   MEDICATION_MEAL_OPTIONS,
   countMedicationMealTiming,
   deriveMedicationMealTiming,
@@ -15,12 +26,9 @@ import {
   normalizeMedicationDosage,
   resolveMedicationFrequency,
   resolveMedicationTimesPerDay,
-  type MedicationLog as SharedMedicationLog,
   type MedicationMealKey,
   type MedicationRecord as SharedMedication,
 } from "@/lib/medications";
-
-interface MedicationLogEntry extends SharedMedicationLog {}
 
 interface MedicationEntry extends SharedMedication {
   purpose: string;
@@ -85,8 +93,8 @@ const QUESTIONS: QuestionConfig[] = [
     required: true,
     options: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Unknown"],
   },
-  { key: "heightCm", question: "What is your height (in cm)?", inputType: "text", required: true, placeholder: "e.g., 175" },
-  { key: "weightKg", question: "What is your weight (in kg)?", inputType: "text", required: true, placeholder: "e.g., 83" },
+  { key: "heightCm", question: "What is your height?", inputType: "text", required: true, placeholder: "e.g., 175" },
+  { key: "weightKg", question: "What is your weight?", inputType: "text", required: true, placeholder: "e.g., 83" },
   { key: "currentDiagnosedCondition", question: "Current diagnosed condition (if any)?", inputType: "multi-text", placeholder: "e.g., Asthma / Diabetes" },
   { key: "allergies", question: "Allergies (if any)?", inputType: "multi-text", placeholder: "e.g., Penicillin / Peanuts" },
   { key: "ongoingTreatments", question: "Ongoing treatments (if any)?", inputType: "multi-text", placeholder: "e.g., Physiotherapy" },
@@ -109,6 +117,20 @@ const createEmptyMedicationEntry = (): MedicationEntry => ({
 });
 
 const uid = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+const parsePositiveNumberInput = (raw: string) => {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const parseWholeNumberInput = (raw: string) => {
+  const trimmed = raw.trim();
+  if (!trimmed || !/^\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 export default function HealthOnboardingChatbot() {
   const router = useRouter();
@@ -152,6 +174,13 @@ export default function HealthOnboardingChatbot() {
     childhoodIllness: [],
     longTermTreatments: [],
   });
+  const [heightUnit, setHeightUnit] = useState<HeightUnit>("cm");
+  const [heightCmInput, setHeightCmInput] = useState("");
+  const [heightFeetInput, setHeightFeetInput] = useState("");
+  const [heightInchesInput, setHeightInchesInput] = useState("");
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
+  const [weightKgInput, setWeightKgInput] = useState("");
+  const [weightLbsInput, setWeightLbsInput] = useState("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const botTimeoutRef = useRef<number | null>(null);
@@ -286,7 +315,7 @@ export default function HealthOnboardingChatbot() {
   }, [dobDaysInMonth]);
 
   useEffect(() => {
-    if (currentQ.inputType === "text") {
+    if (currentQ.inputType === "text" && currentQ.key !== "heightCm" && currentQ.key !== "weightKg") {
       const existingValue = profile[currentQ.key];
       setInputValue(
         typeof existingValue === "string"
@@ -331,6 +360,137 @@ export default function HealthOnboardingChatbot() {
     const next: Profile = { ...profile, [key]: value } as Profile;
     setProfile(next);
     return next;
+  };
+
+  const setHeightUnitWithConversion = (nextUnit: HeightUnit) => {
+    if (nextUnit === heightUnit) return;
+    if (nextUnit === "ft_in") {
+      const cmValue = parsePositiveNumberInput(heightCmInput) ?? profile.heightCm;
+      if (cmValue) {
+        const converted = cmToFeetAndInches(cmValue);
+        setHeightFeetInput(String(converted.feet));
+        setHeightInchesInput(String(converted.inches));
+      }
+    } else {
+      const feet = parseWholeNumberInput(heightFeetInput);
+      const inches = parseWholeNumberInput(heightInchesInput);
+      if (feet !== null || inches !== null) {
+        const converted = feetInchesToCm(feet ?? 0, inches ?? 0);
+        if (converted > 0) {
+          setHeightCmInput(String(converted));
+        }
+      }
+    }
+    setHeightUnit(nextUnit);
+  };
+
+  const setWeightUnitWithConversion = (nextUnit: WeightUnit) => {
+    if (nextUnit === weightUnit) return;
+    if (nextUnit === "lbs") {
+      const kgValue = parsePositiveNumberInput(weightKgInput) ?? profile.weightKg;
+      if (kgValue) {
+        setWeightLbsInput(String(kgToLbs(kgValue)));
+      }
+    } else {
+      const lbsValue = parsePositiveNumberInput(weightLbsInput);
+      if (lbsValue) {
+        setWeightKgInput(String(lbsToKg(lbsValue)));
+      }
+    }
+    setWeightUnit(nextUnit);
+  };
+
+  const getHeightSubmission = () => {
+    if (heightUnit === "cm") {
+      const parsedHeightCm = parsePositiveNumberInput(heightCmInput);
+      if (parsedHeightCm === null) {
+        return { error: "⚠️ Please enter a valid height in cm." } as const;
+      }
+      return {
+        heightCm: parsedHeightCm,
+        heightFeet: null,
+        heightInches: null,
+        summary: formatHeightValue({ unit: "cm", heightCm: parsedHeightCm }),
+      } as const;
+    }
+
+    const parsedFeet = parseWholeNumberInput(heightFeetInput);
+    const parsedInches = heightInchesInput.trim() ? parseWholeNumberInput(heightInchesInput) : 0;
+    if (
+      parsedFeet === null ||
+      parsedInches === null ||
+      parsedInches >= 12 ||
+      (parsedFeet === 0 && parsedInches === 0)
+    ) {
+      return { error: "⚠️ Please enter a valid height in feet and inches." } as const;
+    }
+
+    return {
+      heightCm: feetInchesToCm(parsedFeet, parsedInches),
+      heightFeet: parsedFeet,
+      heightInches: parsedInches,
+      summary: formatHeightValue({
+        unit: "ft_in",
+        heightFeet: parsedFeet,
+        heightInches: parsedInches,
+      }),
+    } as const;
+  };
+
+  const getWeightSubmission = () => {
+    if (weightUnit === "kg") {
+      const parsedWeightKg = parsePositiveNumberInput(weightKgInput);
+      if (parsedWeightKg === null) {
+        return { error: "⚠️ Please enter a valid weight in kg." } as const;
+      }
+      return {
+        weightKg: parsedWeightKg,
+        weightLbs: null,
+        summary: formatWeightValue({ unit: "kg", weightKg: parsedWeightKg }),
+      } as const;
+    }
+
+    const parsedWeightLbs = parsePositiveNumberInput(weightLbsInput);
+    if (parsedWeightLbs === null) {
+      return { error: "⚠️ Please enter a valid weight in lbs." } as const;
+    }
+
+    return {
+      weightKg: lbsToKg(parsedWeightLbs),
+      weightLbs: parsedWeightLbs,
+      summary: formatWeightValue({ unit: "lbs", weightLbs: parsedWeightLbs }),
+    } as const;
+  };
+
+  const handleHeightNext = () => {
+    const submission = getHeightSubmission();
+    if ("error" in submission) {
+      addMessage("bot", submission.error ?? "⚠️ Please enter a valid height.");
+      return;
+    }
+    setProfile((prev) => ({ ...prev, heightCm: submission.heightCm }));
+    if (heightUnit === "cm") {
+      setHeightCmInput(String(submission.heightCm));
+    } else {
+      setHeightFeetInput(String(submission.heightFeet));
+      setHeightInchesInput(String(submission.heightInches));
+    }
+    advanceStep(submission.summary);
+  };
+
+  const handleWeightNext = () => {
+    const submission = getWeightSubmission();
+    if ("error" in submission) {
+      addMessage("bot", submission.error ?? "⚠️ Please enter a valid weight.");
+      return;
+    }
+    setProfile((prev) => ({ ...prev, weightKg: submission.weightKg }));
+    if (weightUnit === "kg") {
+      setWeightKgInput(String(submission.weightKg));
+    } else {
+      setWeightLbsInput(String(submission.weightLbs));
+    }
+    advanceStep(submission.summary);
   };
 
   const validateRequired = (key: keyof Profile, raw: string) => {
@@ -554,6 +714,14 @@ export default function HealthOnboardingChatbot() {
 
   const handleTextSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentQ.key === "heightCm") {
+      handleHeightNext();
+      return;
+    }
+    if (currentQ.key === "weightKg") {
+      handleWeightNext();
+      return;
+    }
     if (isRequired && !inputValue.trim()) {
       addMessage("bot", "⚠️ This field is required. Please enter a valid answer to continue.");
       return;
@@ -774,8 +942,20 @@ export default function HealthOnboardingChatbot() {
         throw new Error("Please select a profile before saving.");
       }
 
+      const heightSubmission = getHeightSubmission();
+      if ("error" in heightSubmission) {
+        throw new Error((heightSubmission.error ?? "Please enter a valid height.").replace(/^⚠️\s*/, ""));
+      }
+
+      const weightSubmission = getWeightSubmission();
+      if ("error" in weightSubmission) {
+        throw new Error((weightSubmission.error ?? "Please enter a valid weight.").replace(/^⚠️\s*/, ""));
+      }
+
       const normalizedProfile: Profile = {
         ...profile,
+        heightCm: heightSubmission.heightCm,
+        weightKg: weightSubmission.weightKg,
         currentDiagnosedCondition: sanitizeTextList(profile.currentDiagnosedCondition),
         allergies: sanitizeTextList(profile.allergies),
         ongoingTreatments: sanitizeTextList(profile.ongoingTreatments),
@@ -809,6 +989,11 @@ export default function HealthOnboardingChatbot() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           profileId: targetProfileId,
+          heightUnit,
+          heightFeet: heightUnit === "ft_in" ? heightSubmission.heightFeet : null,
+          heightInches: heightUnit === "ft_in" ? heightSubmission.heightInches : null,
+          weightUnit,
+          weightLbs: weightUnit === "lbs" ? weightSubmission.weightLbs : null,
           ...healthPayload,
         }),
       });
@@ -1043,7 +1228,7 @@ export default function HealthOnboardingChatbot() {
                 </div>
               )}
 
-              {currentQ.inputType === "text" && (
+              {currentQ.inputType === "text" && currentQ.key !== "heightCm" && currentQ.key !== "weightKg" && (
                 <>
                   <div style={styles.helperText}>
                     {currentQ.required ? "This field is mandatory." : "Optional — you can skip if it doesn’t apply."}
@@ -1056,6 +1241,116 @@ export default function HealthOnboardingChatbot() {
                       onChange={(e) => setInputValue(e.target.value)}
                       placeholder={currentQ.placeholder || "Type here..."}
                       autoFocus
+                    />
+                    <button type="submit" style={sendButtonStyle}>
+                      ➤
+                    </button>
+                  </form>
+                </>
+              )}
+
+              {currentQ.inputType === "text" && currentQ.key === "heightCm" && (
+                <>
+                  <div style={styles.helperText}>Choose whether you want to enter height in cm or ft/in.</div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+                    {(["cm", "ft_in"] as HeightUnit[]).map((unit) => (
+                      <button
+                        key={unit}
+                        type="button"
+                        onClick={() => setHeightUnitWithConversion(unit)}
+                        style={{
+                          ...chipBtnStyle,
+                          width: "auto",
+                          background:
+                            heightUnit === unit
+                              ? "rgba(41, 121, 255, 0.14)"
+                              : "rgba(15, 118, 110, 0.08)",
+                          border:
+                            heightUnit === unit
+                              ? "1px solid rgba(41, 121, 255, 0.45)"
+                              : "1px solid rgba(15, 118, 110, 0.2)",
+                          color: heightUnit === unit ? "#2563eb" : "#0f172a",
+                        }}
+                      >
+                        {unit === "cm" ? "cm" : "ft/in"}
+                      </button>
+                    ))}
+                  </div>
+                  <form onSubmit={handleTextSubmit} style={{ ...inputRowStyle, marginTop: 12 }}>
+                    {heightUnit === "cm" ? (
+                      <input
+                        style={inputStyle}
+                        value={heightCmInput}
+                        onChange={(e) => setHeightCmInput(e.target.value)}
+                        placeholder="e.g., 175"
+                        autoFocus
+                        inputMode="decimal"
+                      />
+                    ) : (
+                      <>
+                        <input
+                          style={inputStyle}
+                          value={heightFeetInput}
+                          onChange={(e) => setHeightFeetInput(e.target.value.replace(/\D/g, ""))}
+                          placeholder="Feet"
+                          autoFocus
+                          inputMode="numeric"
+                        />
+                        <input
+                          style={inputStyle}
+                          value={heightInchesInput}
+                          onChange={(e) => setHeightInchesInput(sanitizeBoundedWholeNumberInput(e.target.value, 11))}
+                          placeholder="Inches"
+                          inputMode="numeric"
+                        />
+                      </>
+                    )}
+                    <button type="submit" style={sendButtonStyle}>
+                      ➤
+                    </button>
+                  </form>
+                </>
+              )}
+
+              {currentQ.inputType === "text" && currentQ.key === "weightKg" && (
+                <>
+                  <div style={styles.helperText}>Choose whether you want to enter weight in kg or lbs.</div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+                    {(["kg", "lbs"] as WeightUnit[]).map((unit) => (
+                      <button
+                        key={unit}
+                        type="button"
+                        onClick={() => setWeightUnitWithConversion(unit)}
+                        style={{
+                          ...chipBtnStyle,
+                          width: "auto",
+                          background:
+                            weightUnit === unit
+                              ? "rgba(41, 121, 255, 0.14)"
+                              : "rgba(15, 118, 110, 0.08)",
+                          border:
+                            weightUnit === unit
+                              ? "1px solid rgba(41, 121, 255, 0.45)"
+                              : "1px solid rgba(15, 118, 110, 0.2)",
+                          color: weightUnit === unit ? "#2563eb" : "#0f172a",
+                        }}
+                      >
+                        {unit}
+                      </button>
+                    ))}
+                  </div>
+                  <form onSubmit={handleTextSubmit} style={{ ...inputRowStyle, marginTop: 12 }}>
+                    <input
+                      style={inputStyle}
+                      value={weightUnit === "kg" ? weightKgInput : weightLbsInput}
+                      onChange={(e) =>
+                        weightUnit === "kg"
+                          ? setWeightKgInput(e.target.value)
+                          : setWeightLbsInput(e.target.value)
+                      }
+                      placeholder={weightUnit === "kg" ? "e.g., 83" : "e.g., 183"}
+                      autoFocus
+                      inputMode="decimal"
                     />
                     <button type="submit" style={sendButtonStyle}>
                       ➤

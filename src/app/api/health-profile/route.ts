@@ -3,6 +3,14 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/auth";
 import {
+  computeBmiFromMetrics,
+  feetInchesToCm,
+  feetInchesToDecimalFeet,
+  lbsToKg,
+  type HeightUnit,
+  type WeightUnit,
+} from "@/lib/healthMeasurements";
+import {
   deriveMedicationMealTiming,
   normalizeMedicationDosage,
   normalizeMedicationReminderSlotKey,
@@ -14,8 +22,13 @@ type ProfilePayload = {
   displayName?: string;
   dateOfBirth: string; // YYYY-MM-DD
   bloodGroup: string;
+  heightUnit?: HeightUnit;
   heightCm: number | null;
+  heightFeet?: number | null;
+  heightInches?: number | null;
+  weightUnit?: WeightUnit;
   weightKg: number | null;
+  weightLbs?: number | null;
 
   currentDiagnosedCondition: string[];
   allergies: string[];
@@ -59,15 +72,6 @@ function computeAge(dobISO: string): number | null {
   if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
   if (age < 0 || age > 130) return null;
   return age;
-}
-
-function computeBMI(heightCm: number | null, weightKg: number | null): number | null {
-  if (!heightCm || !weightKg) return null;
-  if (heightCm < 50 || heightCm > 260) return null;
-  if (weightKg < 10 || weightKg > 400) return null;
-  const h = heightCm / 100;
-  const bmi = weightKg / (h * h);
-  return Math.round(bmi * 10) / 10;
 }
 
 const cleanStringList = (values: string[] | undefined) =>
@@ -122,6 +126,80 @@ const isMissingOnConflictConstraint = (message: string) =>
 const isLegacyUserUniqueViolation = (message: string) =>
   /duplicate key value/i.test(message) &&
   /(health_.*user_id|user_medications_.*user_id|user_id)/i.test(message);
+
+type NormalizedMeasurements =
+  | {
+      ok: true;
+      heightCm: number;
+      heightFt: number | null;
+      weightKg: number;
+      weightLbs: number | null;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+function normalizeMeasurements(body: ProfilePayload): NormalizedMeasurements {
+  const heightUnit: HeightUnit = body.heightUnit === "ft_in" ? "ft_in" : "cm";
+  const weightUnit: WeightUnit = body.weightUnit === "lbs" ? "lbs" : "kg";
+
+  let heightCm: number;
+  let heightFt: number | null = null;
+
+  if (heightUnit === "ft_in") {
+    const heightFeet = body.heightFeet;
+    const heightInches = body.heightInches ?? 0;
+
+    if (
+      !isFiniteNumber(heightFeet) ||
+      !Number.isInteger(heightFeet) ||
+      heightFeet < 0 ||
+      !isFiniteNumber(heightInches) ||
+      !Number.isInteger(heightInches) ||
+      heightInches < 0 ||
+      heightInches >= 12 ||
+      (heightFeet === 0 && heightInches === 0)
+    ) {
+      return { ok: false, message: "Please enter a valid height in feet and inches." };
+    }
+
+    heightCm = feetInchesToCm(heightFeet, heightInches);
+    heightFt = feetInchesToDecimalFeet(heightFeet, heightInches);
+  } else {
+    if (!isFiniteNumber(body.heightCm) || body.heightCm <= 0) {
+      return { ok: false, message: "Please enter a valid height in cm." };
+    }
+    heightCm = body.heightCm;
+  }
+
+  let weightKg: number;
+  let weightLbs: number | null = null;
+
+  if (weightUnit === "lbs") {
+    if (!isFiniteNumber(body.weightLbs) || body.weightLbs <= 0) {
+      return { ok: false, message: "Please enter a valid weight in lbs." };
+    }
+    weightLbs = body.weightLbs;
+    weightKg = lbsToKg(body.weightLbs);
+  } else {
+    if (!isFiniteNumber(body.weightKg) || body.weightKg <= 0) {
+      return { ok: false, message: "Please enter a valid weight in kg." };
+    }
+    weightKg = body.weightKg;
+  }
+
+  return {
+    ok: true,
+    heightCm,
+    heightFt,
+    weightKg,
+    weightLbs,
+  };
+}
 
 export async function POST(req: Request) {
   try {
@@ -205,15 +283,10 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    if (!body?.heightCm || !Number.isFinite(body.heightCm)) {
+    const normalizedMeasurements = normalizeMeasurements(body);
+    if (!normalizedMeasurements.ok) {
       return NextResponse.json(
-        { error: "Height is required", message: "Height is required" },
-        { status: 400 }
-      );
-    }
-    if (!body?.weightKg || !Number.isFinite(body.weightKg)) {
-      return NextResponse.json(
-        { error: "Weight is required", message: "Weight is required" },
+        { error: normalizedMeasurements.message, message: normalizedMeasurements.message },
         { status: 400 }
       );
     }
@@ -295,7 +368,10 @@ export async function POST(req: Request) {
 
     // Backend-only computed
     const age = computeAge(body.dateOfBirth);
-    const bmi = computeBMI(body.heightCm, body.weightKg);
+    const bmi = computeBmiFromMetrics(
+      normalizedMeasurements.heightCm,
+      normalizedMeasurements.weightKg
+    );
 
     // Enforce minimum age of 18 for primary (account holder) profiles
     const { data: profileRow } = await adminClient
@@ -320,8 +396,10 @@ export async function POST(req: Request) {
       date_of_birth: body.dateOfBirth,
       age,
       blood_group: body.bloodGroup,
-      height_cm: body.heightCm,
-      weight_kg: body.weightKg,
+      height_cm: normalizedMeasurements.heightCm,
+      height_ft: normalizedMeasurements.heightFt,
+      weight_kg: normalizedMeasurements.weightKg,
+      weight_lbs: normalizedMeasurements.weightLbs,
       bmi,
 
       current_diagnosed_condition: currentDiagnosedCondition.length ? currentDiagnosedCondition : null,
