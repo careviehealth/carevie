@@ -91,9 +91,6 @@ export default function Navbar() {
   const activeItemStyle: CSSProperties = {
     backgroundColor: 'var(--theme-sidebar-active)',
   };
-  const brandDotStyle: CSSProperties = {
-    backgroundColor: 'var(--theme-primary)',
-  };
 
   const navItems = [
     { label: 'Home', href: '/app/homepage', icon: Home },
@@ -434,7 +431,7 @@ export default function Navbar() {
             className="flex items-center text-left"
             onClick={() => router.push('/app/homepage')}
           >
-            <BrandLogo width={118} surface="dark" className="shrink-0" />
+            <BrandLogo variant="wordmark" width={104} surface="dark" className="shrink-0" />
           </button>
           <button
             type="button"
@@ -526,23 +523,31 @@ export default function Navbar() {
         style={desktopSidebarStyle}
       >
         <div className="flex h-full flex-col px-3 py-6">
-          <div className="flex items-center justify-between px-1">
+          <div
+            className={`px-1 ${effectiveCollapsed
+              ? 'flex flex-col items-center gap-3'
+              : 'flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
+              }`}
+          >
             <button
-              className="flex items-center gap-3 text-left"
+              className={`text-left ${effectiveCollapsed ? 'flex items-center justify-center' : 'flex min-w-0 items-center gap-2.5'}`}
               onClick={() => router.push('/app/homepage')}
             >
               {effectiveCollapsed ? (
-                <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-md p-2">
-                  <div className="w-full h-full rounded-full" style={brandDotStyle}></div>
-                </div>
+                <BrandLogo variant="mark" width={36} surface="dark" className="shrink-0" />
               ) : (
-                <BrandLogo width={134} surface="dark" className="shrink-0" />
+                <>
+                  <BrandLogo variant="mark" width={34} surface="dark" className="shrink-0" />
+                  <BrandLogo variant="wordmark" width={88} surface="dark" className="shrink-0" />
+                </>
               )}
             </button>
             <button
               onClick={() => setCollapsed((v) => !v)}
               title={effectiveCollapsed ? 'Open navbar' : 'Close navbar'}
-              className="ml-auto rounded-lg p-2 text-teal-100/70 hover:bg-white/10 hover:text-white transition"
+              className={`rounded-lg p-2 text-teal-100/70 transition hover:bg-white/10 hover:text-white ${effectiveCollapsed ? '' : 'ml-auto'
+                }`}
+              aria-label={effectiveCollapsed ? 'Expand navbar' : 'Collapse navbar'}
             >
               {effectiveCollapsed ? (
                 <ChevronRight className="w-4 h-4" />

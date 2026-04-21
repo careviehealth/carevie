@@ -57,6 +57,7 @@ __pycache__/
 # IDE config
 .idea/
 .cursor/
+.claude/worktrees/
 
 # Expo cache
 .expo/

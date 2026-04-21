@@ -105,6 +105,31 @@ export default function VaultPage() {
 
   const [selectedCategory, setSelectedCategory] = useState<Category>('all');
   const [showUploadModal, setShowUploadModal] = useState(false);
+
+  const getDefaultUploadCategory = (): Category =>
+    selectedCategory === 'all' ? 'lab-reports' : selectedCategory;
+
+  const openUploadModal = () => {
+    setUploadData({
+      category: getDefaultUploadCategory(),
+      file: null,
+      fileName: '',
+      uploading: false,
+      error: null,
+    });
+    setShowUploadModal(true);
+  };
+
+  const closeUploadModal = () => {
+    setShowUploadModal(false);
+    setUploadData({
+      category: getDefaultUploadCategory(),
+      file: null,
+      fileName: '',
+      uploading: false,
+      error: null,
+    });
+  };
   const [counts, setCounts] = useState<Record<MedicalFolder, number>>({
     reports: 0,
     prescriptions: 0,
@@ -334,7 +359,7 @@ export default function VaultPage() {
 
       // Upload successful
       setShowUploadModal(false);
-      setUploadData({ category: 'lab-reports', file: null, fileName: '', uploading: false, error: null });
+      setUploadData({ category: getDefaultUploadCategory(), file: null, fileName: '', uploading: false, error: null });
       fetchFiles(storageOwnerId, selectedCategory);
       fetchCounts(storageOwnerId);
     } catch (err: any) {
@@ -600,7 +625,7 @@ export default function VaultPage() {
             </div>
             
             <button
-              onClick={() => setShowUploadModal(true)}
+              onClick={openUploadModal}
               className="inline-flex items-center gap-2 px-5 py-2.5 text-white rounded-xl font-medium shadow-lg hover:scale-[1.02] transition-all duration-200"
               style={{
                 background: 'linear-gradient(90deg, var(--theme-button-primary), var(--theme-button-secondary))',
@@ -851,7 +876,7 @@ export default function VaultPage() {
                     <h3 className="font-semibold text-slate-700 mb-2">No documents yet</h3>
                     <p className="text-slate-500 text-sm mb-6">Upload your first medical document to get started</p>
                     <button
-                      onClick={() => setShowUploadModal(true)}
+                      onClick={openUploadModal}
                       className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--theme-button-primary)] text-white rounded-xl font-medium hover:bg-[var(--theme-button-secondary)] transition"
                     >
                       <Plus size={18} />
@@ -1072,20 +1097,14 @@ export default function VaultPage() {
 
       {/* UPLOAD MODAL */}
       {showUploadModal && (
-        <div className="vytara-theme-content fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => {
-          setShowUploadModal(false);
-          setUploadData({ category: 'lab-reports', file: null, fileName: '', uploading: false, error: null });
-        }}>
+        <div className="vytara-theme-content fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={closeUploadModal}>
           <div
             onClick={(e) => e.stopPropagation()}
             className="relative bg-[var(--theme-card)] text-[var(--theme-text)] rounded-3xl p-8 w-full max-w-lg shadow-2xl border border-[var(--theme-border)]"
           >
             <button
               type="button"
-              onClick={() => {
-                setShowUploadModal(false);
-                setUploadData({ category: 'lab-reports', file: null, fileName: '', uploading: false, error: null });
-              }}
+              onClick={closeUploadModal}
               className="absolute top-5 right-5 p-2 rounded-full text-[var(--theme-text-secondary)] hover:text-[var(--theme-text)] hover:bg-[var(--theme-surface)] transition"
               aria-label="Close modal"
             >

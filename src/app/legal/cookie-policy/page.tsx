@@ -193,7 +193,7 @@ const CookiePolicyLayout = () => {
         <div className="flex items-center justify-between px-6 py-4 md:grid md:grid-cols-3 md:gap-0">
           {/* LOGO */}
           <div className="flex gap-3 items-center md:justify-start">
-            <BrandLogo width={136} priority />
+            <BrandLogo variant="wordmark" width={118} priority />
             <Link
               href="/landing-page"
               className="hidden whitespace-nowrap text-xs font-semibold text-[#134E4A] transition hover:text-[#14b8a6] sm:inline-flex sm:text-sm"

@@ -3,28 +3,46 @@ import Image from "next/image";
 type BrandLogoProps = {
   width?: number;
   priority?: boolean;
+  variant?: "full" | "wordmark" | "mark";
   surface?: "plain" | "light" | "dark";
   className?: string;
 };
 
-const ASSET_WIDTH = 1023;
-const ASSET_HEIGHT = 351;
+const logoAssetMap = {
+  full: {
+    src: "/carevie-logo.png",
+    width: 1023,
+    height: 351,
+  },
+  wordmark: {
+    src: "/carevie-wordmark.png",
+    width: 720,
+    height: 240,
+  },
+  mark: {
+    src: "/carevie-mark.png",
+    width: 315,
+    height: 340,
+  },
+} as const;
 
 const surfaceClassMap: Record<NonNullable<BrandLogoProps["surface"]>, string> = {
   plain: "",
   light:
-    "rounded-[22px] border border-slate-200/80 bg-white px-3 py-2 shadow-[0_14px_34px_rgba(15,23,42,0.08)]",
+    "drop-shadow-[0_10px_24px_rgba(15,23,42,0.08)]",
   dark:
-    "rounded-[22px] border border-white/15 bg-white/95 px-3 py-2 shadow-[0_20px_48px_rgba(2,6,23,0.28)] backdrop-blur-sm",
+    "drop-shadow-[0_14px_28px_rgba(2,6,23,0.26)]",
 };
 
 export default function BrandLogo({
   width = 180,
   priority = false,
+  variant = "full",
   surface = "plain",
   className = "",
 }: BrandLogoProps) {
-  const height = Math.round((ASSET_HEIGHT / ASSET_WIDTH) * width);
+  const asset = logoAssetMap[variant];
+  const height = Math.round((asset.height / asset.width) * width);
 
   return (
     <div
@@ -37,12 +55,12 @@ export default function BrandLogo({
         .join(" ")}
     >
       <Image
-        src="/carevie-logo.png"
+        src={asset.src}
         alt="Carevie"
         width={width}
         height={height}
         priority={priority}
-        className="h-auto w-auto max-w-full"
+        className="h-auto w-auto max-w-full object-contain"
       />
     </div>
   );

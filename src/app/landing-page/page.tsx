@@ -377,7 +377,7 @@ export default function Landing() {
         <nav className="nav-shell" style={{ position:'sticky', top:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'space-between',
           padding:'14px 20px', background:'rgba(250,250,249,0.88)', backdropFilter:'blur(16px)', borderBottom:'1px solid rgba(13,148,136,0.12)' }}>
           <div className="nav-brand" style={{ display:'flex', alignItems:'center' }}>
-            <BrandLogo width={158} priority />
+            <BrandLogo variant="wordmark" width={138} priority />
           </div>
           <div className="hidden md:flex" style={{ gap:36 }}>
             {navItems.map(([t, id]) => (
