@@ -73,7 +73,7 @@ def _load_modules() -> dict:
         if an optional dependency is missing.
     """
     from supabase_helper import list_user_files, get_file_bytes, get_profile_info
-    from insurance_rag_query import run_insurance_rag, get_docs_delta
+    from insurance_summary.insurance_rag_query import run_insurance_rag, get_docs_delta
 
     return {
         "list_user_files":   list_user_files,

@@ -5,6 +5,22 @@ import { usePathname, useSearchParams } from "next/navigation";
 import styles from "./ChatWidget.module.css";
 import { useAppProfile } from "./AppProfileProvider";
 
+// SECURITY NOTE — profile_id trust model
+// ─────────────────────────────────────────────────────────────────────────────
+// profile_id IS sent from the client because this system supports family/care-
+// circle profiles: an authenticated user may legitimately query a profile that
+// is not their own (e.g. a family member they manage).
+//
+// The server enforces two layers of protection:
+//   1. route.ts  — nullifies profile_id for unauthenticated users, so an
+//                  unauthenticated attacker can never supply a profile_id that
+//                  reaches the data layer.
+//   2. Supabase RLS — ensures an authenticated user's session token can only
+//                     read rows belonging to profiles they are authorised for.
+//
+// profile_id here comes from AppProfileProvider (the user's selected profile),
+// NOT from any user-editable input field.
+
 export default function ChatWidget() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -63,6 +79,10 @@ export default function ChatWidget() {
     setMessages(prev => [...prev, userMsg]);
     setInput("");
     setLoading(true);
+
+    // profile_id comes from AppProfileProvider (the selected care profile),
+    // not from any user-editable field. Empty string for unauthenticated users
+    // — route.ts will nullify it server-side anyway.
     const profileId = userId ? (selectedProfile?.id ?? "") : "";
 
     try {
@@ -76,37 +96,40 @@ export default function ChatWidget() {
       });
 
       const data = await res.json();
-      
-      // Handle API-level failures (success: false)
-      if (data?.success === false) {
-        console.error('[ChatWidget] API returned error:', data);
-        setMessages(prev => [
-          ...prev,
-          { role: "bot", content: data.reply || "Assistant is unavailable. Please try again later." },
-        ]);
-        return;
-      }
-      
-      // Handle undefined or missing reply
+
+      // ── Reply resolution ────────────────────────────────────────────────
+      // `success: false` from the backend is NOT a system error — it is a
+      // legitimate assistant response (e.g. "no records found", "please log
+      // in", "out of scope question"). Always show `reply` when present,
+      // regardless of the `success` flag.
+      //
+      // Only fall back to a generic message when the response contains no
+      // `reply` field at all (unexpected system-level failure).
       const reply = data?.reply;
-      if (!reply) {
-        console.error('[ChatWidget] No reply in response:', data);
-        setMessages(prev => [
-          ...prev,
-          { role: "bot", content: "Assistant returned an empty response. Please try again." },
-        ]);
+
+      if (reply && typeof reply === "string" && reply.trim()) {
+        setMessages(prev => [...prev, { role: "bot", content: reply }]);
         return;
       }
-      
+
+      // No reply field — unexpected failure.
+      console.error("[ChatWidget] Response contained no reply:", data);
       setMessages(prev => [
         ...prev,
-        { role: "bot", content: reply },
+        {
+          role: "bot",
+          content: "Assistant returned an empty response. Please try again.",
+        },
       ]);
     } catch (error) {
-      console.error('[ChatWidget] Request failed:', error);
+      console.error("[ChatWidget] Request failed:", error);
       setMessages(prev => [
         ...prev,
-        { role: "bot", content: "Unable to process request." },
+        {
+          role: "bot",
+          content:
+            "Unable to reach the assistant. Please check your connection and try again.",
+        },
       ]);
     } finally {
       setLoading(false);
@@ -141,17 +164,13 @@ export default function ChatWidget() {
           {messages.map((m, i) => (
             <div
               key={i}
-              className={m.role === "user"
-                ? styles.user
-                : styles.bot}
+              className={m.role === "user" ? styles.user : styles.bot}
             >
               {m.content}
             </div>
           ))}
 
-          {loading && (
-            <div className={styles.bot}>Analyzing…</div>
-          )}
+          {loading && <div className={styles.bot}>Analyzing…</div>}
           <div ref={endRef} />
         </div>
 

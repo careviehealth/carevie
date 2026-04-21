@@ -44,7 +44,7 @@ _MAX_DOWNLOAD_WORKERS: int = int(os.getenv("MEDICAL_BILLS_DOWNLOAD_WORKERS", "4"
 @lru_cache(maxsize=1)
 def _load_modules() -> dict:
     from supabase_helper import list_user_files, get_file_bytes, get_profile_info
-    from medical_bills_rag_query import run_medical_bills_rag, get_docs_delta
+    from medical_bills.medical_bills_rag_query import run_medical_bills_rag, get_docs_delta
 
     return {
         "list_user_files":        list_user_files,
