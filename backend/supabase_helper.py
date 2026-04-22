@@ -595,7 +595,204 @@ def get_user_card_data(profile_id: str) -> dict:
 
     return card
 
+def get_document_urls(profile_id: str) -> dict:
+    """
+    Fetch signed URLs valid for 1 week (604800 seconds) for
+    reports, prescriptions, and insurance documents directly from Storage.
+    Sorts the files so the latest documents appear on top.
+    """
+    documents = {
+        "reports": [],
+        "prescriptions": [],
+        "insurance": []
+    }
+    
+    # 1 week = 7 days * 24 hours * 60 minutes * 60 seconds
+    EXPIRY_SECONDS = 604800 
 
+    for folder in documents.keys():
+        folder_path = f"{profile_id}/{folder}"
+        
+        try:
+            # List files directly from the storage bucket
+            files = supabase.storage.from_(BUCKET_NAME).list(folder_path)
+            
+            # Filter out empty metadata (like placeholder folder objects)
+            valid_files = [f for f in files if f.get('metadata')]
+            
+            # Sort files by created_at descending (latest first)
+            valid_files.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+            
+            for f in valid_files:
+                file_name = f.get('name')
+                file_path = f"{folder_path}/{file_name}"
+                created_at_full = f.get('created_at', '')
+                created_at = created_at_full[:10] if created_at_full else 'Unknown Date'
+                
+                try:
+                    response = supabase.storage.from_(BUCKET_NAME).create_signed_url(
+                        file_path,
+                        EXPIRY_SECONDS
+                    )
+                    
+                    # Handle potential supabase-py response formats
+                    url = response.get('signedURL') if isinstance(response, dict) else response
+                    import urllib.parse
+                    encoded_name = urllib.parse.quote(file_name)
+                    if '?' in url:
+                        url += f"&download={encoded_name}"
+                    else:
+                        url += f"?download={encoded_name}"
+                    documents[folder].append({
+                        "file_name": file_name,
+                        "date": created_at,
+                        "url": url
+                    })
+                except Exception as e:
+                    print(f"⚠️ Could not generate URL for {file_name}: {e}")
+                    
+        except Exception:
+            # Normal behavior if the folder doesn't exist yet for the user
+            pass
+
+    return documents
+
+def get_full_patient_data(profile_id: str) -> dict:
+    """
+    Fetch all clinically relevant data for a profile in a single call.
+
+    Returns a structured dict with the following top-level keys:
+        demographics        – name, age, DOB, gender, blood group, height, weight, BMI, phone, address
+        emergency_card      – critical allergies, chronic conditions, preferred hospital, insurance
+        emergency_contacts  – list from user_emergency_contacts.contacts
+        health              – allergies, conditions (current/previous/childhood), treatments,
+                              surgeries, family history
+        medical_team        – list from user_medical_team.doctors
+        appointments        – list from user_appointments.appointments
+        medications         – list from user_medications.medications
+
+    All raw DB/technical fields (id, user_id, profile_id, created_at, updated_at, etc.)
+    are stripped before returning.
+    """
+    pid = str(profile_id)
+
+    # ── internal strip helper ──────────────────────────────────────────────
+    _STRIP_KEYS = {
+        "id", "user_id", "profile_id", "auth_id",
+        "created_at", "updated_at", "processed_at",
+        "structured_extracted_at", "generated_at",
+    }
+
+    def _clean(obj):
+        """Recursively remove technical keys from dicts / lists."""
+        if isinstance(obj, dict):
+            return {k: _clean(v) for k, v in obj.items() if k not in _STRIP_KEYS}
+        if isinstance(obj, list):
+            return [_clean(i) for i in obj]
+        return obj
+
+    def _first(table, select, filter_col="profile_id"):
+        try:
+            r = supabase.table(table).select(select).eq(filter_col, pid).limit(1).execute()
+            return _clean(r.data[0]) if r.data else {}
+        except Exception as e:
+            print(f"⚠️  get_full_patient_data: [{table}] fetch failed – {e}")
+            return {}
+
+    def _jsonb_list(table, column, filter_col="profile_id"):
+        try:
+            r = supabase.table(table).select(column).eq(filter_col, pid).limit(1).execute()
+            return _clean((r.data[0].get(column) or []) if r.data else [])
+        except Exception as e:
+            print(f"⚠️  get_full_patient_data: [{table}.{column}] fetch failed – {e}")
+            return []
+
+    # ── 1. Demographics (profiles + health merged) ─────────────────────────
+    profile_row = _first(
+        "profiles",
+        "name, display_name, gender, phone, address",
+        filter_col="id",
+    )
+    health_demo = _first(
+        "health",
+        "date_of_birth, age, blood_group, "
+        "height_cm, height_ft, weight_kg, weight_lbs, bmi",
+    )
+    demographics = {**profile_row, **health_demo}
+
+    # ── 2. Emergency card ──────────────────────────────────────────────────
+    emergency_card = _first(
+        "care_emergency_cards",
+        "name, age, blood_group, critical_allergies, chronic_conditions, "
+        "current_meds, emergency_instructions, emergency_contact_name, "
+        "emergency_contact_phone, preferred_hospital, "
+        "insurer_name, plan_type, tpa_helpline",
+    )
+
+    # ── 3. Emergency contacts ──────────────────────────────────────────────
+    emergency_contacts = _jsonb_list("user_emergency_contacts", "contacts")
+
+    # ── 4. Full health history ─────────────────────────────────────────────
+    health = _first(
+        "health",
+        "allergies, current_diagnosed_condition, previous_diagnosed_conditions, "
+        "ongoing_treatments, past_surgeries, "
+        "childhood_illness, long_term_treatments, family_history",
+    )
+
+    # ── 5. Medical team ────────────────────────────────────────────────────
+    medical_team = _jsonb_list("user_medical_team", "doctors")
+
+    # ── 6. Appointments ────────────────────────────────────────────────────
+    appointments = _jsonb_list("user_appointments", "appointments")
+
+    # ── 7. Medications ─────────────────────────────────────────────────────
+    medications = _jsonb_list("user_medications", "medications")
+
+# ── 8. Documents (Signed URLs from Storage) ────────────────────────────
+    documents = get_document_urls(pid)
+    medical_summary = None
+    try:
+        ms_res = (
+            supabase.table("medical_summaries_cache")
+            .select("summary_text, folder_type, generated_at")
+            .eq("profile_id", pid)
+            .order("generated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if ms_res.data:
+            medical_summary = ms_res.data[0]
+    except Exception:
+        pass
+
+    insurance_summary = None
+    try:
+        ins_res = (
+            supabase.table("insurance_summary_cache")
+            .select("summary_text, created_at")
+            .eq("profile_id", pid)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if ins_res.data:
+            insurance_summary = ins_res.data[0]
+    except Exception:
+        pass
+
+    return {
+        "demographics":      demographics,
+        "emergency_card":    emergency_card,
+        "emergency_contacts": emergency_contacts,
+        "health":            health,
+        "medical_team":      medical_team,
+        "appointments":      appointments,
+        "medications":       medications,
+        "documents":         documents,
+        "medical_summary":   medical_summary,
+        "insurance_summary": insurance_summary,
+    }
 if __name__ == "__main__":
     print("\n" + "="*60)
     test_connection()
