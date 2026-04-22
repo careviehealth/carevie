@@ -87,11 +87,10 @@ def display_demographics(demographics: dict):
     name = (demographics.get("display_name") or demographics.get("name") or "").strip()
     field("Name",          name)
     field("Age",           demographics.get("age"))
-    field("Date of Birth", demographics.get("date_of_birth"))
     field("Gender",        demographics.get("gender"))
     field("Blood Group",   demographics.get("blood_group"))
     field("Phone",         demographics.get("phone"))
-    field("Address",       demographics.get("address"))
+  
 
     if demographics.get("height_cm"):
         field("Height", f"{demographics['height_cm']} cm")
@@ -103,7 +102,6 @@ def display_demographics(demographics: dict):
     elif demographics.get("weight_lbs"):
         field("Weight", f"{demographics['weight_lbs']} lbs")
 
-    field("BMI", demographics.get("bmi"))
 
 
 def display_emergency_card(emergency_card: dict):
@@ -169,7 +167,7 @@ def display_medical_team(medical_team: list):
     print_jsonb_list(
         medical_team,
         fields_to_show=["name", "specialty", "hospital", "phone", "email",
-                        "clinic_address", "notes"],
+                        ],
     )
 
 

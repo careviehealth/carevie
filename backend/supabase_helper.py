@@ -559,8 +559,8 @@ def get_user_card_data(profile_id: str) -> dict:
     """
     Fetch and merge user card fields from the profiles and health tables.
 
-    profiles  → name, gender, phone, address
-    health    → date_of_birth, blood_group, bmi, age
+    profiles  → name, gender, phone
+    health    → date_of_birth, blood_group, age
     """
     card: dict = {}
     profile_id_str = str(profile_id)
@@ -662,7 +662,7 @@ def get_full_patient_data(profile_id: str) -> dict:
     Fetch all clinically relevant data for a profile in a single call.
 
     Returns a structured dict with the following top-level keys:
-        demographics        – name, age, DOB, gender, blood group, height, weight, BMI, phone, address
+        demographics        – name, age, DOB, gender, blood group, height, weight, phone
         emergency_card      – critical allergies, chronic conditions, preferred hospital, insurance
         emergency_contacts  – list from user_emergency_contacts.contacts
         health              – allergies, conditions (current/previous/childhood), treatments,
@@ -710,13 +710,13 @@ def get_full_patient_data(profile_id: str) -> dict:
     # ── 1. Demographics (profiles + health merged) ─────────────────────────
     profile_row = _first(
         "profiles",
-        "name, display_name, gender, phone, address",
+        "name, display_name, gender, phone",
         filter_col="id",
     )
     health_demo = _first(
         "health",
-        "date_of_birth, age, blood_group, "
-        "height_cm, height_ft, weight_kg, weight_lbs, bmi",
+        "age, blood_group, "
+        "height_cm, height_ft, weight_kg, weight_lbs",
     )
     demographics = {**profile_row, **health_demo}
 
