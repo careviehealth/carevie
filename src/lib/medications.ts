@@ -239,7 +239,7 @@ export const formatMedicationMealTimingSummary = (
 ) => {
   const normalized = deriveMedicationMealTiming(mealTiming, frequency);
   return MEDICATION_MEAL_OPTIONS.filter((option) => normalized[option.key])
-    .map((option) => `${option.label} ${normalized[option.key]}`)
+    .map((option) => `${normalized[option.key]} ${option.label.toLowerCase()}`)
     .join(", ");
 };
 

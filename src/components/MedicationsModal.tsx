@@ -24,6 +24,7 @@ import {
   modalSurfaceMotion,
   modalSurfaceTransition,
 } from "@/components/modalMotion";
+import { toast } from "@/components/AppNotifier";
 
 export type MedicationLog = SharedMedicationLog;
 export type Medication = SharedMedication & { id: string };
@@ -157,7 +158,7 @@ export function MedicationsModal({ data, onAdd, onUpdate, onDelete, onLogDose }:
   const handleEndDateChange = (value: string) => {
     if (isUpdatedEndDateBeforeToday(value)) {
       setEndDateError(END_DATE_PAST_ERROR);
-      alert(END_DATE_PAST_ERROR);
+      toast.warning("Invalid end date", END_DATE_PAST_ERROR);
       return;
     }
     setEndDateError("");
@@ -168,13 +169,16 @@ export function MedicationsModal({ data, onAdd, onUpdate, onDelete, onLogDose }:
     const selectedMealCount = countMedicationMealTiming(mealTiming);
 
     if (!name.trim() || !dosage.trim() || selectedMealCount === 0) {
-      alert("Please fill Medication Name, Dosage, and select at least one meal timing.");
+      toast.warning(
+        "Missing info",
+        "Please fill Medication Name, Dosage, and select at least one meal timing."
+      );
       return;
     }
 
     if (isUpdatedEndDateBeforeToday(endDate)) {
       setEndDateError(END_DATE_PAST_ERROR);
-      alert(END_DATE_PAST_ERROR);
+      toast.warning("Invalid end date", END_DATE_PAST_ERROR);
       return;
     }
 

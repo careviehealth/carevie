@@ -5,12 +5,15 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/createClient";
 import { AppointmentsModal } from "@/components/AppointmentsModal";
+import { BrowserNotificationManager } from "@/components/BrowserNotificationManager";
 import { EmergencyContactsModal, type EmergencyContact } from "@/components/EmergencyContactsModal";
 import { MedicalTeamModal, type Doctor } from "@/components/MedicalTeamModal";
 import { MedicationsModal, type Medication } from "@/components/MedicationsModal";
 import { MedicalSummaryModal } from "@/components/MedicalSummaryModal";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
+import PushSubscriptionManager from "@/components/PushSubscriptionManager";
 import { useAppProfile } from "@/components/AppProfileProvider";
+import { confirmDialog, toast } from "@/components/AppNotifier";
 import {
   modalOverlayMotion,
   modalOverlayTransition,
@@ -339,6 +342,31 @@ const logProfileActivity = async (payload: ProfileActivityPayload) => {
     });
   } catch {
     // Non-blocking log write.
+  }
+};
+
+type ReconcileNotificationsPayload = {
+  profileId: string;
+  kind: "medications" | "appointments";
+  onlyMedicationId?: string;
+  onlyAppointmentId?: string;
+  cancelMedicationId?: string;
+  cancelAppointmentId?: string;
+  notifyImmediately?: boolean;
+};
+
+// Fire-and-forget: ask the server to regenerate the user's reminder schedule.
+// Failures are logged but never block the user-facing mutation, since the
+// nightly reconcile cron will eventually catch up.
+const reconcileNotifications = async (payload: ReconcileNotificationsPayload) => {
+  try {
+    await fetch("/api/notifications/reconcile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // ignore — the cron tick will reconcile on the next pass
   }
 };
 
@@ -684,7 +712,7 @@ function HomePageContent() {
       if (process.env.NODE_ENV !== 'production') {
         console.error("Save appointment error:", error);
       }
-      alert("Failed to save appointment");
+      toast.error("Save failed", "Failed to save appointment.");
       return;
     }
 
@@ -715,6 +743,13 @@ function HomePageContent() {
       metadata,
     });
 
+    void reconcileNotifications({
+      profileId,
+      kind: "appointments",
+      onlyAppointmentId: appointment.id,
+      notifyImmediately: true,
+    });
+
     setAppointments(updatedAppointments);
     writeHomeCache(cacheOwnerId, "appointments", updatedAppointments);
   };
@@ -722,7 +757,13 @@ function HomePageContent() {
   const handleDeleteAppointment = async (id: string) => {
     if (!userId || !profileId) return;
 
-    const confirmed = confirm("Delete this appointment?");
+    const confirmed = await confirmDialog({
+      title: "Delete appointment?",
+      description: "This appointment will be permanently removed.",
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+      variant: "danger",
+    });
     if (!confirmed) return;
 
     const deletedAppointment = appointments.find((a) => a.id === id) ?? null;
@@ -744,7 +785,7 @@ function HomePageContent() {
       if (process.env.NODE_ENV !== 'production') {
         console.error("Delete appointment error:", error);
       }
-      alert("Failed to delete appointment");
+      toast.error("Delete failed", "Failed to delete appointment.");
       return;
     }
 
@@ -765,6 +806,12 @@ function HomePageContent() {
       },
     });
 
+    void reconcileNotifications({
+      profileId,
+      kind: "appointments",
+      cancelAppointmentId: id,
+    });
+
     setAppointments(updatedAppointments);
     writeHomeCache(cacheOwnerId, "appointments", updatedAppointments);
   };
@@ -777,7 +824,7 @@ function HomePageContent() {
     if (!userId || !profileId) return;
 
     if (!contact.name.trim() || !contact.phone.trim() || !contact.relation.trim()) {
-      alert("Please fill Name, Phone and Relation.");
+      toast.warning("Missing info", "Please fill name, phone, and relation.");
       return;
     }
 
@@ -806,7 +853,7 @@ function HomePageContent() {
       if (process.env.NODE_ENV !== 'production') {
         console.error("Add emergency contact error:", error);
       }
-      alert("Failed to add contact. Please try again.");
+      toast.error("Save failed", "Failed to add contact. Please try again.");
       return;
     }
 
@@ -817,7 +864,13 @@ function HomePageContent() {
   const deleteEmergencyContact = async (id: string) => {
     if (!userId || !profileId) return;
 
-    const confirmed = confirm("Delete this emergency contact?");
+    const confirmed = await confirmDialog({
+      title: "Delete emergency contact?",
+      description: "This contact will be permanently removed.",
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+      variant: "danger",
+    });
     if (!confirmed) return;
 
     const updatedContacts = emergencyContacts.filter((c) => c.id !== id);
@@ -838,7 +891,7 @@ function HomePageContent() {
       if (process.env.NODE_ENV !== 'production') {
         console.error("Delete emergency contact error:", error);
       }
-      alert("Failed to delete contact. Please try again.");
+      toast.error("Delete failed", "Failed to delete contact. Please try again.");
       return;
     }
 
@@ -854,7 +907,7 @@ function HomePageContent() {
     if (!userId || !profileId) return;
 
     if (!doctor.name.trim() || !doctor.number.trim() || !doctor.speciality.trim()) {
-      alert("Please fill all fields.");
+      toast.warning("Missing info", "Please fill all fields.");
       return;
     }
 
@@ -883,7 +936,7 @@ function HomePageContent() {
       if (process.env.NODE_ENV !== 'production') {
         console.error("Add doctor error:", error);
       }
-      alert("Failed to add doctor. Please try again.");
+      toast.error("Save failed", "Failed to add doctor. Please try again.");
       return;
     }
 
@@ -895,7 +948,7 @@ function HomePageContent() {
     if (!userId || !profileId) return;
 
     if (!doctor.name.trim() || !doctor.number.trim() || !doctor.speciality.trim()) {
-      alert("Please fill all fields.");
+      toast.warning("Missing info", "Please fill all fields.");
       return;
     }
 
@@ -919,7 +972,7 @@ function HomePageContent() {
       if (process.env.NODE_ENV !== 'production') {
         console.error("Update doctor error:", error);
       }
-      alert("Failed to update doctor. Please try again.");
+      toast.error("Update failed", "Failed to update doctor. Please try again.");
       return;
     }
 
@@ -930,7 +983,13 @@ function HomePageContent() {
   const deleteDoctor = async (id: string) => {
     if (!userId || !profileId) return;
 
-    const confirmed = confirm("Delete this doctor?");
+    const confirmed = await confirmDialog({
+      title: "Delete doctor?",
+      description: "This doctor will be permanently removed from your medical team.",
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+      variant: "danger",
+    });
     if (!confirmed) return;
 
     const updatedDoctors = medicalTeam.filter((d) => d.id !== id);
@@ -951,7 +1010,7 @@ function HomePageContent() {
       if (process.env.NODE_ENV !== 'production') {
         console.error("Delete doctor error:", error);
       }
-      alert("Failed to delete doctor. Please try again.");
+      toast.error("Delete failed", "Failed to delete doctor. Please try again.");
       return;
     }
 
@@ -981,7 +1040,10 @@ function HomePageContent() {
     );
 
     if (!medication.name.trim() || !medication.dosage.trim() || !normalizedFrequency) {
-      alert("Please fill Medication Name, Dosage, and select at least one meal timing.");
+      toast.warning(
+        "Missing info",
+        "Please fill Medication Name, Dosage, and select at least one meal timing."
+      );
       return;
     }
 
@@ -1034,13 +1096,19 @@ function HomePageContent() {
         },
       });
 
+      void reconcileNotifications({
+        profileId,
+        kind: "medications",
+        onlyMedicationId: newMedication.id,
+      });
+
       setMedications(updatedMedications);
       writeHomeCache(cacheOwnerId, "medications", updatedMedications);
     } catch (error: unknown) {
       if (process.env.NODE_ENV !== 'production') {
         console.error("Add medication error:", error);
       }
-      alert(`Failed to add medication: ${getErrorMessage(error)}`);
+      toast.error("Save failed", getErrorMessage(error, "Failed to add medication."));
     }
   };
 
@@ -1062,18 +1130,21 @@ function HomePageContent() {
     );
 
     if (!medication.name.trim() || !medication.dosage.trim() || !normalizedFrequency) {
-      alert("Please fill Medication Name, Dosage, and select at least one meal timing.");
+      toast.warning(
+        "Missing info",
+        "Please fill Medication Name, Dosage, and select at least one meal timing."
+      );
       return;
     }
 
     const existingMedication = medications.find((m) => m.id === medication.id) ?? null;
     const medicationId = medication.id || existingMedication?.id || "";
     if (!medicationId) {
-      alert("Medication ID is missing. Please reopen and try again.");
+      toast.error("Missing medication", "Medication ID is missing. Please reopen and try again.");
       return;
     }
     if (isUpdatedEndDateBeforeToday(medication.endDate, existingMedication?.endDate)) {
-      alert("End date cannot be changed to a date before today.");
+      toast.warning("Invalid end date", "End date cannot be changed to a date before today.");
       return;
     }
     const normalizedMedication: Medication = {
@@ -1137,20 +1208,32 @@ function HomePageContent() {
         },
       });
 
+      void reconcileNotifications({
+        profileId,
+        kind: "medications",
+        onlyMedicationId: normalizedMedication.id,
+      });
+
       setMedications(updatedMedications);
       writeHomeCache(cacheOwnerId, "medications", updatedMedications);
     } catch (error: unknown) {
       if (process.env.NODE_ENV !== 'production') {
         console.error("Update medication error:", error);
       }
-      alert(`Failed to update medication: ${getErrorMessage(error)}`);
+      toast.error("Update failed", getErrorMessage(error, "Failed to update medication."));
     }
   };
 
   const deleteMedication = async (id: string) => {
     if (!userId || !profileId) return;
 
-    const confirmed = confirm("Delete this medication?");
+    const confirmed = await confirmDialog({
+      title: "Delete medication?",
+      description: "This medication and its related reminders will be permanently removed.",
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+      variant: "danger",
+    });
     if (!confirmed) return;
 
     const deletedMedication = medications.find((m) => m.id === id) ?? null;
@@ -1187,13 +1270,19 @@ function HomePageContent() {
         },
       });
 
+      void reconcileNotifications({
+        profileId,
+        kind: "medications",
+        cancelMedicationId: id,
+      });
+
       setMedications(updatedMedications);
       writeHomeCache(cacheOwnerId, "medications", updatedMedications);
     } catch (error: unknown) {
       if (process.env.NODE_ENV !== 'production') {
         console.error("Delete medication error:", error);
       }
-      alert(`Failed to delete medication: ${getErrorMessage(error)}`);
+      toast.error("Delete failed", getErrorMessage(error, "Failed to delete medication."));
     }
   };
 
@@ -1265,7 +1354,7 @@ function HomePageContent() {
       if (process.env.NODE_ENV !== 'production') {
         console.error("Failed to log dose:", error);
       }
-      alert(`Failed to log dose: ${getErrorMessage(error)}`);
+      toast.error("Log failed", getErrorMessage(error, "Failed to log dose."));
     }
   };
 
@@ -1275,17 +1364,23 @@ function HomePageContent() {
 
   const handleSOS = async () => {
     if (!emergencyContacts || emergencyContacts.length === 0) {
-      alert(
+      toast.warning(
+        "No emergency contacts",
         "Please set up emergency contacts first before using SOS.\n\nClick on 'Emergency Contacts' card to add your emergency contacts."
       );
       setActiveSection("emergency");
       return;
     }
 
-    const confirmed = confirm(
-      "Are you sure you want to send an SOS alert to all your emergency contacts?\n\nThis will send an emergency message to:\n" +
-        emergencyContacts.map((c) => `• ${c.name} (${c.phone})`).join("\n")
-    );
+    const confirmed = await confirmDialog({
+      title: "Send SOS alert?",
+      description:
+        "This will send an emergency message to:\n" +
+        emergencyContacts.map((c) => `- ${c.name} (${c.phone})`).join("\n"),
+      confirmLabel: "Send SOS",
+      cancelLabel: "Cancel",
+      variant: "danger",
+    });
 
     if (!confirmed) return;
 
@@ -1308,15 +1403,16 @@ function HomePageContent() {
         throw new Error(errorMessage);
       }
 
-      alert(
-        `✅ SOS Alert Sent Successfully!\n\n${data.message}\n\nYour emergency contacts have been notified.`
+      toast.success(
+        "SOS alert sent",
+        `${data.message}\n\nYour emergency contacts have been notified.`
       );
     } catch (error: unknown) {
       if (process.env.NODE_ENV !== 'production') {
         console.error("SOS error:", error);
       }
       const message = getErrorMessage(error, "Failed to send SOS alert. Please try again.");
-      alert(`❌ ${message}`);
+      toast.error("SOS failed", message);
     } finally {
       setIsSendingSOS(false);
     }
@@ -1328,6 +1424,7 @@ function HomePageContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50 text-slate-900">
+      <PushSubscriptionManager userId={userId || null} />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-12">
         {/* HERO */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mb-20">
@@ -1339,7 +1436,7 @@ function HomePageContent() {
               </span>
 
               <h2
-                className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-4 leading-tight"
+                className="inline-block text-4xl sm:text-5xl lg:text-6xl font-bold mb-4 leading-tight"
                 style={{
                   background:
                     "linear-gradient(90deg, var(--hero-greeting-from), var(--hero-greeting-to))",
@@ -1443,6 +1540,14 @@ function HomePageContent() {
             </Modal>
           ) : null}
         </AnimatePresence>
+
+        <BrowserNotificationManager
+          key={`browser-notifications:${userId}:${profileId ?? "account"}`}
+          userId={userId}
+          profileId={profileId}
+          appointments={appointments}
+          medications={medications}
+        />
 
         <AnimatePresence>
           {activeSection === "calendar" ? (

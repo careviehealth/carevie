@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth';
 import { getBackendInternalHeaders, hasBackendInternalAuth } from '@/lib/backendInternalAuth';
+import { tryCreateSupabaseAdminClient } from '@/lib/supabaseAdmin';
+import { emitMedicalSummaryReady } from '@/lib/notifications/emitters/medicalSummary';
 
 const PRODUCTION_BACKEND_FALLBACK = 'https://carevie.onrender.com';
 const FLASK_API_URL =
@@ -227,7 +229,8 @@ export async function POST(request: NextRequest) {
   try {
     console.log('📥 [Next.js API] POST /api/medical');
 
-    if (!(await getAuthenticatedUser(request))) {
+    const authenticatedUser = await getAuthenticatedUser(request);
+    if (!authenticatedUser) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized', message: 'Unauthorized' },
         { status: 401 }
@@ -293,6 +296,43 @@ export async function POST(request: NextRequest) {
         force_regenerate: force_regenerate === true,
         max_new_structured_extractions,
       });
+
+      // Fire `medical_summary_ready` only when generation actually produced
+      // content. Dedupe inside the emitter collapses repeat calls with the
+      // same body to a single notification.
+      if (result.status >= 200 && result.status < 300) {
+        const data = (result.data ?? {}) as Record<string, unknown>;
+        const success = data.success === true || data.success === undefined;
+        const summary =
+          typeof data.summary === 'string'
+            ? data.summary
+            : typeof (data.data as Record<string, unknown> | undefined)?.summary === 'string'
+              ? ((data.data as Record<string, unknown>).summary as string)
+              : '';
+        const reportCountRaw =
+          (data.report_count as unknown) ??
+          (data.reports_count as unknown) ??
+          ((data.data as Record<string, unknown> | undefined)?.report_count as unknown);
+        const reportCount =
+          typeof reportCountRaw === 'number' && Number.isFinite(reportCountRaw)
+            ? reportCountRaw
+            : null;
+
+        if (success && summary.trim()) {
+          const adminClient = tryCreateSupabaseAdminClient();
+          if (adminClient) {
+            void emitMedicalSummaryReady({
+              adminClient,
+              recipientUserId: authenticatedUser.id,
+              profileId: normalizedProfileId,
+              folderType: typeof folder_type === 'string' ? folder_type : null,
+              summaryContent: summary,
+              reportCount,
+            });
+          }
+        }
+      }
+
       return NextResponse.json(
         {
           ...sanitizeBackendResponse(result.status, result.data),

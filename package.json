@@ -16,6 +16,7 @@
     "@react-three/fiber": "^9.5.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.87.3",
+    "@types/web-push": "^3.6.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "driver.js": "^1.4.0",
@@ -35,7 +36,8 @@
     "supabase": "^2.76.16",
     "tailwind-merge": "^3.4.0",
     "three": "^0.167.1",
-    "twilio": "^5.11.2"
+    "twilio": "^5.11.2",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser } from '@/lib/auth';
+import { logAndNotifyCareCircleActivity } from '@/lib/notifications/emitters/careCircle';
 import {
-  logCareCircleActivity,
   type CareCircleActivityAction,
   type CareCircleActivityDomain,
 } from '@/lib/careCircleActivityLogs';
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
     const entity = isObject(body?.entity) ? body?.entity : null;
     const metadata = isObject(body?.metadata) ? body.metadata : {};
 
-    await logCareCircleActivity({
+    await logAndNotifyCareCircleActivity({
       adminClient,
       profileId,
       actorUserId: user.id,

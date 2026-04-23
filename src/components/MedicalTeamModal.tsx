@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "@/components/AppNotifier";
 
 export type Doctor = {
   id: string;
@@ -43,7 +44,7 @@ export function MedicalTeamModal({ data, onAdd, onUpdate, onDelete }: Props) {
 
   const handleSave = async () => {
     if (!name.trim() || !number.trim() || !speciality.trim()) {
-      alert("Please fill all fields.");
+      toast.warning("Missing info", "Please fill all fields.");
       return;
     }
 

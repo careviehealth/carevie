@@ -26,6 +26,7 @@ import {
 import { supabase } from '@/lib/createClient';
 import { deleteMedicalFile, getSignedUrl, listMedicalFiles, uploadMedicalFile } from '@/lib/medicalStorage';
 import { MedicalFolder } from '@/constants/medicalFolders';
+import { confirmDialog, promptDialog, toast } from '@/components/AppNotifier';
 import { useAppProfile } from '@/components/AppProfileProvider';
 
 type Category = 'lab-reports' | 'prescriptions' | 'insurance' | 'bills' | 'all';
@@ -34,6 +35,11 @@ type MedicalFile = {
   name: string;
   created_at: string;
   folder: MedicalFolder;
+};
+
+type StorageFileLike = {
+  name: string;
+  created_at: string;
 };
 
 type CacheEntry<T> = { ts: number; value: T };
@@ -224,7 +230,7 @@ export default function VaultPage() {
       const { data } = await listMedicalFiles(uid, folder);
       if (data) {
         results.push(
-          ...data.map((f: any) => ({
+          ...data.map((f: StorageFileLike) => ({
             name: f.name,
             created_at: f.created_at,
             folder,
@@ -306,7 +312,7 @@ export default function VaultPage() {
     e.preventDefault();
     if (!storageOwnerId || !uploadData.file) return;
     if (!isAllowedUploadType(uploadData.file)) {
-      window.alert('Only PDF and image files are allowed.');
+      toast.warning('Unsupported file', 'Only PDF and image files are allowed.');
       return;
     }
 
@@ -362,19 +368,25 @@ export default function VaultPage() {
       setUploadData({ category: getDefaultUploadCategory(), file: null, fileName: '', uploading: false, error: null });
       fetchFiles(storageOwnerId, selectedCategory);
       fetchCounts(storageOwnerId);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Network or other error
       setUploadData((prev) => ({
         ...prev,
         uploading: false,
-        error: err?.message || 'An error occurred during upload. Please try again.',
+        error: err instanceof Error ? err.message : 'An error occurred during upload. Please try again.',
       }));
     }
   };
 
   const handleDelete = async (file: MedicalFile) => {
     if (!storageOwnerId) return;
-    const confirmed = window.confirm(`Delete "${file.name}"?`);
+    const confirmed = await confirmDialog({
+      title: `Delete "${file.name}"?`,
+      description: 'This document will be permanently removed from your vault.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+    });
     if (!confirmed) return;
 
     setOpenMenuName(null);
@@ -385,7 +397,7 @@ export default function VaultPage() {
     setDeletingName(null);
 
     if (error) {
-      alert(error.message || "Failed to delete file.");
+      toast.error('Delete failed', error.message || 'Failed to delete file.');
       return;
     }
 
@@ -406,12 +418,20 @@ export default function VaultPage() {
 
   const handleRename = async (file: MedicalFile) => {
     if (!storageOwnerId) return;
-    const nextName = window
-      .prompt('Rename file', file.name)
-      ?.trim();
+    const nextName = (
+      await promptDialog({
+        title: 'Rename file',
+        description: `Choose a new name for "${file.name}".`,
+        defaultValue: file.name,
+        inputLabel: 'File name',
+        placeholder: 'Enter file name',
+        confirmLabel: 'Save',
+        cancelLabel: 'Cancel',
+      })
+    )?.trim();
     if (!nextName || nextName === file.name) return;
     if (nextName.includes('/')) {
-      alert("File name can't include slashes.");
+      toast.warning('Invalid file name', "File name can't include slashes.");
       return;
     }
 
@@ -426,7 +446,7 @@ export default function VaultPage() {
     setRenamingName(null);
 
     if (error) {
-      alert(error.message || 'Failed to rename file.');
+      toast.error('Rename failed', error.message || 'Failed to rename file.');
       return;
     }
 
@@ -454,7 +474,7 @@ export default function VaultPage() {
       `${storageOwnerId}/${file.folder}/${file.name}`
     );
     if (error || !data?.signedUrl) {
-      alert(error?.message || "Failed to download file.");
+      toast.error('Download failed', error?.message || 'Failed to download file.');
       return;
     }
 
@@ -473,7 +493,10 @@ export default function VaultPage() {
       link.remove();
       window.URL.revokeObjectURL(objectUrl);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to download file.");
+      toast.error(
+        'Download failed',
+        err instanceof Error ? err.message : 'Failed to download file.'
+      );
     }
   };
 
@@ -491,7 +514,10 @@ export default function VaultPage() {
       }
       setPreviewUrl(data.signedUrl);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to load preview.");
+      toast.error(
+        'Preview failed',
+        err instanceof Error ? err.message : 'Failed to load preview.'
+      );
     } finally {
       setPreviewLoading(false);
     }
@@ -563,7 +589,7 @@ export default function VaultPage() {
   });
 
   const getCategoryIcon = (folder: MedicalFolder) => {
-    const icons: Record<MedicalFolder, any> = {
+    const icons: Record<MedicalFolder, typeof Activity> = {
       reports: Activity,
       prescriptions: FileText,
       insurance: Shield,
@@ -799,7 +825,10 @@ export default function VaultPage() {
                                 type="button"
                                 onClick={() => {
                                   if (!customRange.start || !customRange.end) {
-                                    alert('Please select a start and end date.');
+                                    toast.warning(
+                                      'Select a date range',
+                                      'Please select a start and end date.'
+                                    );
                                     return;
                                   }
                                   setDateFilter('custom');
@@ -1151,7 +1180,7 @@ export default function VaultPage() {
                     onChange={(e) => {
                       const nextFile = e.target.files?.[0] || null;
                       if (nextFile && !isAllowedUploadType(nextFile)) {
-                        window.alert('Only PDF and image files are allowed.');
+                        toast.warning('Unsupported file', 'Only PDF and image files are allowed.');
                         e.target.value = '';
                         return;
                       }

@@ -50,6 +50,7 @@ import {
   type CareCirclePermissionKey,
   type CareCirclePermissions,
 } from '@/lib/careCirclePermissions';
+import { confirmDialog, promptDialog, toast } from '@/components/AppNotifier';
 
 type CareCircleStatus = 'pending' | 'accepted' | 'declined';
 
@@ -1180,6 +1181,15 @@ export default function CareCirclePage() {
     if (!currentUserId) {
       return;
     }
+    const confirmed = await confirmDialog({
+      title: `Remove "${member.name}"?`,
+      description: `Are you sure you want to remove ${member.name} from your care circle?`,
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+
     await supabase
       .from('care_circle_links')
       .delete()
@@ -1659,10 +1669,20 @@ export default function CareCirclePage() {
   const handleVaultRename = useCallback(
     async (file: MemberVaultFile) => {
       if (!selectedMember) return;
-      const nextName = window.prompt('Rename file', file.name)?.trim();
+      const nextName = (
+        await promptDialog({
+          title: 'Rename file',
+          description: `Choose a new name for "${file.name}".`,
+          defaultValue: file.name,
+          inputLabel: 'File name',
+          placeholder: 'Enter file name',
+          confirmLabel: 'Save',
+          cancelLabel: 'Cancel',
+        })
+      )?.trim();
       if (!nextName || nextName === file.name) return;
       if (!isValidVaultFileName(nextName)) {
-        window.alert("File name can't include slashes.");
+        toast.warning('Invalid file name', "File name can't include slashes.");
         return;
       }
 
@@ -1701,7 +1721,13 @@ export default function CareCirclePage() {
   const handleVaultDelete = useCallback(
     async (file: MemberVaultFile) => {
       if (!selectedMember) return;
-      const confirmed = window.confirm(`Delete "${file.name}"?`);
+      const confirmed = await confirmDialog({
+        title: `Delete "${file.name}"?`,
+        description: 'This document will be permanently removed from the shared vault.',
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        variant: 'danger',
+      });
       if (!confirmed) return;
 
       const fileKey = vaultFileKey(file);
@@ -1813,7 +1839,13 @@ export default function CareCirclePage() {
   const handleMedicationDelete = useCallback(
     async (medication: MemberDetailsMedication) => {
       if (!selectedMember) return;
-      const confirmed = window.confirm(`Delete "${medication.name}"?`);
+      const confirmed = await confirmDialog({
+        title: `Delete "${medication.name}"?`,
+        description: 'This medication will be permanently removed.',
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        variant: 'danger',
+      });
       if (!confirmed) return;
 
       setMedicationDeletingId(medication.id);
@@ -1933,7 +1965,13 @@ export default function CareCirclePage() {
   const handleAppointmentDelete = useCallback(
     async (appointment: MemberDetailsAppointment) => {
       if (!selectedMember) return;
-      const confirmed = window.confirm(`Delete "${appointment.title}"?`);
+      const confirmed = await confirmDialog({
+        title: `Delete "${appointment.title}"?`,
+        description: 'This appointment will be permanently removed.',
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        variant: 'danger',
+      });
       if (!confirmed) return;
 
       setAppointmentDeletingId(appointment.id);
@@ -3047,7 +3085,7 @@ export default function CareCirclePage() {
                         (key) => selectedMember.permissions[key]
                       ).length === 0 ? (
                         <p className="mt-1 text-xs text-slate-500">
-                          This person hasn't shared any sections with you yet.
+                          This person hasn&apos;t shared any sections with you yet.
                         </p>
                       ) : null}
                       <ul className="mt-0.5 space-y-2">

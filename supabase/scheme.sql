@@ -1,19 +1,62 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
+CREATE TABLE public.appointment_summary_cache (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  profile_id uuid NOT NULL,
+  summary_text text NOT NULL,
+  report_count integer DEFAULT 0,
+  reports_signature text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  folder_type text,
+  CONSTRAINT appointment_summary_cache_pkey PRIMARY KEY (id),
+  CONSTRAINT appointment_summary_cache_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT appointment_summary_cache_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.bills_summary_cache (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  profile_id uuid NOT NULL,
+  summary_text text NOT NULL,
+  report_count integer DEFAULT 0,
+  reports_signature text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  folder_type text,
+  CONSTRAINT bills_summary_cache_pkey PRIMARY KEY (id),
+  CONSTRAINT bills_summary_cache_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT bills_summary_cache_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id)
+);
 CREATE TABLE public.care_circle_links (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   requester_id uuid NOT NULL,
   recipient_id uuid NOT NULL,
-  relationship text NOT NULL DEFAULT 'friend'::text CHECK (relationship = ANY (ARRAY['family'::text, 'friend'::text])),
   status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'accepted'::text, 'declined'::text])),
   profile_id uuid NOT NULL,
   CONSTRAINT care_circle_links_pkey PRIMARY KEY (id),
   CONSTRAINT care_circle_links_requester_id_fkey FOREIGN KEY (requester_id) REFERENCES auth.users(id),
   CONSTRAINT care_circle_links_recipient_id_fkey FOREIGN KEY (recipient_id) REFERENCES auth.users(id),
   CONSTRAINT fk_care_circle_links_profile FOREIGN KEY (profile_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.care_circle_permissions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  owner_user_id uuid NOT NULL,
+  recipient_id uuid NOT NULL,
+  perm_emergency_card boolean NOT NULL DEFAULT true,
+  perm_appointments boolean NOT NULL DEFAULT false,
+  perm_medications boolean NOT NULL DEFAULT false,
+  perm_vault boolean NOT NULL DEFAULT false,
+  perm_personal_info boolean NOT NULL DEFAULT false,
+  perm_activity_log boolean NOT NULL DEFAULT false,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT care_circle_permissions_pkey PRIMARY KEY (id),
+  CONSTRAINT care_circle_permissions_owner_user_id_fkey FOREIGN KEY (owner_user_id) REFERENCES auth.users(id),
+  CONSTRAINT care_circle_permissions_recipient_id_fkey FOREIGN KEY (recipient_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.care_emergency_cards (
   user_id uuid NOT NULL,
@@ -50,6 +93,7 @@ CREATE TABLE public.feedback (
   steps_to_reproduce text,
   use_case text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
+  status text NOT NULL DEFAULT 'open'::text CHECK (status = ANY (ARRAY['open'::text, 'in_progress'::text, 'resolved'::text, 'closed'::text])),
   CONSTRAINT feedback_pkey PRIMARY KEY (id),
   CONSTRAINT feedback_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
@@ -59,9 +103,7 @@ CREATE TABLE public.health (
   date_of_birth date,
   blood_group text,
   height_cm numeric,
-  height_ft numeric,
   weight_kg numeric,
-  weight_lbs numeric,
   bmi numeric,
   age integer,
   current_diagnosed_condition jsonb,
@@ -76,9 +118,25 @@ CREATE TABLE public.health (
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   family_history jsonb,
   profile_id uuid NOT NULL,
+  height_ft numeric,
+  weight_lbs numeric,
   CONSTRAINT health_pkey PRIMARY KEY (id),
   CONSTRAINT health_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
   CONSTRAINT health_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.insurance_summary_cache (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  profile_id uuid NOT NULL,
+  summary_text text NOT NULL,
+  report_count integer DEFAULT 0,
+  reports_signature text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  folder_type text,
+  CONSTRAINT insurance_summary_cache_pkey PRIMARY KEY (id),
+  CONSTRAINT insurance_summary_cache_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id),
+  CONSTRAINT insurance_summary_cache_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.medical_reports_processed (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -118,6 +176,20 @@ CREATE TABLE public.medical_summaries_cache (
   profile_id uuid NOT NULL,
   CONSTRAINT medical_summaries_cache_pkey PRIMARY KEY (id),
   CONSTRAINT medical_summaries_cache_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.medication_summary_cache (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  profile_id uuid NOT NULL,
+  summary_text text NOT NULL,
+  report_count integer DEFAULT 0,
+  reports_signature text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  folder_type text,
+  CONSTRAINT medication_summary_cache_pkey PRIMARY KEY (id),
+  CONSTRAINT medication_summary_cache_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT medication_summary_cache_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.notification_states (
   user_id uuid NOT NULL,

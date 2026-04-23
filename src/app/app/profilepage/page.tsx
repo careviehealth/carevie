@@ -10,6 +10,7 @@ import { useRef, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Silk from '@/components/Silk';
 import jsPDF from 'jspdf';
+import { toast } from '@/components/AppNotifier';
 import { useAppProfile } from '@/components/AppProfileProvider';
 import { syncRememberedAccountName } from '@/lib/rememberedAccount';
 import {
@@ -1629,12 +1630,12 @@ useEffect(() => {
                 <form onSubmit={async (e) => {
                   e.preventDefault();
                   if (!profileId || !userId) {
-                    alert("Please select a profile first.");
+                    toast.warning("No profile selected", "Please select a profile first.");
                     return;
                   }
                   const measurements = getPersonalDraftMeasurements();
                   if ("error" in measurements) {
-                    alert(measurements.error);
+                    toast.warning("Invalid measurements", measurements.error);
                     return;
                   }
                   const computedAge = computeAgeFromDob(personalDraft.dob);
@@ -1653,7 +1654,7 @@ useEffect(() => {
                     .update(personalData)
                     .eq("id", profileId);
                   if (profileError) {
-                    alert("Error: " + profileError.message);
+                    toast.error("Save failed", profileError.message);
                     return;
                   }
                   const normalizedMedications = currentMedications
@@ -1724,7 +1725,10 @@ useEffect(() => {
                     | { error?: string; message?: string }
                     | null;
                   if (!healthResponse.ok) {
-                    alert("Error: " + (healthPayload?.message || healthPayload?.error || "Failed to save health profile."));
+                    toast.error(
+                      "Save failed",
+                      healthPayload?.message || healthPayload?.error || "Failed to save health profile."
+                    );
                   } else {
                     if (selectedProfile?.is_primary && personalDraft.userName.trim()) {
                       syncRememberedAccountName(userId, personalDraft.userName.trim());
@@ -1744,7 +1748,7 @@ useEffect(() => {
                     setAge(computedAge !== null ? String(computedAge) : "");
                     setBmi(computedBmi !== null ? String(computedBmi) : "");
                     setIsPersonalInfoModalOpen(false);
-                    alert("Personal information updated successfully!");
+                    toast.success("Saved", "Personal information updated successfully.");
                   }
                 }}>
                   <div className="space-y-4">
@@ -1955,7 +1959,7 @@ useEffect(() => {
                 <form onSubmit={async (e) => {
                   e.preventDefault();
                   if (!profileId || !userId) {
-                    alert("Please select a profile first.");
+                    toast.warning("No profile selected", "Please select a profile first.");
                     return;
                   }
                   const todayDate = new Date().toISOString().split("T")[0];
@@ -1982,7 +1986,10 @@ useEffect(() => {
                     );
                   });
                   if (hasIncompleteMedication) {
-                    alert("Please fill Medication Name, Dosage, and meal timing for each medication.");
+                    toast.warning(
+                      "Missing medication details",
+                      "Please fill Medication Name, Dosage, and meal timing for each medication."
+                    );
                     return;
                   }
 
@@ -2045,9 +2052,9 @@ useEffect(() => {
                   ]);
 
                   if (healthError) {
-                    alert("Error: " + healthError.message);
+                    toast.error("Save failed", healthError.message);
                   } else if (medicationError) {
-                    alert("Error: " + medicationError.message);
+                    toast.error("Save failed", medicationError.message);
                   } else {
                     const medicationChanges = buildMedicationListActivityChanges(
                       persistedCurrentMedications,
@@ -2082,7 +2089,7 @@ useEffect(() => {
                     setCurrentMedications(normalizedMedications);
                     setPersistedCurrentMedications(cloneMedicationList(normalizedMedications));
                     setIsCurrentMedicalModalOpen(false);
-                    alert("Health information updated successfully!");
+                    toast.success("Saved", "Health information updated successfully.");
                   }
                 }}>
                   <div className="space-y-6">
@@ -2391,7 +2398,7 @@ useEffect(() => {
                 <form onSubmit={async (e) => {
                   e.preventDefault();
                   if (!profileId || !userId) {
-                    alert("Please select a profile first.");
+                    toast.warning("No profile selected", "Please select a profile first.");
                     return;
                   }
                   const pastData = {
@@ -2412,10 +2419,10 @@ useEffect(() => {
                     .from("health")
                     .upsert(pastData, { onConflict: "profile_id" });
                   if (error) {
-                    alert("Error: " + error.message);
+                    toast.error("Save failed", error.message);
                   } else {
                     setIsPastMedicalModalOpen(false);
-                    alert("Past medical history updated successfully!");
+                    toast.success("Saved", "Past medical history updated successfully.");
                   }
                 }}>
                   <div className="space-y-6">
@@ -2630,7 +2637,7 @@ useEffect(() => {
                 <form onSubmit={async (e) => {
                   e.preventDefault();
                   if (!profileId || !userId) {
-                    alert("Please select a profile first.");
+                    toast.warning("No profile selected", "Please select a profile first.");
                     return;
                   }
                   const familyData = { familyMedicalHistory };
@@ -2646,10 +2653,10 @@ useEffect(() => {
                       { onConflict: "profile_id" }
                     );
                   if (error) {
-                    alert("Error: " + error.message);
+                    toast.error("Save failed", error.message);
                   } else {
                     setIsFamilyHistoryModalOpen(false);
-                    alert("Family medical history updated successfully!");
+                    toast.success("Saved", "Family medical history updated successfully.");
                   }
                 }}>
                   <div className="space-y-6">

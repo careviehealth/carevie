@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser } from '@/lib/auth';
-import { logCareCircleActivity } from '@/lib/careCircleActivityLogs';
+import { logAndNotifyCareCircleActivity as logCareCircleActivity } from '@/lib/notifications/emitters/careCircle';
 import { authorizeCareCircleMemberAccess } from '@/lib/careCirclePermissions';
 
 const CARE_CIRCLE_FOLDERS = ['reports', 'prescriptions', 'insurance', 'bills'] as const;

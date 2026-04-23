@@ -9,6 +9,7 @@ import ChatWidget from "@/components/ChatWidget";
 import ConveyThisProvider from "@/components/ConveyThisProvider";
 import FeedbackTab from "@/components/FeedbackTab";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
+import { AppNotifier } from "@/components/AppNotifier";
 import { AppProfileProvider } from "@/components/AppProfileProvider";
 
 const geistSans = Geist({
@@ -59,6 +60,8 @@ export default function RootLayout({
           <Suspense fallback={null}>
             <FeedbackTab />
           </Suspense>
+
+          <AppNotifier />
         </AppProfileProvider>
       </body>
     </html>

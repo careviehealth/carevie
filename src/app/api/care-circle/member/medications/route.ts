@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser } from '@/lib/auth';
-import { logCareCircleActivity } from '@/lib/careCircleActivityLogs';
+import { logAndNotifyCareCircleActivity as logCareCircleActivity } from '@/lib/notifications/emitters/careCircle';
+import {
+  reconcileMedicationSchedule,
+  cancelMedicationSchedule,
+} from '@/lib/notifications/schedulers/medication';
 import { authorizeCareCircleMemberAccess } from '@/lib/careCirclePermissions';
 import {
   deriveMedicationMealTiming,
@@ -461,6 +465,15 @@ export async function POST(request: Request) {
       },
     });
 
+    await reconcileMedicationSchedule({
+      adminClient: access.adminClient,
+      profileId: access.ownerProfileId,
+      medications: nextMedications as unknown as Parameters<typeof reconcileMedicationSchedule>[0]['medications'],
+      onlyMedicationId: nextMedication.id,
+    }).catch((err) =>
+      console.error('[notifications] reconcileMedicationSchedule (POST):', err)
+    );
+
     return NextResponse.json({
       medication: nextMedication,
       medications: nextMedications,
@@ -612,6 +625,15 @@ export async function PATCH(request: Request) {
       },
     });
 
+    await reconcileMedicationSchedule({
+      adminClient: access.adminClient,
+      profileId: access.ownerProfileId,
+      medications: nextMedications as unknown as Parameters<typeof reconcileMedicationSchedule>[0]['medications'],
+      onlyMedicationId: updatedMedication.id,
+    }).catch((err) =>
+      console.error('[notifications] reconcileMedicationSchedule (PATCH):', err)
+    );
+
     return NextResponse.json({
       medication: updatedMedication,
       medications: nextMedications,
@@ -682,6 +704,10 @@ export async function DELETE(request: Request) {
         startDate: deletedMedication?.startDate ?? null,
       },
     });
+
+    await cancelMedicationSchedule(access.adminClient, medicationId).catch((err) =>
+      console.error('[notifications] cancelMedicationSchedule (DELETE):', err)
+    );
 
     return NextResponse.json({ deleted: true, medications: nextMedications });
   } catch (error) {

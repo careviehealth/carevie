@@ -8,6 +8,7 @@ import {
   modalSurfaceMotion,
   modalSurfaceTransition,
 } from '@/components/modalMotion';
+import { toast } from '@/components/AppNotifier';
 
 type Appointment = {
   id: string;
@@ -224,23 +225,23 @@ export function AppointmentsModal({
     e.preventDefault();
 
     if (!eventForm.title.trim()) {
-      alert('Please enter the event name.');
+      toast.warning('Missing title', 'Please enter the event name.');
       return;
     }
     if (!eventTime.hour) {
-      alert('Please enter the hour for the appointment time.');
+      toast.warning('Missing time', 'Please enter the hour for the appointment time.');
       return;
     }
     if (!eventTime.minute) {
-      alert('Please enter the minutes for the appointment time.');
+      toast.warning('Missing time', 'Please enter the minutes for the appointment time.');
       return;
     }
     if (!eventTime.period) {
-      alert('Please select AM or PM for the appointment time.');
+      toast.warning('Missing time', 'Please select AM or PM for the appointment time.');
       return;
     }
     if (!eventForm.type) {
-      alert('Please select an appointment type.');
+      toast.warning('Missing type', 'Please select an appointment type.');
       return;
     }
 
@@ -248,7 +249,7 @@ export function AppointmentsModal({
       const appointmentDateTime = new Date(`${eventForm.date}T${eventForm.time}`);
       const now = new Date();
       if (appointmentDateTime <= now) {
-        alert('Please select a future date and time for the appointment.');
+        toast.warning('Invalid time', 'Please select a future date and time for the appointment.');
         return;
       }
 

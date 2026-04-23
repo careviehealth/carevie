@@ -571,7 +571,7 @@ html[class*="theme-"] {
   --color-violet-500: var(--theme-button-primary);
   --color-violet-600: var(--theme-button-secondary);
   --hero-greeting-from: var(--theme-button-primary);
-  --hero-greeting-to: var(--theme-accent);
+  --hero-greeting-to: var(--theme-text);
 }
 
 /* theme application for frequently used utility classes in /app shell */

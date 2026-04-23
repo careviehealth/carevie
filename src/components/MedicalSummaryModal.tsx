@@ -9,6 +9,7 @@ import {
   modalSurfaceMotion,
   modalSurfaceTransition,
 } from '@/components/modalMotion';
+import { toast } from '@/components/AppNotifier';
 
 interface SummaryResponse {
   success: boolean;
@@ -396,7 +397,7 @@ export function MedicalSummaryModal({
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(summary);
-                  alert('✅ Summary copied to clipboard!');
+                  toast.success('Copied', 'Summary copied to clipboard.');
                 }}
                 className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl transition font-medium"
               >

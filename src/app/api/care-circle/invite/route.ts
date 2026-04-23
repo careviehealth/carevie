@@ -7,6 +7,7 @@ import {
   upsertCareCirclePermissions,
   CARE_CIRCLE_DEFAULT_PERMISSIONS,
 } from '@/lib/careCirclePermissions';
+import { emitCareCircleInviteReceived } from '@/lib/notifications/emitters/careCircle';
 
 type InvitePayload = {
   contact?: string;
@@ -254,6 +255,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ message }, { status: 500 });
     }
 
+    await emitCareCircleInviteReceived({
+      adminClient,
+      requesterId: user.id,
+      recipientId,
+      profileId: selectedProfile.id,
+      linkId: existingPairRows[0]?.id ?? selectedProfile.id,
+    });
+
     return NextResponse.json({
       recipientId,
       invitedProfilesCount: existingPairRows.length,
@@ -323,6 +332,13 @@ export async function POST(request: Request) {
           const message = permError instanceof Error ? permError.message : 'Failed to save permissions.';
           return NextResponse.json({ message }, { status: 500 });
         }
+        await emitCareCircleInviteReceived({
+          adminClient,
+          requesterId: user.id,
+          recipientId,
+          profileId: primaryInviteRow.profile_id,
+          linkId: primaryInviteRow.profile_id,
+        });
         return NextResponse.json({
           recipientId,
           invitedProfilesCount: 1,
@@ -346,6 +362,14 @@ export async function POST(request: Request) {
     const message = permError instanceof Error ? permError.message : 'Failed to save permissions.';
     return NextResponse.json({ message }, { status: 500 });
   }
+
+  await emitCareCircleInviteReceived({
+    adminClient,
+    requesterId: user.id,
+    recipientId,
+    profileId: selectedProfile.id,
+    linkId: selectedProfile.id,
+  });
 
   return NextResponse.json({ recipientId, invitedProfilesCount: inviteRows.length });
 }

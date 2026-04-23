@@ -9,6 +9,7 @@ import {
   PHONE_MAX_DIGITS,
   type CountryOption,
 } from "@/lib/countries";
+import { toast } from "@/components/AppNotifier";
 
 export type EmergencyContact = {
   id: string;
@@ -67,14 +68,15 @@ export function EmergencyContactsModal({ data, onAdd, onDelete }: Props) {
 
   const handleSave = async () => {
     if (!name.trim() || !relation.trim()) {
-      alert("Please enter a valid Name and Relation.");
+      toast.warning("Missing info", "Please enter a valid name and relation.");
       return;
     }
     const digitsOnly = phone.replace(/\D/g, "");
     const isIndia = selectedCountry.code === "IN";
     const minLen = isIndia ? INDIA_PHONE_DIGITS : 10;
     if (digitsOnly.length < minLen || digitsOnly.length > PHONE_MAX_DIGITS) {
-      alert(
+      toast.warning(
+        "Invalid phone number",
         isIndia
           ? "Please enter a valid 10-digit phone number."
           : "Please enter a valid phone number (10–15 digits)."

@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser } from '@/lib/auth';
-import { logCareCircleActivity } from '@/lib/careCircleActivityLogs';
+import { logAndNotifyCareCircleActivity as logCareCircleActivity } from '@/lib/notifications/emitters/careCircle';
+import {
+  reconcileAppointmentSchedule,
+  cancelAppointmentSchedule,
+} from '@/lib/notifications/schedulers/appointment';
 import { authorizeCareCircleMemberAccess } from '@/lib/careCirclePermissions';
 
 type AppointmentRecord = {
@@ -436,6 +440,15 @@ export async function POST(request: Request) {
       },
     });
 
+    await reconcileAppointmentSchedule({
+      adminClient: access.adminClient,
+      profileId: access.ownerProfileId,
+      appointments: nextAppointments,
+      onlyAppointmentId: normalized.id,
+    }).catch((err) =>
+      console.error('[notifications] reconcileAppointmentSchedule (POST):', err)
+    );
+
     return NextResponse.json({
       appointment: normalized,
       appointments: nextAppointments,
@@ -522,6 +535,15 @@ export async function PATCH(request: Request) {
       },
     });
 
+    await reconcileAppointmentSchedule({
+      adminClient: access.adminClient,
+      profileId: access.ownerProfileId,
+      appointments: nextAppointments,
+      onlyAppointmentId: normalized.id,
+    }).catch((err) =>
+      console.error('[notifications] reconcileAppointmentSchedule (PATCH):', err)
+    );
+
     return NextResponse.json({
       appointment: normalized,
       appointments: nextAppointments,
@@ -593,6 +615,10 @@ export async function DELETE(request: Request) {
         time: deletedAppointment?.time ?? null,
       },
     });
+
+    await cancelAppointmentSchedule(access.adminClient, appointmentId).catch((err) =>
+      console.error('[notifications] cancelAppointmentSchedule (DELETE):', err)
+    );
 
     return NextResponse.json({
       deleted: true,

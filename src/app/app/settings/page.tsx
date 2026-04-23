@@ -2,9 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { ChevronRight, FileText, Lock, Shield, UserRound, X } from 'lucide-react';
+import { Bell, ChevronRight, FileText, Lock, Shield, UserRound, X } from 'lucide-react';
 import { supabase } from '@/lib/createClient';
 import { useAppProfile } from '@/components/AppProfileProvider';
+import NotificationPreferencesPanel from '@/components/NotificationPreferencesPanel';
 
 const accountItems = [
   {
@@ -50,7 +51,7 @@ const legalItems = [
   },
 ];
 
-type SettingsTab = 'account' | 'legal';
+type SettingsTab = 'account' | 'notifications' | 'legal';
 const ACCOUNT_DELETE_CONFIRMATION = 'DELETE';
 
 export default function SettingsPage() {
@@ -65,8 +66,27 @@ export default function SettingsPage() {
   const [isLegalModalReady, setIsLegalModalReady] = useState(false);
   const legalIframeRef = useRef<HTMLIFrameElement | null>(null);
   const isAccountTab = activeTab === 'account';
+  const isNotificationsTab = activeTab === 'notifications';
+  const isLegalTab = activeTab === 'legal';
   const selectedProfileId = selectedProfile?.id ?? '';
   const canDeleteAccount = Boolean(selectedProfile?.is_primary);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (cancelled) return;
+        setAuthUserId(data.user?.id ?? null);
+      } catch {
+        if (!cancelled) setAuthUserId(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -232,12 +252,27 @@ export default function SettingsPage() {
             </button>
             <button
               role="tab"
+              id="settings-tab-notifications"
+              aria-selected={isNotificationsTab}
+              aria-controls="settings-panel-notifications"
+              onClick={() => setActiveTab('notifications')}
+              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-button-primary)] ${
+                isNotificationsTab
+                  ? 'bg-[var(--theme-button-primary)] text-white shadow-sm'
+                  : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-card)] hover:text-[var(--theme-text)]'
+              }`}
+            >
+              <Bell className="h-4 w-4" />
+              Notifications
+            </button>
+            <button
+              role="tab"
               id="settings-tab-legal"
-              aria-selected={!isAccountTab}
+              aria-selected={isLegalTab}
               aria-controls="settings-panel-legal"
               onClick={() => setActiveTab('legal')}
               className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-button-primary)] ${
-                !isAccountTab
+                isLegalTab
                   ? 'bg-[var(--theme-button-primary)] text-white shadow-sm'
                   : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-card)] hover:text-[var(--theme-text)]'
               }`}
@@ -250,22 +285,42 @@ export default function SettingsPage() {
 
         <section
           role="tabpanel"
-          id={isAccountTab ? 'settings-panel-account' : 'settings-panel-legal'}
-          aria-labelledby={isAccountTab ? 'settings-tab-account' : 'settings-tab-legal'}
+          id={
+            isAccountTab
+              ? 'settings-panel-account'
+              : isNotificationsTab
+                ? 'settings-panel-notifications'
+                : 'settings-panel-legal'
+          }
+          aria-labelledby={
+            isAccountTab
+              ? 'settings-tab-account'
+              : isNotificationsTab
+                ? 'settings-tab-notifications'
+                : 'settings-tab-legal'
+          }
           className="vytara-theme-content mt-4 rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5 shadow-sm sm:p-6"
         >
           <div className="mb-5 flex items-center justify-between gap-2 border-b border-[var(--theme-border)] pb-4">
             <div className="flex items-center gap-2">
               {isAccountTab ? (
                 <UserRound className="h-5 w-5 text-[var(--theme-button-primary)]" />
+              ) : isNotificationsTab ? (
+                <Bell className="h-5 w-5 text-[var(--theme-button-primary)]" />
               ) : (
                 <Lock className="h-5 w-5 text-[var(--theme-button-primary)]" />
               )}
-              <h2 className="text-lg font-semibold text-[var(--theme-text)]">{isAccountTab ? 'Account' : 'Legal'}</h2>
+              <h2 className="text-lg font-semibold text-[var(--theme-text)]">
+                {isAccountTab ? 'Account' : isNotificationsTab ? 'Notifications' : 'Legal'}
+              </h2>
             </div>
             {isAccountTab ? (
               <span className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] px-2.5 py-1 text-xs font-medium text-[var(--theme-text-secondary)]">
                 4 sections
+              </span>
+            ) : isNotificationsTab ? (
+              <span className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] px-2.5 py-1 text-xs font-medium text-[var(--theme-text-secondary)]">
+                Channels and quiet hours
               </span>
             ) : (
               <span className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] px-2.5 py-1 text-xs font-medium text-[var(--theme-text-secondary)]">
@@ -399,6 +454,8 @@ export default function SettingsPage() {
                 )}
               </div>
             </div>
+          ) : isNotificationsTab ? (
+            <NotificationPreferencesPanel userId={authUserId} />
           ) : (
             <div className="space-y-3">
               <div

@@ -22,6 +22,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePathname } from 'next/navigation';
 import BrandLogo from '@/components/BrandLogo';
+import { confirmDialog } from '@/components/AppNotifier';
 import { supabase } from '@/lib/createClient';
 import { useAppProfile, type AppProfile } from '@/components/AppProfileProvider';
 import { syncRememberedAccountName } from '@/lib/rememberedAccount';
@@ -58,6 +59,12 @@ const hasMissingColumnError = (
   false;
 
 const profilePreferenceKey = (userId: string) => `vytara:last-selected-profile:${userId}`;
+const navbarLogoCapsuleClass =
+  'inline-flex items-center justify-center rounded-2xl border border-white/70 bg-white/95 shadow-[0_12px_28px_rgba(2,6,23,0.20)] ring-1 ring-slate-900/5 backdrop-blur';
+const navbarLogoWordmarkCapsuleClass = `${navbarLogoCapsuleClass} px-2.5 py-1.5`;
+const navbarLogoExpandedCapsuleClass =
+  'inline-flex h-11 w-[142px] items-center justify-center rounded-xl border border-white/75 bg-white/95 px-3 shadow-[0_10px_22px_rgba(2,6,23,0.18)] ring-1 ring-slate-900/5 backdrop-blur';
+const navbarLogoMarkCapsuleClass = `${navbarLogoCapsuleClass} p-1.5`;
 
 export default function Navbar() {
   const router = useRouter();
@@ -379,13 +386,15 @@ export default function Navbar() {
       return;
     }
 
-    if (typeof window !== 'undefined') {
-      const confirmed = window.confirm(
-        `Delete "${getProfileLabel(profile)}"? This profile data will be permanently removed.`
-      );
-      if (!confirmed) {
-        return;
-      }
+    const confirmed = await confirmDialog({
+      title: `Delete "${getProfileLabel(profile)}"?`,
+      description: 'This profile data will be permanently removed.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+    });
+    if (!confirmed) {
+      return;
     }
 
     setDeletingProfileId(profile.id);
@@ -431,7 +440,9 @@ export default function Navbar() {
             className="flex items-center text-left"
             onClick={() => router.push('/app/homepage')}
           >
-            <BrandLogo variant="wordmark" width={104} surface="dark" className="shrink-0" />
+            <span className={navbarLogoWordmarkCapsuleClass}>
+              <BrandLogo variant="wordmark" width={104} className="shrink-0" />
+            </span>
           </button>
           <button
             type="button"
@@ -534,12 +545,13 @@ export default function Navbar() {
               onClick={() => router.push('/app/homepage')}
             >
               {effectiveCollapsed ? (
-                <BrandLogo variant="mark" width={36} surface="dark" className="shrink-0" />
+                <span className={navbarLogoMarkCapsuleClass}>
+                  <BrandLogo variant="mark" width={36} className="shrink-0" />
+                </span>
               ) : (
-                <>
-                  <BrandLogo variant="mark" width={34} surface="dark" className="shrink-0" />
-                  <BrandLogo variant="wordmark" width={88} surface="dark" className="shrink-0" />
-                </>
+                <span className={navbarLogoExpandedCapsuleClass}>
+                  <BrandLogo variant="full" width={118} className="shrink-0" />
+                </span>
               )}
             </button>
             <button

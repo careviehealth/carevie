@@ -550,7 +550,7 @@ export default function Landing() {
             </h2>
             <div className="pain-grid-mobile stagger-group" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14 }}>
               {[
-                { icon:'🗂️', title:'Scattered records', text:'All medical documents stored and accessible in one secure place — prescriptions, reports, discharge summaries.', bg:'#0f766e', titleColor:'white', textColor:'rgba(255,255,255,0.75)', border:'none', iconBg:'rgba(255,255,255,0.15)' },
+                { icon:'🗂️', title:'Organized records', text:'All medical documents stored and accessible in one secure place — prescriptions, reports, discharge summaries.', bg:'#0f766e', titleColor:'white', textColor:'rgba(255,255,255,0.75)', border:'none', iconBg:'rgba(255,255,255,0.15)' },
                 { icon:'🚨', title:'Emergency preparedness', text:'One tap shares your full medical profile with your Care Circle. Allergies, medications, and contacts — instantly.', bg:'#134e4a', titleColor:'white', textColor:'rgba(255,255,255,0.75)', border:'none', iconBg:'rgba(255,255,255,0.15)' },
                 { icon:'👨‍👩‍👧', title:'Family health management', text:'One account manages health profiles for the whole family — children, elderly parents, and yourself.', bg:'#0d9488', titleColor:'white', textColor:'rgba(255,255,255,0.75)', border:'none', iconBg:'rgba(255,255,255,0.15)' },
               ].map(({ icon, title, text, bg, titleColor, textColor, border, iconBg }) => (
@@ -652,14 +652,13 @@ export default function Landing() {
             </div>
             <div className="mission-right mission-pillars stagger-group" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:2 }}>
               {[
-                { num:'01', icon:'🧠', title:'Clarity',   sub:'Understand your health',    text:'AI turns medical reports and prescriptions into plain language — no jargon, no confusion.', accent:'#0d9488' },
-                { num:'02', icon:'⚡', title:'Readiness', sub:'Prepared for emergencies',   text:'Your profile is always ready to share. One tap reaches your Care Circle and emergency services.', accent:'#14b8a6' },
-                { num:'03', icon:'🤝', title:'Together',  sub:'One account, whole family',  text:'Manage profiles for children, elderly parents, and yourself — all from a single Carevie account.', accent:'#5eead4' },
-              ].map(({ num, icon, title, sub, text, accent }, i) => (
+                { num:'01', title:'Clarity',   sub:'Understand your health',    text:'AI turns medical reports and prescriptions into plain language — no jargon, no confusion.', accent:'#0d9488' },
+                { num:'02', title:'Readiness', sub:'Prepared for emergencies',   text:'Your profile is always ready to share. One tap reaches your Care Circle and emergency services.', accent:'#14b8a6' },
+                { num:'03', title:'Together',  sub:'One account, whole family',  text:'Manage profiles for children, elderly parents, and yourself — all from a single Carevie account.', accent:'#5eead4' },
+              ].map(({ num, title, sub, text, accent }, i) => (
                 <div key={num} className="stagger-item mission-card-hover" style={{ padding:'36px 32px', borderTop:`3px solid ${accent}`, background: i===1 ? 'rgba(13,148,136,0.06)' : 'transparent' }}>
                   <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
                     <span style={{ fontFamily:"'Playfair Display', serif", fontSize:'2.4rem', fontWeight:900, color:accent, opacity:0.2, lineHeight:1 }}>{num}</span>
-                    <span style={{ fontSize:'1.5rem' }}>{icon}</span>
                   </div>
                   <h4 style={{ fontFamily:"'Playfair Display', serif", fontSize:'1.3rem', fontWeight:800, color:'white', marginBottom:4 }}>{title}</h4>
                   <p style={{ fontSize:'0.72rem', fontWeight:600, color:accent, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:12 }}>{sub}</p>

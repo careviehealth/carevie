@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { confirmDialog } from "@/components/AppNotifier";
 import { supabase } from "@/lib/createClient";
 import { useAppProfile } from "@/components/AppProfileProvider";
 import { syncRememberedAccountName } from "@/lib/rememberedAccount";
@@ -890,7 +891,13 @@ export default function HealthOnboardingChatbot() {
       return;
     }
 
-    const confirmed = window.confirm("If you go back, this new profile will not be created. Continue?");
+    const confirmed = await confirmDialog({
+      title: "Discard new profile?",
+      description: "If you go back now, this new profile will not be created.",
+      confirmLabel: "Discard",
+      cancelLabel: "Stay here",
+      variant: "danger",
+    });
     if (!confirmed) {
       return;
     }

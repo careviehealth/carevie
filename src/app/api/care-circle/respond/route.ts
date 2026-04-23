@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser } from '@/lib/auth';
+import { emitCareCircleInviteAccepted } from '@/lib/notifications/emitters/careCircle';
 
 type InviteDecision = 'accepted' | 'declined';
 
@@ -102,6 +103,16 @@ export async function POST(request: Request) {
 
     if (updateError) {
       return NextResponse.json({ message: updateError.message }, { status: 500 });
+    }
+
+    if (decision === 'accepted') {
+      await emitCareCircleInviteAccepted({
+        adminClient,
+        requesterId: link.requester_id,
+        recipientId: link.recipient_id,
+        profileId: null,
+        linkId: link.id,
+      });
     }
 
     return NextResponse.json({
