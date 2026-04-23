@@ -1,10 +1,3 @@
-
-from pathlib import Path
-import sys
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-# ── Supabase client (re-use the singleton already initialised) ─────────────
 """
 all_users_data.py
 -----------------
@@ -15,8 +8,14 @@ Usage:
     python all_users_data.py <profile_id>
 """
 
+from pathlib import Path
 import sys
 import json
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from supabase_helper import get_full_patient_data
 
 # ──────────────────────────────────────────────
@@ -235,7 +234,13 @@ def display_summaries(medical_summary: dict, insurance_summary: dict):
 # Main handler
 # ──────────────────────────────────────────────
 
-def main(profile_id: str):
+def main(profile_id: str) -> dict | None:
+    """
+    Fetch and display the full patient clinical summary.
+
+    Returns the data dict on success (for programmatic callers),
+    or None if the profile is not found.
+    """
     print(f"\n{DIVIDER}")
     print("  PATIENT CLINICAL SUMMARY")
     print(f"  Profile: {profile_id}")
@@ -243,6 +248,20 @@ def main(profile_id: str):
 
     # ── Single fetch call ──────────────────────
     data = get_full_patient_data(profile_id)
+
+    # Trigger QR summary generation only when needed; domain flows are independent.
+    # Only overwrite the cached values from get_full_patient_data when the orchestrator
+    # returns a non-None result — this prevents a generation failure from blanking out
+    # a previously valid cached summary that was already fetched from the DB.
+    try:
+        from qr_rag_pipeline.qr_summary_orchestrator import ensure_qr_summaries
+        refreshed = ensure_qr_summaries(profile_id)
+        if refreshed.get("medical_summary"):
+            data["medical_summary"] = refreshed["medical_summary"]
+        if refreshed.get("insurance_summary"):
+            data["insurance_summary"] = refreshed["insurance_summary"]
+    except Exception as exc:
+        print(f"⚠️  QR summary generation skipped due to error: {exc}")
 
     # ── Store each section in its own variable ─
     demographics       = data["demographics"]
@@ -258,7 +277,7 @@ def main(profile_id: str):
 
     if not demographics:
         print(f"\n❌ No profile found for profile_id: {profile_id}")
-        sys.exit(1)
+        return None
 
     # ── Display ────────────────────────────────
     display_demographics(demographics)
@@ -274,11 +293,12 @@ def main(profile_id: str):
     print("  END OF REPORT")
     print(DIVIDER + "\n")
 
+    return data
+
 
 if __name__ == "__main__":
-    main("15bfe7a8-6d7a-4656-9aac-7b23b16e0dea")
-    if len(sys.argv) < 2:
-        print("Usage: python all_users_data.py <profile_id>")
-        sys.exit(1)
-
-    main(sys.argv[1].strip())
+    if len(sys.argv) >= 2:
+        main(sys.argv[1].strip())
+    else:
+        # Fallback to hardcoded profile for local development convenience
+        main("15bfe7a8-6d7a-4656-9aac-7b23b16e0dea")

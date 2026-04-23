@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import requests
 import hashlib
 import io
+import uuid
 
 load_dotenv()
 
@@ -303,16 +304,54 @@ def compute_signature_from_reports(reports: list) -> str:
         return ''
 
 
+def compute_signature_from_docs(docs: list) -> str:
+    """
+    Compute a stable hash signature for storage-doc metadata.
+
+    Expected doc shape supports keys like:
+      - file_path
+      - file_name
+      - source_file_hash
+    """
+    try:
+        items = []
+        for d in docs:
+            file_path = d.get("file_path") or d.get("path") or ""
+            file_name = d.get("file_name") or d.get("name") or ""
+            source_hash = d.get("source_file_hash") or ""
+            items.append(f"{file_path}|{file_name}|{source_hash}")
+
+        items.sort()
+        concat = ";;".join(items)
+        sig = hashlib.sha256(concat.encode("utf-8")).hexdigest()
+        print(f"🔐 Computed docs signature: {sig[:16]}...")
+        return sig
+    except Exception as e:
+        print(f"⚠️  Failed to compute docs signature: {e}")
+        return ""
+
+
 def save_summary_cache(profile_id: str, folder_type: str, summary: str, 
                       report_count: int, reports_signature: str = None):
     """
     Cache generated summary.
+    Uses delete-then-insert to avoid reliance on unique constraints.
     Maintains legacy schema compatibility by populating 'user_id' with 'profile_id'.
     """
     print(f"\n💾 Caching summary for profile: {profile_id}")
     
     try:
         profile_id_str = str(profile_id)
+
+        # Delete existing row(s) for this profile+folder_type first
+        # (table has no unique index on these columns, so upsert is unreliable)
+        try:
+            supabase.table('medical_summaries_cache').delete().eq(
+                'profile_id', profile_id_str
+            ).eq('folder_type', folder_type).execute()
+        except Exception:
+            pass
+
         payload = {
             'user_id': profile_id_str,
             'profile_id': profile_id_str,
@@ -322,16 +361,7 @@ def save_summary_cache(profile_id: str, folder_type: str, summary: str,
             'reports_signature': reports_signature
         }
 
-        try:
-            result = supabase.table('medical_summaries_cache').upsert(
-                payload,
-                on_conflict='profile_id,folder_type'
-            ).execute()
-        except Exception:
-            result = supabase.table('medical_summaries_cache').upsert(
-                payload,
-                on_conflict='user_id,folder_type'
-            ).execute()
+        supabase.table('medical_summaries_cache').insert(payload).execute()
         
         print(f"✅ Summary cached")
         print(f"   Reports: {report_count}")
@@ -405,6 +435,182 @@ def clear_user_cache(profile_id: str, folder_type: str = None):
         
     except Exception as e:
         print(f"❌ Error clearing cache: {e}")
+        raise
+
+
+def _insurance_cache_user_id_candidates(profile_id: str) -> list[str]:
+    """
+    Return candidate auth user UUIDs for insurance_summary_cache.user_id.
+    Sources (in priority order):
+      1) existing insurance_summary_cache row for this profile
+      2) profiles.auth_id
+      3) profiles.user_id
+      4) profiles.id
+      5) profile_id itself (guaranteed fallback — always a valid UUID)
+    """
+    candidates: list[str] = []
+ 
+    def _push_uuid(raw):
+        if not raw:
+            return
+        try:
+            val = str(uuid.UUID(str(raw)))
+            if val not in candidates:
+                candidates.append(val)
+        except Exception:
+            pass
+ 
+    try:
+        existing = (
+            supabase
+            .table("insurance_summary_cache")
+            .select("user_id")
+            .eq("profile_id", str(profile_id))
+            .limit(1)
+            .execute()
+        )
+        rows = existing.data or []
+        if rows:
+            _push_uuid(rows[0].get("user_id"))
+    except Exception:
+        pass
+ 
+    try:
+        result = (
+            supabase
+            .table("profiles")
+            .select("id, auth_id, user_id")
+            .eq("id", str(profile_id))
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        if rows:
+            row = rows[0]
+            _push_uuid(row.get("auth_id"))
+            _push_uuid(row.get("user_id"))
+            _push_uuid(row.get("id"))
+    except Exception as e:
+        print(f"⚠️ _insurance_cache_user_id_candidates failed: {e}")
+ 
+    # Guaranteed fallback: profile_id is always a valid UUID in Supabase deployments.
+    # This ensures the INSERT can always proceed even when auth_id / user_id columns
+    # are unpopulated in the profiles table.
+    _push_uuid(str(profile_id))
+ 
+    return candidates
+
+
+def get_cached_insurance_summary(profile_id: str, expected_signature: str = None):
+    """Retrieve latest insurance summary cache row, optionally signature-validated."""
+    print(f"\n🔍 Checking for cached insurance summary...")
+    try:
+        result = (
+            supabase
+            .table("insurance_summary_cache")
+            .select("*")
+            .eq("profile_id", str(profile_id))
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        if not rows:
+            print("ℹ️  No cached insurance summary found")
+            return None
+
+        record = rows[0]
+        stored_sig = record.get("reports_signature") or ""
+        if expected_signature and stored_sig != expected_signature:
+            print("⚠️  Insurance cache signature mismatch - documents changed")
+            print(f"   Expected: {expected_signature[:16]}...")
+            print(f"   Stored:   {stored_sig[:16]}...")
+            return None
+
+        print("✅ Found valid cached insurance summary")
+        print(f"   Created: {record.get('created_at')}")
+        print(f"   Reports: {record.get('report_count')}")
+        return record
+    except Exception as e:
+        print(f"❌ Error fetching insurance cache: {e}")
+        return None
+
+
+def save_insurance_summary_cache(
+    profile_id: str,
+    summary: str,
+    report_count: int,
+    reports_signature: str = None,
+    report_type: str = "insurance",
+):
+    """
+    Persist insurance summary cache.
+    Table requires user_id (auth user UUID), so we resolve it from profiles.
+    """
+    print(f"\n💾 Caching insurance summary for profile: {profile_id}")
+    profile_id_str = str(profile_id)
+    errors: list[str] = []
+ 
+    candidates = _insurance_cache_user_id_candidates(profile_id_str)
+    if not candidates:
+        print(
+            "⚠️  Could not resolve candidate auth UUID(s) for insurance cache; "
+            "skipping DB write."
+        )
+        return False
+ 
+    # Keep one latest row per profile for deterministic retrieval.
+    try:
+        supabase.table("insurance_summary_cache").delete().eq(
+            "profile_id", profile_id_str
+        ).execute()
+    except Exception:
+        pass
+ 
+    for user_id in candidates:
+        try:
+            payload = {
+                "user_id": user_id,
+                "profile_id": profile_id_str,
+                "summary_text": summary,
+                "report_count": int(report_count or 0),
+                "reports_signature": reports_signature,
+                "folder_type": report_type,
+            }
+            supabase.table("insurance_summary_cache").insert(payload).execute()
+ 
+            print("✅ Insurance summary cached")
+            print(f"   User ID: {user_id}")
+            print(f"   Reports: {report_count}")
+            print(f"   Type: {report_type}")
+            print(f"   Signature: {reports_signature[:16] if reports_signature else 'None'}...")
+            return True
+        except Exception as e:
+            errors.append(f"{user_id}: {e}")
+            continue
+ 
+    print("❌ Error caching insurance summary: all user_id candidates failed")
+    for err in errors[:3]:
+        print(f"   - {err}")
+    return False
+
+
+def clear_insurance_cache(profile_id: str):
+    """Clear insurance summary cache rows for a profile."""
+    print(f"\n🗑️  Clearing insurance cache for profile: {profile_id}")
+    try:
+        result = (
+            supabase
+            .table("insurance_summary_cache")
+            .delete()
+            .eq("profile_id", str(profile_id))
+            .execute()
+        )
+        deleted = len(result.data) if result.data else 0
+        print(f"✅ Cleared {deleted} insurance cached summary(s)")
+        return deleted
+    except Exception as e:
+        print(f"❌ Error clearing insurance cache: {e}")
         raise
 
 
