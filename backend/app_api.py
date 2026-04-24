@@ -3,7 +3,7 @@ import os
 import re
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 import traceback
 import tempfile
@@ -23,6 +23,8 @@ app = Flask(__name__)
 
 EXEMPT_INTERNAL_AUTH_PATHS = {"/api/health"}
 
+# Prefix-matched paths that skip internal auth (unauthenticated doctor scans)
+EXEMPT_INTERNAL_AUTH_PREFIXES = ("/api/share/",)
 CORS(app, resources={
     r"/api/*": {
         "origins": [
@@ -110,6 +112,11 @@ def require_internal_api_auth():
 
     if request.path in EXEMPT_INTERNAL_AUTH_PATHS:
         return None
+
+    # Prefix-match for unauthenticated scan endpoints (e.g. /api/share/<token>)
+    for prefix in EXEMPT_INTERNAL_AUTH_PREFIXES:
+        if request.path.startswith(prefix) and request.method == "GET":
+            return None
 
     return authorize_internal_request()
 
@@ -1101,7 +1108,7 @@ def generate_share_link():
                 del _token_cache[token]
 
     token = secrets.token_urlsafe(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=60)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
 
     _token_cache[token] = {
         "profile_id": profile_id,
@@ -1116,6 +1123,12 @@ def generate_share_link():
 
 @app.route("/api/share/<token>", methods=["GET"])
 def get_shared_summary(token):
+    """QR scan endpoint — streams patient emergency profile via SSE.
+
+    This endpoint is UNAUTHENTICATED by design: a doctor scanning a QR code
+    in an emergency will not have app credentials.  The token itself serves
+    as the access credential (short-lived, cryptographically random).
+    """
     info = _token_cache.get(token)
 
     if not info:
@@ -1125,11 +1138,20 @@ def get_shared_summary(token):
         del _token_cache[token]
         return jsonify({"error": "This link has expired"}), 410
 
-    return jsonify({
-        "valid": True,
-        "profile_id": info["profile_id"],
-        "expires_at": info["expires_at"].isoformat()
-    })
+    profile_id = info["profile_id"]
+    log_step("QR SCAN", "start", f"token=...{token[-8:]} → profile={profile_id}")
+
+    from qr_rag_pipeline import stream_qr_profile
+
+    return Response(
+        stream_with_context(stream_qr_profile(profile_id)),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 
