@@ -17,6 +17,7 @@ import {
   type AppointmentRecord,
 } from '@/lib/notifications/schedulers/appointment';
 import { ownerUserIdForProfile } from '@/lib/notifications/schedulers/recipients';
+import { triggerOpportunisticDrain } from '@/lib/notifications/opportunisticDrain';
 import type { MedicationRecord } from '@/lib/medications';
 
 type Body = {
@@ -47,6 +48,7 @@ export async function POST(request: Request) {
     }
 
     const adminClient = createSupabaseAdminClient();
+    triggerOpportunisticDrain(adminClient);
     const ownerUserId = await ownerUserIdForProfile(adminClient, profileId);
     if (!ownerUserId) {
       return NextResponse.json({ message: 'Profile not found.' }, { status: 404 });

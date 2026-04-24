@@ -11,6 +11,7 @@ import {
   upsertPreferences,
   type PreferencesUpdateInput,
 } from '@/lib/notifications/preferences';
+import { triggerOpportunisticDrain } from '@/lib/notifications/opportunisticDrain';
 
 const HHMM_RE = /^(\d{2}):(\d{2})(?::\d{2})?$/;
 
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
     const adminClient = createSupabaseAdminClient();
+    triggerOpportunisticDrain(adminClient);
     const prefs = await getOrInitPreferences(adminClient, user.id);
     return NextResponse.json({ preferences: prefs });
   } catch (error) {

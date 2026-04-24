@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth';
 import { createSupabaseAdminClient } from '@/lib/supabaseAdmin';
 import { transitionNotificationState } from '@/lib/notifications/repository';
+import { triggerOpportunisticDrain } from '@/lib/notifications/opportunisticDrain';
 
 type Body = {
   read?: unknown;
@@ -52,6 +53,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     const adminClient = createSupabaseAdminClient();
+    triggerOpportunisticDrain(adminClient);
     const row = await transitionNotificationState(adminClient, user.id, id, transition);
     if (!row) {
       return NextResponse.json({ message: 'Notification not found.' }, { status: 404 });

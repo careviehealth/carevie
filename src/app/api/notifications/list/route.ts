@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth';
 import { createSupabaseAdminClient } from '@/lib/supabaseAdmin';
 import { listNotificationsForUser } from '@/lib/notifications/repository';
+import { triggerOpportunisticDrain } from '@/lib/notifications/opportunisticDrain';
 import { isNotificationCategory, type NotificationCategory } from '@/lib/notifications/types';
 
 const parseCategories = (raw: string | null): NotificationCategory[] | undefined => {
@@ -31,6 +32,10 @@ export async function GET(request: Request) {
     const includeDismissed = url.searchParams.get('includeDismissed') === '1';
 
     const adminClient = createSupabaseAdminClient();
+    // Opportunistic drain: every time the bell panel polls (every 20s while
+    // open), we flush any due jobs in the background. On Vercel Hobby this
+    // replaces the per-minute cron we can't run.
+    triggerOpportunisticDrain(adminClient);
     const { rows, nextCursor } = await listNotificationsForUser(adminClient, user.id, {
       limit,
       cursorScheduledFor: cursor ?? undefined,
