@@ -1082,6 +1082,56 @@ def debug_user(profile_id):
         log_step("Debug", "error", str(e))
         return internal_error_response("Failed to fetch debug information")
 
+@app.route("/api/share/generate", methods=["POST"])
+def generate_share_link():
+    data = request.get_json()
+    profile_id = data.get("profile_id") if data else None
+
+    if not profile_id:
+        return jsonify({"error": "profile_id is required"}), 400
+
+    for token, info in list(_token_cache.items()):
+        if info["profile_id"] == profile_id:
+            if datetime.now(timezone.utc) < info["expires_at"]:
+                return jsonify({
+                    "token": token,
+                    "expires_at": info["expires_at"].isoformat()
+                })
+            else:
+                del _token_cache[token]
+
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=60)
+
+    _token_cache[token] = {
+        "profile_id": profile_id,
+        "expires_at": expires_at
+    }
+
+    return jsonify({
+        "token": token,
+        "expires_at": expires_at.isoformat()
+    })
+
+
+@app.route("/api/share/<token>", methods=["GET"])
+def get_shared_summary(token):
+    info = _token_cache.get(token)
+
+    if not info:
+        return jsonify({"error": "Link not found"}), 404
+
+    if datetime.now(timezone.utc) > info["expires_at"]:
+        del _token_cache[token]
+        return jsonify({"error": "This link has expired"}), 410
+
+    return jsonify({
+        "valid": True,
+        "profile_id": info["profile_id"],
+        "expires_at": info["expires_at"].isoformat()
+    })
+
+
 
 @app.errorhandler(404)
 def not_found(error):
