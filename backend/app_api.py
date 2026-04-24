@@ -8,16 +8,16 @@ from flask_cors import CORS
 import traceback
 import tempfile
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
-
+import secrets
 from internal_auth import authorize_internal_request
 from rag_pipeline.profile_checker import (
     verify_patient_name,
     INVALID_NAME_TOKENS,
 )
-
+_token_cache={}
 
 app = Flask(__name__)
 
