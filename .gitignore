@@ -69,3 +69,5 @@ backend/medical_report_2.pdf
 backend/medical_report_1.pdf
 backend/vectors
 /vectors
+package-lock.json
+package.json

@@ -1431,6 +1431,7 @@ function HomePageContent() {
   const openQrModal = async () => {
     if (!profileId) return;
     setIsGeneratingLink(true);
+    setShareLink("");
     setIsQrModalOpen(true);
 
     try {
@@ -1439,11 +1440,29 @@ function HomePageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profile_id: profileId }),
       });
+
       const data = await res.json();
+
+      if (!res.ok) {
+        const errorDetail = data?.error || `Server responded with ${res.status}`;
+        throw new Error(errorDetail);
+      }
+
+      if (!data.token) {
+        throw new Error("No token received from backend");
+      }
+
       const link = `${window.location.origin}/app/share/${data.token}`;
       setShareLink(link);
     } catch (err) {
-      console.error("Failed to generate share link", err);
+      if (process.env.NODE_ENV !== "production") {
+        console.error("Failed to generate share link", err);
+      }
+      toast.error(
+        "QR generation failed",
+        err instanceof Error ? err.message : "Could not generate a share link. Please try again."
+      );
+      setIsQrModalOpen(false);
     } finally {
       setIsGeneratingLink(false);
     }

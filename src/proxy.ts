@@ -7,6 +7,12 @@ import { NextResponse, type NextRequest } from 'next/server';
  */
 const PROTECTED_PATH_PREFIX = '/app';
 
+/**
+ * Paths under PROTECTED_PATH_PREFIX that should remain accessible
+ * WITHOUT authentication (e.g. QR-scanned emergency profiles).
+ */
+const PUBLIC_APP_PREFIXES = ['/app/share/'];
+
 export async function proxy(request: NextRequest) {
   // Build response first so Supabase can write refreshed cookies to it
   let response = NextResponse.next();
@@ -34,8 +40,9 @@ export async function proxy(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const isProtected = pathname === PROTECTED_PATH_PREFIX || pathname.startsWith(PROTECTED_PATH_PREFIX + '/');
+  const isPublicException = PUBLIC_APP_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
-  if (isProtected && !user) {
+  if (isProtected && !isPublicException && !user) {
     const loginUrl = new URL('/auth/login', request.url);
     const safeReturnTo = pathname.startsWith('/app') ? pathname : '/app/homepage';
     loginUrl.searchParams.set('returnTo', safeReturnTo);
