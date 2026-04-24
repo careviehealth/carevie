@@ -961,7 +961,7 @@ def get_full_patient_data(profile_id: str) -> dict:
     try:
         ms_res = (
             supabase.table("medical_summaries_cache")
-            .select("summary_text, folder_type, generated_at")
+            .select("summary_text, folder_type, generated_at, reports_signature")
             .eq("profile_id", pid)
             .order("generated_at", desc=True)
             .limit(1)
@@ -976,7 +976,7 @@ def get_full_patient_data(profile_id: str) -> dict:
     try:
         ins_res = (
             supabase.table("insurance_summary_cache")
-            .select("summary_text, created_at")
+            .select("summary_text, created_at, reports_signature")
             .eq("profile_id", pid)
             .order("created_at", desc=True)
             .limit(1)
@@ -999,6 +999,55 @@ def get_full_patient_data(profile_id: str) -> dict:
         "medical_summary":   medical_summary,
         "insurance_summary": insurance_summary,
     }
+
+def get_emergency_contacts(profile_id: str) -> list:
+    """Fetch the contacts JSONB array from user_emergency_contacts for a profile."""
+    try:
+        result = (
+            supabase
+            .table("user_emergency_contacts")
+            .select("contacts")
+            .eq("profile_id", str(profile_id))
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return rows[0].get("contacts") or [] if rows else []
+    except Exception as e:
+        print(f"❌ get_emergency_contacts failed for profile {profile_id}: {e}")
+        return []
+
+
+def get_full_health_record(profile_id: str) -> dict:
+    """
+    Fetch ALL health fields for a profile.
+
+    Returns a dict with both current and past medical fields so the caller
+    can split them into separate sections without a second query.
+    """
+    try:
+        result = (
+            supabase
+            .table("health")
+            .select(
+                "allergies, current_diagnosed_condition, "
+                "ongoing_treatments, current_medication, "
+                "long_term_treatments, "
+                "previous_diagnosed_conditions, childhood_illness, "
+                "past_surgeries, family_history, "
+                "height_cm, height_ft, weight_kg, weight_lbs"
+            )
+            .eq("profile_id", str(profile_id))
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return rows[0] if rows else {}
+    except Exception as e:
+        print(f"❌ get_full_health_record failed for profile {profile_id}: {e}")
+        return {}
+
+
 if __name__ == "__main__":
     print("\n" + "="*60)
     test_connection()
