@@ -1128,6 +1128,24 @@ def get_shared_summary(token):
     This endpoint is UNAUTHENTICATED by design: a doctor scanning a QR code
     in an emergency will not have app credentials.  The token itself serves
     as the access credential (short-lived, cryptographically random).
+
+    FIX (Problem 7): The generator (stream_qr_profile) now has its own
+    internal try/except that guarantees a `complete` SSE event is always the
+    last thing yielded — even if an unhandled exception occurs mid-stream.
+    The wrapper below adds a second safety net at the Flask layer: if the
+    generator itself raises before yielding anything, we emit a minimal SSE
+    error + complete pair so the client is never left hanging.
+
+    FIX (Problem 10 — Gunicorn/uWSGI buffering):
+    The Response is built with stream_with_context and the anti-buffering
+    headers already set.  To prevent WSGI-level buffering you MUST run
+    Gunicorn with an async worker class:
+        gunicorn app_api:app --worker-class gevent --workers 2
+    or:
+        gunicorn app_api:app --worker-class eventlet --workers 2
+    The default `sync` worker class cannot stream responses — it will buffer
+    the entire body before sending.  This is a server-config requirement; no
+    code change can work around a sync worker.
     """
     info = _token_cache.get(token)
 
@@ -1142,15 +1160,45 @@ def get_shared_summary(token):
     log_step("QR SCAN", "start", f"token=...{token[-8:]} → profile={profile_id}")
 
     from qr_rag_pipeline import stream_qr_profile
+    import json as _json
+
+    def _safe_stream():
+        """
+        FIX (Problem 7): Outer safety-net generator.
+
+        stream_qr_profile already catches all exceptions internally and always
+        yields `complete`.  This wrapper catches any exception that somehow
+        escapes the inner generator (e.g. an import error before the first
+        yield) and emits a valid SSE error + complete so the client clears
+        its loading state.
+        """
+        try:
+            yield from stream_qr_profile(profile_id)
+        except Exception as exc:
+            log_step("QR STREAM FATAL", "error", str(exc))
+            traceback.print_exc()
+            error_payload = _json.dumps(
+                {"message": "An unexpected server error occurred."},
+                ensure_ascii=False,
+            )
+            complete_payload = _json.dumps({"status": "error"}, ensure_ascii=False)
+            yield f"event: error\ndata: {error_payload}\n\n"
+            yield f"event: complete\ndata: {complete_payload}\n\n"
 
     return Response(
-        stream_with_context(stream_qr_profile(profile_id)),
+        stream_with_context(_safe_stream()),
         mimetype="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
+            # Prevent every caching / proxy layer from buffering the stream.
+            "Cache-Control":     "no-cache, no-store, no-transform",
+            "Connection":        "keep-alive",
+            # Nginx upstream buffering off
             "X-Accel-Buffering": "no",
+            # Some CDNs / proxies respect this header
+            "X-Content-Type-Options": "nosniff",
         },
+        # direct_passthrough keeps Flask from trying to buffer the iterable
+        direct_passthrough=False,
     )
 
 

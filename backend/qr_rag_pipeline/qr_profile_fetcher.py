@@ -9,24 +9,27 @@ Public API
 
 Yields Server-Sent Events (SSE) in stages:
     Event 1  "profile_data"       → all DB-sourced profile data + any cached summaries
+                                     includes `summary_pending` / `insurance_pending` booleans
     Event 2  "medical_summary"    → RAG-generated lab report summary  (if not cached)
     Event 3  "insurance_summary"  → RAG-generated insurance JSON      (if not cached)
-    Event 4  "complete"           → terminal event
+    Event 4  "complete"           → terminal event (always sent, even on error)
+    Event E  "error"              → only sent if a fatal exception occurs before complete
 
 If both summaries are cached and valid, Events 2/3 are skipped and all data
 is included in Event 1 followed immediately by Event 4.
 
 Design decisions
 ----------------
-* All profile DB queries run in parallel via ``ThreadPoolExecutor(max_workers=4)``
-  — 8 independent queries complete in roughly 2 round-trip cycles.
+* ALL profile DB queries AND cache-validity checks run in ONE parallel
+  ThreadPoolExecutor(max_workers=6) pass — nothing sequential before Event 1.
+* All Future.result() calls happen INSIDE the `with` block so executor
+  shutdown(wait=True) cannot race with result collection.
 * Cache validity is checked by computing a storage-file signature and comparing
-  it against the signature stored in the cache row.  No dependency on external
-  endpoints.
+  it against the signature stored in the cache row.
 * Technical DB fields (id, user_id, profile_id, created_at, updated_at) are
   stripped from the response.
-* The response schema exactly matches the frontend contract (see implementation
-  plan for full schema).
+* The entire generator body is wrapped in try/except; `complete` is ALWAYS
+  the final yielded event so the frontend never hangs.
 """
 
 from __future__ import annotations
@@ -83,7 +86,6 @@ def _clean(obj):
 
 def _reshape_profile(card_data: dict, profile_info: dict, health_raw: dict) -> dict:
     """Build the ``profile`` section from card_data + profile_info + health_raw."""
-    # Height/weight live in health_raw (get_full_health_record)
     height_cm  = health_raw.get("height_cm")
     height_ft  = health_raw.get("height_ft")
     weight_kg  = health_raw.get("weight_kg")
@@ -140,11 +142,11 @@ def _reshape_medications(medications: list) -> list:
 def _reshape_health_current(health: dict, medications: list) -> dict:
     """Build current_medical_status from health record + medications."""
     return {
-        "allergies":                _ensure_list(health.get("allergies")),
-        "current_diagnosed_condition": _ensure_list(health.get("current_diagnosed_condition")),
-        "ongoing_treatments":       _ensure_list(health.get("ongoing_treatments")),
-        "long_term_treatments":     _ensure_list(health.get("long_term_treatments")),
-        "medications":              _reshape_medications(medications),
+        "allergies":                    _ensure_list(health.get("allergies")),
+        "current_diagnosed_condition":  _ensure_list(health.get("current_diagnosed_condition")),
+        "ongoing_treatments":           _ensure_list(health.get("ongoing_treatments")),
+        "long_term_treatments":         _ensure_list(health.get("long_term_treatments")),
+        "medications":                  _reshape_medications(medications),
     }
 
 
@@ -174,11 +176,8 @@ def _reshape_appointments(appointments: list) -> list:
     """Reshape appointments into frontend format."""
     result = []
     for a in appointments:
-        # Format date to readable form
         raw_date = a.get("date") or ""
         formatted_date = _format_date(raw_date)
-
-        # Format time
         raw_time = a.get("time") or ""
         formatted_time = _format_time(raw_time)
 
@@ -237,7 +236,7 @@ def _format_time(raw: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Cache validation
+# Cache validation  (runs inside the ThreadPoolExecutor alongside DB queries)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _validate_summary_cache(
@@ -257,20 +256,27 @@ def _validate_summary_cache(
         docs_list is the doc metadata built from current storage files
         (needed for RAG generation if cache is stale).
     """
-    from qr_rag_pipeline.qr_summary_generator import _build_doc_list
+    try:
+        from qr_rag_pipeline.qr_summary_generator import _build_doc_list
 
-    storage_files = list_user_files_fn(profile_id, folder_type=folder_type) or []
-    if not storage_files:
+        storage_files = list_user_files_fn(profile_id, folder_type=folder_type) or []
+        if not storage_files:
+            return None, []
+
+        docs = _build_doc_list(profile_id, storage_files, folder_type)
+        if not docs:
+            return None, []
+
+        current_sig = compute_sig_fn(docs)
+        cached = get_cache_fn(profile_id, expected_signature=current_sig)
+
+        return cached, docs
+    except Exception as exc:
+        logger.warning(
+            "_validate_summary_cache failed for profile=%s folder=%s: %s",
+            profile_id, folder_type, exc,
+        )
         return None, []
-
-    docs = _build_doc_list(profile_id, storage_files, folder_type)
-    if not docs:
-        return None, []
-
-    current_sig = compute_sig_fn(docs)
-    cached = get_cache_fn(profile_id, expected_signature=current_sig)
-
-    return cached, docs
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -284,6 +290,9 @@ def stream_qr_profile(profile_id: str) -> Generator[str, None, None]:
     Yields SSE-formatted strings. The caller (Flask/API route) should set
     ``Content-Type: text/event-stream`` and stream these directly.
 
+    The `complete` event is ALWAYS the final event, even when an unhandled
+    exception occurs — the frontend is therefore guaranteed never to hang.
+
     Parameters
     ----------
     profile_id : str
@@ -294,129 +303,156 @@ def stream_qr_profile(profile_id: str) -> Generator[str, None, None]:
     str
         SSE event strings (event: <type>\\ndata: <json>\\n\\n).
     """
-    from supabase_helper import (
-        get_profile_info,
-        get_user_card_data,
-        get_medications,
-        get_medical_team,
-        get_appointments,
-        get_document_urls,
-        get_emergency_contacts,
-        get_full_health_record,
-        list_user_files,
-        compute_signature_from_docs,
-        get_cached_summary,
-        get_cached_insurance_summary,
-    )
-
     log_prefix = f"[qr_profile | profile={profile_id}]"
-    logger.info("%s SSE stream started.", log_prefix)
+    complete_sent = False
 
-    # ── Stage 1: Parallel DB fetch ───────────────────────────────────────────
-    # All 8 queries run concurrently via ThreadPoolExecutor.
+    try:
+        from supabase_helper import (
+            get_profile_info,
+            get_user_card_data,
+            get_medications,
+            get_medical_team,
+            get_appointments,
+            get_document_urls,
+            get_emergency_contacts,
+            get_full_health_record,
+            list_user_files,
+            compute_signature_from_docs,
+            get_cached_summary,
+            get_cached_insurance_summary,
+        )
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        f_profile:      Future = pool.submit(get_profile_info, profile_id)
-        f_card:         Future = pool.submit(get_user_card_data, profile_id)
-        f_contacts:     Future = pool.submit(get_emergency_contacts, profile_id)
-        f_health:       Future = pool.submit(get_full_health_record, profile_id)
-        f_medications:  Future = pool.submit(get_medications, profile_id)
-        f_doctors:      Future = pool.submit(get_medical_team, profile_id)
-        f_appointments: Future = pool.submit(get_appointments, profile_id)
-        f_doc_urls:     Future = pool.submit(get_document_urls, profile_id)
+        logger.info("%s SSE stream started.", log_prefix)
 
-    # Collect results (all complete by now)
-    profile_info  = _safe_result(f_profile, {})
-    card_data     = _safe_result(f_card, {})
-    contacts_raw  = _safe_result(f_contacts, [])
-    health_raw    = _safe_result(f_health, {})
-    medications   = _safe_result(f_medications, [])
-    doctors_raw   = _safe_result(f_doctors, [])
-    appointments_raw = _safe_result(f_appointments, [])
-    doc_urls      = _safe_result(f_doc_urls, {})
+        # ── Stage 1: ALL fetches in a single parallel pass ───────────────────
+        # DB queries (8) + cache validation (2) run concurrently.
+        # All .result() calls happen INSIDE the `with` block so that
+        # executor.shutdown(wait=True) cannot race with result collection.
 
-    logger.info("%s Stage 1 (parallel DB fetch) complete.", log_prefix)
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            f_profile:      Future = pool.submit(get_profile_info,     profile_id)
+            f_card:         Future = pool.submit(get_user_card_data,   profile_id)
+            f_contacts:     Future = pool.submit(get_emergency_contacts, profile_id)
+            f_health:       Future = pool.submit(get_full_health_record, profile_id)
+            f_medications:  Future = pool.submit(get_medications,      profile_id)
+            f_doctors:      Future = pool.submit(get_medical_team,     profile_id)
+            f_appointments: Future = pool.submit(get_appointments,     profile_id)
+            f_doc_urls:     Future = pool.submit(get_document_urls,    profile_id)
 
-    # ── Stage 2: Cache validation ────────────────────────────────────────────
-    # Check if medical and insurance summaries are cached and still valid
-    # by comparing storage file signatures.
+            # Cache validation runs in parallel with DB queries — not after.
+            f_med_cache: Future = pool.submit(
+                _validate_summary_cache,
+                profile_id, "reports",
+                list_user_files, compute_signature_from_docs, get_cached_summary,
+            )
+            f_ins_cache: Future = pool.submit(
+                _validate_summary_cache,
+                profile_id, "insurance",
+                list_user_files, compute_signature_from_docs, get_cached_insurance_summary,
+            )
 
-    medical_cached, medical_docs = _validate_summary_cache(
-        profile_id, "reports",
-        list_user_files, compute_signature_from_docs,
-        get_cached_summary,
-    )
-    insurance_cached, insurance_docs = _validate_summary_cache(
-        profile_id, "insurance",
-        list_user_files, compute_signature_from_docs,
-        get_cached_insurance_summary,
-    )
+            # --- Collect ALL results while still inside the `with` block ---
+            profile_info     = _safe_result(f_profile,      {})
+            card_data        = _safe_result(f_card,         {})
+            contacts_raw     = _safe_result(f_contacts,     [])
+            health_raw       = _safe_result(f_health,       {})
+            medications      = _safe_result(f_medications,  [])
+            doctors_raw      = _safe_result(f_doctors,      [])
+            appointments_raw = _safe_result(f_appointments, [])
+            doc_urls         = _safe_result(f_doc_urls,     {})
 
-    logger.info(
-        "%s Stage 2 (cache check): medical=%s, insurance=%s",
-        log_prefix,
-        "HIT" if medical_cached else "MISS",
-        "HIT" if insurance_cached else "MISS",
-    )
+            med_cache_result = _safe_result(f_med_cache, (None, []))
+            ins_cache_result = _safe_result(f_ins_cache, (None, []))
 
-    # ── Build profile_data payload ───────────────────────────────────────────
+        # Unpack cache results
+        medical_cached,   medical_docs   = med_cache_result  if isinstance(med_cache_result, tuple)   else (None, [])
+        insurance_cached, insurance_docs = ins_cache_result  if isinstance(ins_cache_result, tuple)   else (None, [])
 
-    profile_data = {
-        "profile":              _reshape_profile(card_data, profile_info, health_raw),
-        "emergency_contact":    _reshape_emergency_contacts(contacts_raw),
-        "current_medical_status": _reshape_health_current(health_raw, medications),
-        "past_medical_history": _reshape_health_past(health_raw),
-        "doctors":              _reshape_doctors(doctors_raw),
-        "appointments":         _reshape_appointments(appointments_raw),
-        "prescriptions":        _reshape_documents(doc_urls, "prescriptions"),
-        "medical_documents":    _reshape_documents(doc_urls, "reports"),
-        "insurance_documents":  _reshape_documents(doc_urls, "insurance"),
-    }
+        logger.info(
+            "%s Stage 1 complete. medical_cache=%s insurance_cache=%s",
+            log_prefix,
+            "HIT" if medical_cached else "MISS",
+            "HIT" if insurance_cached else "MISS",
+        )
 
-    # Include cached summaries if available
-    if medical_cached:
-        profile_data["summary"] = medical_cached.get("summary_text") or ""
+        # ── Stage 2: Determine what needs to be generated ────────────────────
+        medical_needed   = not medical_cached   and bool(medical_docs)
+        insurance_needed = not insurance_cached and bool(insurance_docs)
 
-    if insurance_cached:
-        raw_ins = insurance_cached.get("summary_text") or ""
-        profile_data["insurance"] = _parse_insurance_cache(raw_ins)
+        # ── Build profile_data payload ────────────────────────────────────────
+        profile_data: dict = {
+            "profile":                _reshape_profile(card_data, profile_info, health_raw),
+            "emergency_contact":      _reshape_emergency_contacts(contacts_raw),
+            "current_medical_status": _reshape_health_current(health_raw, medications),
+            "past_medical_history":   _reshape_health_past(health_raw),
+            "doctors":                _reshape_doctors(doctors_raw),
+            "appointments":           _reshape_appointments(appointments_raw),
+            "prescriptions":          _reshape_documents(doc_urls, "prescriptions"),
+            "medical_documents":      _reshape_documents(doc_urls, "reports"),
+            "insurance_documents":    _reshape_documents(doc_urls, "insurance"),
+            # Pending flags let the frontend show a spinner in the right tab
+            # instead of "no data available" while generation is in progress.
+            "summary_pending":   medical_needed,
+            "insurance_pending": insurance_needed,
+        }
 
-    # ── SSE Event 1: profile_data ────────────────────────────────────────────
-    yield _sse_event("profile_data", profile_data)
-    logger.info("%s Event 1 (profile_data) sent.", log_prefix)
+        # Include cached summaries when available
+        if medical_cached:
+            profile_data["summary"] = medical_cached.get("summary_text") or ""
 
-    # ── Stage 3: Generate missing summaries ──────────────────────────────────
+        if insurance_cached:
+            raw_ins = insurance_cached.get("summary_text") or ""
+            profile_data["insurance"] = _parse_insurance_cache(raw_ins)
 
-    medical_needed = not medical_cached and bool(medical_docs)
-    insurance_needed = not insurance_cached and bool(insurance_docs)
+        # ── SSE Event 1: profile_data ─────────────────────────────────────────
+        yield _sse_event("profile_data", profile_data)
+        logger.info("%s Event 1 (profile_data) sent.", log_prefix)
 
-    if medical_needed:
+        # ── Stage 3: Sequential summary generation ────────────────────────────
+        # (kept sequential to avoid RAM exhaustion from concurrent RAG pipelines)
+
+        if medical_needed:
+            try:
+                from qr_rag_pipeline.qr_summary_generator import generate_medical_summary
+                summary_text = generate_medical_summary(profile_id)
+                yield _sse_event("medical_summary", {"summary": summary_text})
+                logger.info("%s Event 2 (medical_summary) sent.", log_prefix)
+            except Exception as exc:
+                logger.exception("%s Medical summary generation failed: %s", log_prefix, exc)
+                yield _sse_event("medical_summary", {
+                    "summary": "Unable to generate medical summary at this time."
+                })
+
+        if insurance_needed:
+            try:
+                from qr_rag_pipeline.qr_summary_generator import generate_insurance_summary
+                insurance_data = generate_insurance_summary(profile_id)
+                yield _sse_event("insurance_summary", {"insurance": insurance_data})
+                logger.info("%s Event 3 (insurance_summary) sent.", log_prefix)
+            except Exception as exc:
+                logger.exception("%s Insurance summary generation failed: %s", log_prefix, exc)
+                yield _sse_event("insurance_summary", {
+                    "insurance": _default_insurance()
+                })
+
+        # ── SSE Event 4: complete ─────────────────────────────────────────────
+        yield _sse_event("complete", {"status": "done"})
+        complete_sent = True
+        logger.info("%s SSE stream complete.", log_prefix)
+
+    except Exception as exc:
+        logger.exception("%s Fatal unhandled error in stream_qr_profile: %s", log_prefix, exc)
+        # Attempt to tell the frontend something went wrong
         try:
-            from qr_rag_pipeline.qr_summary_generator import generate_medical_summary
-            summary_text = generate_medical_summary(profile_id)
-            yield _sse_event("medical_summary", {"summary": summary_text})
-            logger.info("%s Event 2 (medical_summary) sent.", log_prefix)
-        except Exception as exc:
-            logger.exception("%s Medical summary generation failed: %s", log_prefix, exc)
-            yield _sse_event("medical_summary", {
-                "summary": f"Unable to generate medical summary: {exc}"
-            })
-
-    if insurance_needed:
-        try:
-            from qr_rag_pipeline.qr_summary_generator import generate_insurance_summary
-            insurance_data = generate_insurance_summary(profile_id)
-            yield _sse_event("insurance_summary", {"insurance": insurance_data})
-            logger.info("%s Event 3 (insurance_summary) sent.", log_prefix)
-        except Exception as exc:
-            logger.exception("%s Insurance summary generation failed: %s", log_prefix, exc)
-            yield _sse_event("insurance_summary", {
-                "insurance": _default_insurance()
-            })
-
-    # ── SSE Event 4: complete ────────────────────────────────────────────────
-    yield _sse_event("complete", {"status": "done"})
-    logger.info("%s SSE stream complete.", log_prefix)
+            yield _sse_event("error", {"message": "An unexpected error occurred loading your profile."})
+        except Exception:
+            pass
+        # Always send `complete` so the frontend never hangs indefinitely
+        if not complete_sent:
+            try:
+                yield _sse_event("complete", {"status": "error"})
+            except Exception:
+                pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -467,7 +503,6 @@ def _parse_insurance_cache(raw: str) -> dict:
     try:
         parsed = json.loads(raw)
         if isinstance(parsed, dict):
-            # Merge with defaults to guarantee all keys
             defaults = _default_insurance()
             result = {}
             for section, section_defaults in defaults.items():
@@ -500,11 +535,10 @@ if __name__ == "__main__":
     start = time.perf_counter()
 
     for event_str in stream_qr_profile(TEST_PROFILE_ID):
-        # Parse the SSE to pretty-print
         lines = event_str.strip().split("\n")
         event_type = lines[0].replace("event: ", "")
-        data_raw = lines[1].replace("data: ", "")
-        data = json.loads(data_raw)
+        data_raw   = lines[1].replace("data: ", "")
+        data       = json.loads(data_raw)
 
         elapsed = time.perf_counter() - start
         print(f"\n{'─' * 70}")
@@ -516,4 +550,3 @@ if __name__ == "__main__":
     print(f"\n{'=' * 70}")
     print(f"  ✅ Complete in {total:.2f}s")
     print(f"{'=' * 70}")
-

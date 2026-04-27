@@ -5,7 +5,7 @@ On-demand RAG summary generation for the QR Emergency Profile pipeline.
 
 Two public functions:
     generate_medical_summary(profile_id)  → pure text summary
-    generate_insurance_summary(profile_id) → strict JSON string
+    generate_insurance_summary(profile_id) → strict JSON dict
 
 Both functions:
   1. List current storage files for the profile.
@@ -46,14 +46,14 @@ if str(PROJECT_ROOT) not in sys.path:
 _MAX_DOWNLOAD_WORKERS: int = int(os.getenv("QR_DOWNLOAD_WORKERS", "4"))
 
 # Higher top_k and token budget for emergency summaries (need exhaustive coverage)
-_MEDICAL_TOP_K:     int = 15
-_MEDICAL_MAX_TOKENS: int = 2500
-_INSURANCE_TOP_K:    int = 15
+_MEDICAL_TOP_K:       int = 15
+_MEDICAL_MAX_TOKENS:  int = 2500
+_INSURANCE_TOP_K:     int = 15
 _INSURANCE_MAX_TOKENS: int = 2000
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Temp-file download helpers (inlined — same pattern as lab_report_handler)
+# Temp-file download helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _download_one(doc: dict, get_file_bytes_fn) -> tuple[str, str]:
@@ -69,7 +69,9 @@ def _download_one(doc: dict, get_file_bytes_fn) -> tuple[str, str]:
     finally:
         tmp.close()
 
-    logger.debug("Downloaded '%s' → temp '%s' (%d bytes)", logical_path, tmp.name, len(raw_bytes))
+    logger.debug(
+        "Downloaded '%s' → temp '%s' (%d bytes)", logical_path, tmp.name, len(raw_bytes)
+    )
     return logical_path, tmp.name
 
 
@@ -96,7 +98,9 @@ def _concurrent_download(
         return file_paths
 
     workers = min(_MAX_DOWNLOAD_WORKERS, len(docs_to_fetch))
-    logger.info("Downloading %d file(s) with %d worker(s)…", len(docs_to_fetch), workers)
+    logger.info(
+        "Downloading %d file(s) with %d worker(s)…", len(docs_to_fetch), workers
+    )
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         future_to_doc = {
@@ -109,14 +113,18 @@ def _concurrent_download(
                 logical, tmp = future.result()
                 file_paths[logical] = tmp
             except Exception as exc:
-                logger.error("Failed to download '%s': %s", doc.get("file_name"), exc)
+                logger.error(
+                    "Failed to download '%s': %s", doc.get("file_name"), exc
+                )
 
-    logger.info("Download complete: %d/%d succeeded.", len(file_paths), len(docs_to_fetch))
+    logger.info(
+        "Download complete: %d/%d succeeded.", len(file_paths), len(docs_to_fetch)
+    )
     return file_paths
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Doc metadata builder (same pattern as lab_report_handler / insurance_handler)
+# Doc metadata builder
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _build_doc_list(
@@ -154,15 +162,14 @@ def generate_medical_summary(profile_id: str) -> str:
     """
     Generate an emergency-grade medical summary via the lab report RAG pipeline.
 
-    Returns pure text (the summary string).  The result is also cached to
+    Returns pure text (the summary string). The result is also cached to
     ``medical_summaries_cache`` so subsequent calls hit the fast path.
 
-    Raises on critical failure so the SSE orchestrator can handle it.
+    Raises on critical failure so the SSE orchestrator can handle it gracefully.
     """
     from supabase_helper import (
         list_user_files,
         get_file_bytes,
-        get_profile_info,
         compute_signature_from_docs,
         save_summary_cache,
     )
@@ -196,7 +203,9 @@ def generate_medical_summary(profile_id: str) -> str:
     try:
         to_add, _to_remove = get_docs_delta(profile_id, docs)
     except Exception as exc:
-        logger.warning("%s get_docs_delta failed (%s); full fetch.", log_prefix, exc)
+        logger.warning(
+            "%s get_docs_delta failed (%s); performing full fetch.", log_prefix, exc
+        )
         to_add = docs
 
     # 4. Concurrent download to temp files
@@ -207,7 +216,7 @@ def generate_medical_summary(profile_id: str) -> str:
         file_paths = _concurrent_download(to_add, get_file_bytes)
         temp_files = list(file_paths.values())
     else:
-        logger.info("%s All documents unchanged. No downloads required.", log_prefix)
+        logger.info("%s All documents unchanged — no downloads required.", log_prefix)
 
     with _temp_file_context(temp_files):
         # 5. Incremental vector update (shared index)
@@ -220,13 +229,13 @@ def generate_medical_summary(profile_id: str) -> str:
             index, chunks_dict, vectorizer,
             query=EMERGENCY_RAG_QUERY,
             top_k=_MEDICAL_TOP_K,
-            min_score=0.18,  # slightly lower threshold for exhaustive coverage
+            min_score=0.18,
         )
 
         if not context_chunks:
             return (
-                "Lab reports were indexed but no relevant content could be "
-                "retrieved. The documents may contain non-extractable content."
+                "Lab reports were indexed but no relevant content could be retrieved. "
+                "The documents may contain non-extractable content."
             )
 
         # 7. Build LLM prompt
@@ -237,7 +246,9 @@ def generate_medical_summary(profile_id: str) -> str:
         )
         user_prompt = EMERGENCY_MEDICAL_SUMMARY_USER.format(excerpts=excerpts)
 
-        logger.info("%s Generating summary from %d chunks.", log_prefix, len(context_chunks))
+        logger.info(
+            "%s Generating summary from %d chunks.", log_prefix, len(context_chunks)
+        )
 
         summary: str = call_llm(
             system_prompt=EMERGENCY_MEDICAL_SUMMARY_SYSTEM,
@@ -257,7 +268,7 @@ def generate_medical_summary(profile_id: str) -> str:
         )
         logger.info("%s Summary cached (%d chars).", log_prefix, len(summary))
     except Exception as exc:
-        logger.warning("%s Cache save failed: %s", log_prefix, exc)
+        logger.warning("%s Cache save failed (non-fatal): %s", log_prefix, exc)
 
     return summary
 
@@ -302,18 +313,17 @@ def _parse_insurance_json(raw_text: str) -> dict:
     # Strip markdown code fences
     if cleaned.startswith("```"):
         lines = cleaned.split("\n")
-        lines = [l for l in lines if not l.strip().startswith("```")]
+        lines = [ln for ln in lines if not ln.strip().startswith("```")]
         cleaned = "\n".join(lines).strip()
 
     try:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError:
-        # Try to find JSON object within the text
         start = cleaned.find("{")
-        end = cleaned.rfind("}")
+        end   = cleaned.rfind("}")
         if start != -1 and end != -1 and end > start:
             try:
-                parsed = json.loads(cleaned[start:end + 1])
+                parsed = json.loads(cleaned[start : end + 1])
             except json.JSONDecodeError:
                 logger.warning("Failed to parse insurance JSON from LLM output.")
                 return dict(_INSURANCE_DEFAULT)
@@ -337,10 +347,10 @@ def generate_insurance_summary(profile_id: str) -> dict:
     Generate a structured insurance summary via the insurance RAG pipeline.
 
     Returns a dict with the exact policy schema (policy_overview,
-    coverage_details, medical_rules, hospital_access).  The JSON-stringified
+    coverage_details, medical_rules, hospital_access). The JSON-stringified
     result is also cached to ``insurance_summary_cache``.
 
-    Raises on critical failure so the SSE orchestrator can handle it.
+    Raises on critical failure so the SSE orchestrator can handle it gracefully.
     """
     from supabase_helper import (
         list_user_files,
@@ -378,7 +388,9 @@ def generate_insurance_summary(profile_id: str) -> dict:
     try:
         to_add, _to_remove = get_docs_delta(profile_id, docs)
     except Exception as exc:
-        logger.warning("%s get_docs_delta failed (%s); full fetch.", log_prefix, exc)
+        logger.warning(
+            "%s get_docs_delta failed (%s); performing full fetch.", log_prefix, exc
+        )
         to_add = docs
 
     # 4. Download changed docs
@@ -428,7 +440,7 @@ def generate_insurance_summary(profile_id: str) -> dict:
     # 8. Parse JSON
     result = _parse_insurance_json(raw_output)
 
-    # 9. Cache
+    # 9. Cache (non-fatal if it fails)
     current_sig = compute_signature_from_docs(docs)
     try:
         save_insurance_summary_cache(
@@ -440,6 +452,6 @@ def generate_insurance_summary(profile_id: str) -> dict:
         )
         logger.info("%s Insurance summary cached.", log_prefix)
     except Exception as exc:
-        logger.warning("%s Insurance cache save failed: %s", log_prefix, exc)
+        logger.warning("%s Insurance cache save failed (non-fatal): %s", log_prefix, exc)
 
     return result

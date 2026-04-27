@@ -1,4 +1,5 @@
 import os
+import threading
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import requests
@@ -14,7 +15,41 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
     raise ValueError("❌ Missing SUPABASE_URL or SUPABASE_SERVICE_KEY in .env")
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+class _ThreadLocalSupabaseProxy:
+    """
+    Thread-local Supabase client proxy.
+
+    The supabase-py library uses httpx with HTTP/2 enabled by default.
+    HTTP/2 multiplexes multiple requests over a single TCP connection via
+    numbered "streams". When several threads share one Client instance and
+    fire concurrent queries, the server can terminate the connection with
+    error_code:1 (PROTOCOL_ERROR) because stream IDs collide or the server's
+    concurrent-stream limit is exceeded.
+
+    This proxy gives every thread its own Client, and therefore its own HTTP
+    connection pool, eliminating the stream conflicts entirely.  All existing
+    call-sites (`supabase.table(...)`, `supabase.storage...`, etc.) continue
+    to work unchanged — attribute access is transparently forwarded to the
+    per-thread client.
+    """
+
+    def __init__(self, url: str, key: str) -> None:
+        self._url = url
+        self._key = key
+        self._local = threading.local()
+
+    def _get_client(self) -> Client:
+        if not hasattr(self._local, "client"):
+            self._local.client = create_client(self._url, self._key)
+        return self._local.client
+
+    def __getattr__(self, name: str):
+        # Forward every attribute/method access to the thread-local client.
+        return getattr(self._get_client(), name)
+
+
+supabase: Client = _ThreadLocalSupabaseProxy(SUPABASE_URL, SUPABASE_SERVICE_KEY)  # type: ignore[assignment]
 print(f"✅ Supabase client initialized: {SUPABASE_URL}")
 
 BUCKET_NAME = "medical-vault"
