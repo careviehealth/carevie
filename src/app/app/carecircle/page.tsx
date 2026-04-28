@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import QRModal from '@/components/QRModal';
 import {
   Activity,
   Calendar,
@@ -782,10 +783,10 @@ function SectionHelpButton({
           style={
             popoverPosition
               ? {
-                  left: `${popoverPosition.left}px`,
-                  top: `${popoverPosition.top}px`,
-                  width: `${popoverPosition.width}px`,
-                }
+                left: `${popoverPosition.left}px`,
+                top: `${popoverPosition.top}px`,
+                width: `${popoverPosition.width}px`,
+              }
               : undefined
           }
         >
@@ -883,6 +884,11 @@ export default function CareCirclePage() {
   const [appointmentSaving, setAppointmentSaving] = useState(false);
   const [appointmentDeletingId, setAppointmentDeletingId] = useState<string | null>(null);
   const [pendingMemberLinkId, setPendingMemberLinkId] = useState<string | null>(null);
+  const [isMemberQrModalOpen, setIsMemberQrModalOpen] = useState(false);
+  const [memberQrShareLink, setMemberQrShareLink] = useState('');
+  const [isMemberQrGenerating, setIsMemberQrGenerating] = useState(false);
+  const [memberQrTargetName, setMemberQrTargetName] = useState('');
+  const [memberQrError, setMemberQrError] = useState<string | null>(null);
   const [pendingMemberTab, setPendingMemberTab] = useState<MemberDetailsTab | null>(null);
   const hasAppliedMemberDeepLinkRef = useRef(false);
 
@@ -1059,7 +1065,7 @@ export default function CareCirclePage() {
     const response = await fetch(
       `/api/care-circle/links${profileId ? `?profileId=${encodeURIComponent(profileId)}` : ''}`,
       {
-      cache: 'no-store',
+        cache: 'no-store',
       }
     );
 
@@ -2010,6 +2016,33 @@ export default function CareCirclePage() {
     [profileId, selectedMember]
   );
 
+  const openMemberQrModal = async (member: CareCircleMember) => {
+    setMemberQrTargetName(member.name);
+    setMemberQrShareLink('');
+    setMemberQrError(null);
+    setIsMemberQrGenerating(true);
+    setIsMemberQrModalOpen(true);
+
+    try {
+      const res = await fetch('/api/care-circle/member/generate-qr-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkId: member.linkId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.token) {
+        setMemberQrError(data.message ?? 'Failed to generate QR.');
+        return;
+      }
+      const link = `${window.location.origin}/app/share/${data.token}`;
+      setMemberQrShareLink(link);
+    } catch {
+      setMemberQrError('Failed to generate QR. Please try again.');
+    } finally {
+      setIsMemberQrGenerating(false);
+    }
+  };
+
   const handleEmergencyChange = <Key extends keyof EmergencyCardData>(
     key: Key,
     value: EmergencyCardData[Key]
@@ -2105,10 +2138,10 @@ export default function CareCirclePage() {
     const firstTab: MemberDetailsTab = perms.personal_info
       ? 'personal'
       : perms.appointments
-      ? 'appointments'
-      : perms.medications
-      ? 'medications'
-      : 'vault';
+        ? 'appointments'
+        : perms.medications
+          ? 'medications'
+          : 'vault';
     setMemberDetailsTab(firstTab);
     setVaultCategory('all');
     setVaultSearchQuery('');
@@ -2347,11 +2380,10 @@ export default function CareCirclePage() {
                 onClick={() => setIsInviteOpen(true)}
                 disabled={!isSelectedProfilePrimary}
                 data-tour="care-invite-member"
-                className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold shadow-md shadow-teal-900/20 transition ${
-                  isSelectedProfilePrimary
-                    ? 'bg-teal-600 text-white hover:bg-teal-700'
-                    : 'bg-slate-300 text-slate-600 cursor-not-allowed shadow-none'
-                }`}
+                className={`inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold shadow-md shadow-teal-900/20 transition ${isSelectedProfilePrimary
+                  ? 'bg-teal-600 text-white hover:bg-teal-700'
+                  : 'bg-slate-300 text-slate-600 cursor-not-allowed shadow-none'
+                  }`}
               >
                 <UserPlus className="h-5 w-5" />
                 Invite member
@@ -2395,11 +2427,10 @@ export default function CareCirclePage() {
                   <button
                     type="button"
                     onClick={() => setIsEmergencyEditing(false)}
-                    className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold ${
-                      !isEmergencyEditing
-                        ? 'bg-teal-600 text-white'
-                        : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
+                    className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold ${!isEmergencyEditing
+                      ? 'bg-teal-600 text-white'
+                      : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
                   >
                     Card preview
                   </button>
@@ -2407,11 +2438,10 @@ export default function CareCirclePage() {
                     <button
                       type="button"
                       onClick={() => setIsEmergencyEditing(true)}
-                      className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold ${
-                        isEmergencyEditing
-                          ? 'bg-teal-600 text-white'
-                          : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
+                      className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold ${isEmergencyEditing
+                        ? 'bg-teal-600 text-white'
+                        : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
                     >
                       Edit card
                     </button>
@@ -2430,343 +2460,343 @@ export default function CareCirclePage() {
                 </div>
               </div>
 
-            {isEmergencyLoading ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-sm text-slate-500">
-                Loading emergency card details…
-              </div>
-            ) : isEmergencyEditing && !isViewingExternalCard ? (
-              <form
-                onSubmit={handleEmergencySave}
-                className="space-y-6 rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-6"
-              >
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="block text-sm font-medium text-slate-700">
-                    Full legal name
-                    <input
-                      value={emergencyCard.name}
-                      onChange={(event) =>
-                        handleEmergencyChange('name', event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Age
-                    <input
-                      type="number"
-                      min="0"
-                      value={emergencyCard.age}
-                      onChange={(event) =>
-                        handleEmergencyChange('age', event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Date of birth
-                    <input
-                      type="date"
-                      value={emergencyCard.date_of_birth}
-                      onChange={(event) =>
-                        handleEmergencyChange('date_of_birth', event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Preferred hospital
-                    <input
-                      value={emergencyCard.preferred_hospital}
-                      onChange={(event) =>
-                        handleEmergencyChange(
-                          'preferred_hospital',
-                          event.target.value
-                        )
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
+              {isEmergencyLoading ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-sm text-slate-500">
+                  Loading emergency card details…
                 </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="block text-sm font-medium text-slate-700">
-                    Photo ID on file
-                    <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+              ) : isEmergencyEditing && !isViewingExternalCard ? (
+                <form
+                  onSubmit={handleEmergencySave}
+                  className="space-y-6 rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-6"
+                >
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      Full legal name
                       <input
-                        type="checkbox"
-                        checked={emergencyCard.photo_id_on_file}
+                        value={emergencyCard.name}
+                        onChange={(event) =>
+                          handleEmergencyChange('name', event.target.value)
+                        }
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Age
+                      <input
+                        type="number"
+                        min="0"
+                        value={emergencyCard.age}
+                        onChange={(event) =>
+                          handleEmergencyChange('age', event.target.value)
+                        }
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Date of birth
+                      <input
+                        type="date"
+                        value={emergencyCard.date_of_birth}
+                        onChange={(event) =>
+                          handleEmergencyChange('date_of_birth', event.target.value)
+                        }
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Preferred hospital
+                      <input
+                        value={emergencyCard.preferred_hospital}
                         onChange={(event) =>
                           handleEmergencyChange(
-                            'photo_id_on_file',
-                            event.target.checked
+                            'preferred_hospital',
+                            event.target.value
                           )
                         }
-                        className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
                       />
-                      Mark as on file
+                    </label>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      Photo ID on file
+                      <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={emergencyCard.photo_id_on_file}
+                          onChange={(event) =>
+                            handleEmergencyChange(
+                              'photo_id_on_file',
+                              event.target.checked
+                            )
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                        />
+                        Mark as on file
+                      </div>
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Photo ID last 4 digits
+                      <input
+                        value={emergencyCard.photo_id_last4}
+                        onChange={(event) =>
+                          handleEmergencyChange('photo_id_last4', event.target.value)
+                        }
+                        placeholder="1234"
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Emergency contact name
+                      <input
+                        value={emergencyCard.emergency_contact_name}
+                        onChange={(event) =>
+                          handleEmergencyChange(
+                            'emergency_contact_name',
+                            event.target.value
+                          )
+                        }
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Emergency contact phone
+                      <input
+                        value={emergencyCard.emergency_contact_phone}
+                        onChange={(event) =>
+                          handleEmergencyChange(
+                            'emergency_contact_phone',
+                            event.target.value
+                          )
+                        }
+                        placeholder="+1 555 000 0000"
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      Insurer name
+                      <input
+                        value={emergencyCard.insurer_name}
+                        onChange={(event) =>
+                          handleEmergencyChange('insurer_name', event.target.value)
+                        }
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Plan type (optional)
+                      <input
+                        value={emergencyCard.plan_type}
+                        onChange={(event) =>
+                          handleEmergencyChange('plan_type', event.target.value)
+                        }
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      TPA + helpline
+                      <input
+                        value={emergencyCard.tpa_helpline}
+                        onChange={(event) =>
+                          handleEmergencyChange('tpa_helpline', event.target.value)
+                        }
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Insurance last 4 digits
+                      <input
+                        value={emergencyCard.insurance_last4}
+                        onChange={(event) =>
+                          handleEmergencyChange(
+                            'insurance_last4',
+                            event.target.value
+                          )
+                        }
+                        placeholder="1234"
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      Blood group
+                      <input
+                        value={emergencyCard.blood_group}
+                        onChange={(event) =>
+                          handleEmergencyChange('blood_group', event.target.value)
+                        }
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Critical allergies
+                      <input
+                        value={emergencyCard.critical_allergies}
+                        onChange={(event) =>
+                          handleEmergencyChange(
+                            'critical_allergies',
+                            event.target.value
+                          )
+                        }
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Chronic conditions
+                      <input
+                        value={emergencyCard.chronic_conditions}
+                        onChange={(event) =>
+                          handleEmergencyChange(
+                            'chronic_conditions',
+                            event.target.value
+                          )
+                        }
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Current meds
+                      <input
+                        value={emergencyCard.current_meds}
+                        onChange={(event) =>
+                          handleEmergencyChange('current_meds', event.target.value)
+                        }
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block text-sm font-medium text-slate-700">
+                    Emergency instructions
+                    <textarea
+                      rows={3}
+                      value={emergencyCard.emergency_instructions}
+                      onChange={(event) =>
+                        handleEmergencyChange(
+                          'emergency_instructions',
+                          event.target.value
+                        )
+                      }
+                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  </label>
+
+                  {emergencyError && (
+                    <p className="text-sm text-rose-600">{emergencyError}</p>
+                  )}
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setIsEmergencyEditing(false)}
+                      className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingEmergency}
+                      className="inline-flex items-center justify-center rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
+                    >
+                      {isSavingEmergency ? 'Saving…' : 'Save card'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-teal-50 p-6 shadow-inner">
+                  <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-600">
+                        Emergency ID
+                      </p>
+                      <h3 className="text-2xl font-semibold text-slate-900">
+                        {emergencyCard.name || 'Full legal name'}
+                      </h3>
+                      <div className="flex flex-wrap gap-3 text-sm text-slate-600">
+                        <span>Age: {emergencyCard.age || '—'}</span>
+                        <span>DOB: {emergencyCard.date_of_birth || '—'}</span>
+                        <span>Blood: {emergencyCard.blood_group || '—'}</span>
+                      </div>
+                      <p className="text-sm text-slate-600">
+                        Photo ID: {photoIdLabel}
+                      </p>
                     </div>
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Photo ID last 4 digits
-                    <input
-                      value={emergencyCard.photo_id_last4}
-                      onChange={(event) =>
-                        handleEmergencyChange('photo_id_last4', event.target.value)
-                      }
-                      placeholder="1234"
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Emergency contact name
-                    <input
-                      value={emergencyCard.emergency_contact_name}
-                      onChange={(event) =>
-                        handleEmergencyChange(
-                          'emergency_contact_name',
-                          event.target.value
-                        )
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Emergency contact phone
-                    <input
-                      value={emergencyCard.emergency_contact_phone}
-                      onChange={(event) =>
-                        handleEmergencyChange(
-                          'emergency_contact_phone',
-                          event.target.value
-                        )
-                      }
-                      placeholder="+1 555 000 0000"
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="block text-sm font-medium text-slate-700">
-                    Insurer name
-                    <input
-                      value={emergencyCard.insurer_name}
-                      onChange={(event) =>
-                        handleEmergencyChange('insurer_name', event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Plan type (optional)
-                    <input
-                      value={emergencyCard.plan_type}
-                      onChange={(event) =>
-                        handleEmergencyChange('plan_type', event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    TPA + helpline
-                    <input
-                      value={emergencyCard.tpa_helpline}
-                      onChange={(event) =>
-                        handleEmergencyChange('tpa_helpline', event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Insurance last 4 digits
-                    <input
-                      value={emergencyCard.insurance_last4}
-                      onChange={(event) =>
-                        handleEmergencyChange(
-                          'insurance_last4',
-                          event.target.value
-                        )
-                      }
-                      placeholder="1234"
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="block text-sm font-medium text-slate-700">
-                    Blood group
-                    <input
-                      value={emergencyCard.blood_group}
-                      onChange={(event) =>
-                        handleEmergencyChange('blood_group', event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Critical allergies
-                    <input
-                      value={emergencyCard.critical_allergies}
-                      onChange={(event) =>
-                        handleEmergencyChange(
-                          'critical_allergies',
-                          event.target.value
-                        )
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Chronic conditions
-                    <input
-                      value={emergencyCard.chronic_conditions}
-                      onChange={(event) =>
-                        handleEmergencyChange(
-                          'chronic_conditions',
-                          event.target.value
-                        )
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Current meds
-                    <input
-                      value={emergencyCard.current_meds}
-                      onChange={(event) =>
-                        handleEmergencyChange('current_meds', event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                  </label>
-                </div>
-
-                <label className="block text-sm font-medium text-slate-700">
-                  Emergency instructions
-                  <textarea
-                    rows={3}
-                    value={emergencyCard.emergency_instructions}
-                    onChange={(event) =>
-                      handleEmergencyChange(
-                        'emergency_instructions',
-                        event.target.value
-                      )
-                    }
-                    className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                </label>
-
-                {emergencyError && (
-                  <p className="text-sm text-rose-600">{emergencyError}</p>
-                )}
-
-                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setIsEmergencyEditing(false)}
-                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSavingEmergency}
-                    className="inline-flex items-center justify-center rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
-                  >
-                    {isSavingEmergency ? 'Saving…' : 'Save card'}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-teal-50 p-6 shadow-inner">
-                <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-600">
-                      Emergency ID
-                    </p>
-                    <h3 className="text-2xl font-semibold text-slate-900">
-                      {emergencyCard.name || 'Full legal name'}
-                    </h3>
-                    <div className="flex flex-wrap gap-3 text-sm text-slate-600">
-                      <span>Age: {emergencyCard.age || '—'}</span>
-                      <span>DOB: {emergencyCard.date_of_birth || '—'}</span>
-                      <span>Blood: {emergencyCard.blood_group || '—'}</span>
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        Emergency contact
+                      </p>
+                      <p className="mt-2 text-sm font-semibold text-slate-900">
+                        {emergencyCard.emergency_contact_name || 'Not provided'}
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        {emergencyCard.emergency_contact_phone || '—'}
+                      </p>
+                      {emergencyCard.emergency_contact_phone && (
+                        <a
+                          href={`tel:${emergencyCard.emergency_contact_phone}`}
+                          className="mt-3 inline-flex items-center justify-center rounded-full bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
+                        >
+                          Call now
+                        </a>
+                      )}
                     </div>
-                    <p className="text-sm text-slate-600">
-                      Photo ID: {photoIdLabel}
-                    </p>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      Emergency contact
-                    </p>
-                    <p className="mt-2 text-sm font-semibold text-slate-900">
-                      {emergencyCard.emergency_contact_name || 'Not provided'}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      {emergencyCard.emergency_contact_phone || '—'}
-                    </p>
-                    {emergencyCard.emergency_contact_phone && (
-                      <a
-                        href={`tel:${emergencyCard.emergency_contact_phone}`}
-                        className="mt-3 inline-flex items-center justify-center rounded-full bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
-                      >
-                        Call now
-                      </a>
-                    )}
-                  </div>
-                </div>
 
-                <div className="mt-6 grid gap-4 md:grid-cols-3">
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      Preferred hospital
-                    </p>
-                    <p className="mt-2 text-sm font-semibold text-slate-900">
-                      {emergencyCard.preferred_hospital || 'Not provided'}
-                    </p>
+                  <div className="mt-6 grid gap-4 md:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        Preferred hospital
+                      </p>
+                      <p className="mt-2 text-sm font-semibold text-slate-900">
+                        {emergencyCard.preferred_hospital || 'Not provided'}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        Insurance
+                      </p>
+                      <p className="mt-2 text-sm font-semibold text-slate-900">
+                        {emergencyCard.insurer_name || 'Not provided'}
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        {emergencyCard.plan_type || 'Plan type'}
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        TPA/Helpline: {emergencyCard.tpa_helpline || '—'}
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        Last 4: {insuranceLast4Label}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        Medical notes
+                      </p>
+                      <p className="mt-2 text-sm text-slate-600">
+                        Allergies: {emergencyCard.critical_allergies || '—'}
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        Chronic: {emergencyCard.chronic_conditions || '—'}
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        Meds: {emergencyCard.current_meds || '—'}
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        Instructions: {emergencyCard.emergency_instructions || '—'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      Insurance
-                    </p>
-                    <p className="mt-2 text-sm font-semibold text-slate-900">
-                      {emergencyCard.insurer_name || 'Not provided'}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      {emergencyCard.plan_type || 'Plan type'}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      TPA/Helpline: {emergencyCard.tpa_helpline || '—'}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Last 4: {insuranceLast4Label}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      Medical notes
-                    </p>
-                    <p className="mt-2 text-sm text-slate-600">
-                      Allergies: {emergencyCard.critical_allergies || '—'}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Chronic: {emergencyCard.chronic_conditions || '—'}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Meds: {emergencyCard.current_meds || '—'}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Instructions: {emergencyCard.emergency_instructions || '—'}
-                    </p>
-                  </div>
+                  {emergencyError && (
+                    <p className="mt-4 text-sm text-rose-600">{emergencyError}</p>
+                  )}
                 </div>
-                {emergencyError && (
-                  <p className="mt-4 text-sm text-rose-600">{emergencyError}</p>
-                )}
-              </div>
-            )}
+              )}
             </section>
           </div>
         )}
@@ -2869,11 +2899,10 @@ export default function CareCirclePage() {
                                   }
                                   title={CARE_CIRCLE_PERMISSION_DESCRIPTIONS[key]}
                                   aria-pressed={checked}
-                                  className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors duration-150 ${
-                                    checked
-                                      ? 'border-teal-600 bg-teal-600 text-white'
-                                      : 'border-slate-200 bg-white text-slate-500'
-                                  } ${canEdit ? 'hover:border-teal-500 hover:text-teal-700 ' + (checked ? '' : '') : 'cursor-not-allowed opacity-60'}`}
+                                  className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors duration-150 ${checked
+                                    ? 'border-teal-600 bg-teal-600 text-white'
+                                    : 'border-slate-200 bg-white text-slate-500'
+                                    } ${canEdit ? 'hover:border-teal-500 hover:text-teal-700 ' + (checked ? '' : '') : 'cursor-not-allowed opacity-60'}`}
                                 >
                                   <Icon
                                     className={`h-3 w-3 ${checked ? 'text-white' : 'text-slate-400'}`}
@@ -2982,6 +3011,13 @@ export default function CareCirclePage() {
                             </div>
                             <button
                               type="button"
+                              onClick={() => openMemberQrModal(member)}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+                            >
+                              Generate QR
+                            </button>
+                            <button
+                              type="button"
                               onClick={() =>
                                 hasExtraAccess
                                   ? handleViewMemberDetails(member)
@@ -2989,13 +3025,12 @@ export default function CareCirclePage() {
                               }
                               disabled={!canView}
                               data-tour="care-view-access"
-                              className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors duration-150 ${
-                                canView
-                                  ? hasExtraAccess
-                                    ? 'bg-slate-900 text-white hover:bg-slate-800'
-                                    : 'border border-teal-200 bg-white text-teal-700 hover:bg-teal-50'
-                                  : 'border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-                              }`}
+                              className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors duration-150 ${canView
+                                ? hasExtraAccess
+                                  ? 'bg-slate-900 text-white hover:bg-slate-800'
+                                  : 'border border-teal-200 bg-white text-teal-700 hover:bg-teal-50'
+                                : 'border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                                }`}
                             >
                               {hasExtraAccess ? (
                                 <>
@@ -3146,60 +3181,57 @@ export default function CareCirclePage() {
                     className="flex flex-1 items-center gap-1 overflow-x-auto -mx-1 px-1"
                   >
                     {memberModalTabs.map((tab) => {
-                    const metaKey: CareCirclePermissionKey =
-                      tab === 'personal' ? 'personal_info' : tab === 'vault' ? 'vault' : tab;
-                    const Icon = PERMISSION_META[metaKey].icon;
-                    const label =
-                      tab === 'personal'
-                        ? 'Personal'
-                        : tab === 'appointments'
-                        ? 'Appointments'
-                        : tab === 'medications'
-                        ? 'Medications'
-                        : 'Vault';
-                    const count =
-                      tab === 'appointments'
-                        ? memberDetails?.appointments?.length ?? null
-                        : tab === 'medications'
-                        ? memberDetails?.medications?.length ?? null
-                        : tab === 'vault'
-                        ? vaultFiles.length
-                        : null;
-                    const isActive = memberDetailsTab === tab;
-                    return (
-                      <button
-                        key={tab}
-                        type="button"
-                        role="tab"
-                        aria-selected={isActive}
-                        onClick={() => setMemberDetailsTab(tab)}
-                        className={`group inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 ${
-                          isActive
+                      const metaKey: CareCirclePermissionKey =
+                        tab === 'personal' ? 'personal_info' : tab === 'vault' ? 'vault' : tab;
+                      const Icon = PERMISSION_META[metaKey].icon;
+                      const label =
+                        tab === 'personal'
+                          ? 'Personal'
+                          : tab === 'appointments'
+                            ? 'Appointments'
+                            : tab === 'medications'
+                              ? 'Medications'
+                              : 'Vault';
+                      const count =
+                        tab === 'appointments'
+                          ? memberDetails?.appointments?.length ?? null
+                          : tab === 'medications'
+                            ? memberDetails?.medications?.length ?? null
+                            : tab === 'vault'
+                              ? vaultFiles.length
+                              : null;
+                      const isActive = memberDetailsTab === tab;
+                      return (
+                        <button
+                          key={tab}
+                          type="button"
+                          role="tab"
+                          aria-selected={isActive}
+                          onClick={() => setMemberDetailsTab(tab)}
+                          className={`group inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 ${isActive
                             ? 'bg-slate-900 text-white shadow-sm shadow-slate-900/20'
                             : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        <Icon
-                          className={`h-4 w-4 ${
-                            isActive ? 'text-teal-300' : 'text-slate-400 group-hover:text-slate-600'
-                          }`}
-                          aria-hidden
-                        />
-                        <span>{label}</span>
-                        {count !== null ? (
-                          <span
-                            className={`inline-flex items-center justify-center min-w-[20px] rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
-                              isActive
+                            }`}
+                        >
+                          <Icon
+                            className={`h-4 w-4 ${isActive ? 'text-teal-300' : 'text-slate-400 group-hover:text-slate-600'
+                              }`}
+                            aria-hidden
+                          />
+                          <span>{label}</span>
+                          {count !== null ? (
+                            <span
+                              className={`inline-flex items-center justify-center min-w-[20px] rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${isActive
                                 ? 'bg-white/10 text-white'
                                 : 'bg-slate-200/70 text-slate-600'
-                            }`}
-                          >
-                            {count}
-                          </span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
+                                }`}
+                            >
+                              {count}
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
                   </div>
                   <SectionHelpButton
                     id="member-modal-tabs-help"
@@ -3238,9 +3270,8 @@ export default function CareCirclePage() {
               <div className="min-h-[280px] flex-1 overflow-y-auto -mx-1 px-1">
                 {memberDetailsTab === 'vault' ? (
                   <div
-                    className={`relative space-y-4 py-4 ${
-                      canManageSelectedMemberVault ? 'pt-12' : ''
-                    }`}
+                    className={`relative space-y-4 py-4 ${canManageSelectedMemberVault ? 'pt-12' : ''
+                      }`}
                   >
                     {canManageSelectedMemberVault ? (
                       <button
@@ -3262,11 +3293,10 @@ export default function CareCirclePage() {
                               key={category}
                               type="button"
                               onClick={() => setVaultCategory(category)}
-                              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                                vaultCategory === category
-                                  ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80'
-                                  : 'text-slate-600 hover:text-slate-900'
-                              }`}
+                              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${vaultCategory === category
+                                ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80'
+                                : 'text-slate-600 hover:text-slate-900'
+                                }`}
                             >
                               {vaultCategoryLabels[category]}
                             </button>
@@ -3307,8 +3337,8 @@ export default function CareCirclePage() {
                           const iconColor = isImage
                             ? 'text-violet-500'
                             : isPdf
-                            ? 'text-rose-500'
-                            : 'text-slate-500';
+                              ? 'text-rose-500'
+                              : 'text-slate-500';
                           return (
                             <li
                               key={`${file.folder}:${file.name}`}
@@ -3427,8 +3457,8 @@ export default function CareCirclePage() {
                         {!(memberDetails.health?.current_diagnosed_condition?.length ||
                           memberDetails.health?.allergies?.length ||
                           memberDetails.health?.ongoing_treatments?.length) && (
-                          <p className="text-slate-500">No current medical status recorded.</p>
-                        )}
+                            <p className="text-slate-500">No current medical status recorded.</p>
+                          )}
                       </div>
                     </div>
                     <div>
@@ -3468,8 +3498,8 @@ export default function CareCirclePage() {
                           memberDetails.health?.past_surgeries?.length ||
                           memberDetails.health?.childhood_illness?.length ||
                           memberDetails.health?.long_term_treatments?.length) && (
-                          <p className="text-slate-500">No past medical history recorded.</p>
-                        )}
+                            <p className="text-slate-500">No past medical history recorded.</p>
+                          )}
                       </div>
                     </div>
                   </div>
@@ -3732,16 +3762,14 @@ export default function CareCirclePage() {
                           return (
                             <li
                               key={med.id}
-                              className={`group relative flex items-stretch gap-4 rounded-xl border bg-white p-3 pr-4 text-sm transition-colors duration-150 hover:border-slate-300 ${
-                                isActive ? 'border-slate-200' : 'border-slate-200 opacity-75'
-                              }`}
+                              className={`group relative flex items-stretch gap-4 rounded-xl border bg-white p-3 pr-4 text-sm transition-colors duration-150 hover:border-slate-300 ${isActive ? 'border-slate-200' : 'border-slate-200 opacity-75'
+                                }`}
                             >
                               <div
-                                className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-lg ring-1 ${
-                                  isActive
-                                    ? 'bg-gradient-to-br from-indigo-50 to-violet-50 ring-indigo-100/80'
-                                    : 'bg-slate-50 ring-slate-200'
-                                }`}
+                                className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-lg ring-1 ${isActive
+                                  ? 'bg-gradient-to-br from-indigo-50 to-violet-50 ring-indigo-100/80'
+                                  : 'bg-slate-50 ring-slate-200'
+                                  }`}
                               >
                                 <Pill
                                   className={`h-6 w-6 ${isActive ? 'text-indigo-500' : 'text-slate-400'}`}
@@ -4139,8 +4167,8 @@ export default function CareCirclePage() {
                       ? 'Adding…'
                       : 'Saving…'
                     : medicationFormMode === 'add'
-                    ? 'Add medication'
-                    : 'Save changes'}
+                      ? 'Add medication'
+                      : 'Save changes'}
                 </button>
               </div>
             </form>
@@ -4247,11 +4275,10 @@ export default function CareCirclePage() {
                       <button
                         type="button"
                         onClick={() => updateAppointmentTime({ period: 'AM' })}
-                        className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
-                          appointmentTime.period === 'AM'
-                            ? 'border-teal-500 bg-teal-500 text-white shadow'
-                            : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300'
-                        }`}
+                        className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${appointmentTime.period === 'AM'
+                          ? 'border-teal-500 bg-teal-500 text-white shadow'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300'
+                          }`}
                         aria-pressed={appointmentTime.period === 'AM'}
                       >
                         AM
@@ -4260,11 +4287,10 @@ export default function CareCirclePage() {
                       <button
                         type="button"
                         onClick={() => updateAppointmentTime({ period: 'PM' })}
-                        className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
-                          appointmentTime.period === 'PM'
-                            ? 'border-teal-500 bg-teal-500 text-white shadow'
-                            : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300'
-                        }`}
+                        className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${appointmentTime.period === 'PM'
+                          ? 'border-teal-500 bg-teal-500 text-white shadow'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300'
+                          }`}
                         aria-pressed={appointmentTime.period === 'PM'}
                       >
                         PM
@@ -4365,8 +4391,8 @@ export default function CareCirclePage() {
                       ? 'Adding…'
                       : 'Saving…'
                     : appointmentFormMode === 'add'
-                    ? 'Add appointment'
-                    : 'Save changes'}
+                      ? 'Add appointment'
+                      : 'Save changes'}
                 </button>
               </div>
             </form>
@@ -4585,11 +4611,10 @@ export default function CareCirclePage() {
                     return (
                       <label
                         key={key}
-                        className={`group relative flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-xs transition-all duration-150 ${
-                          checked
-                            ? 'border-teal-300 bg-gradient-to-br from-teal-50 to-emerald-50/60 shadow-sm ring-1 ring-teal-100'
-                            : 'border-slate-200 bg-white hover:border-slate-300'
-                        } ${isEmergency ? 'cursor-not-allowed opacity-90' : 'cursor-pointer hover:-translate-y-0.5 hover:shadow-sm'}`}
+                        className={`group relative flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-xs transition-all duration-150 ${checked
+                          ? 'border-teal-300 bg-gradient-to-br from-teal-50 to-emerald-50/60 shadow-sm ring-1 ring-teal-100'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                          } ${isEmergency ? 'cursor-not-allowed opacity-90' : 'cursor-pointer hover:-translate-y-0.5 hover:shadow-sm'}`}
                       >
                         <input
                           type="checkbox"
@@ -4604,11 +4629,10 @@ export default function CareCirclePage() {
                           className="sr-only"
                         />
                         <span
-                          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                            checked
-                              ? 'bg-gradient-to-br from-teal-500 to-emerald-500 text-white shadow-sm'
-                              : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
-                          }`}
+                          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${checked
+                            ? 'bg-gradient-to-br from-teal-500 to-emerald-500 text-white shadow-sm'
+                            : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
+                            }`}
                           aria-hidden
                         >
                           <Icon className="h-3.5 w-3.5" />
@@ -4628,11 +4652,10 @@ export default function CareCirclePage() {
                         </span>
                         {!isEmergency ? (
                           <span
-                            className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-all ${
-                              checked
-                                ? 'border-teal-500 bg-teal-500'
-                                : 'border-slate-300 bg-white group-hover:border-slate-400'
-                            }`}
+                            className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-all ${checked
+                              ? 'border-teal-500 bg-teal-500'
+                              : 'border-slate-300 bg-white group-hover:border-slate-400'
+                              }`}
                             aria-hidden
                           >
                             {checked ? (
@@ -4675,6 +4698,16 @@ export default function CareCirclePage() {
           </div>
         </div>
       )}
+      <QRModal
+        isOpen={isMemberQrModalOpen}
+        onClose={() => setIsMemberQrModalOpen(false)}
+        title="Emergency QR"
+        subtitle={`For ${memberQrTargetName}`}
+        shareLink={memberQrShareLink}
+        isGenerating={isMemberQrGenerating}
+        error={memberQrError}
+        readyMessage="Expires in 15 minutes. Show to doctor."
+      />
     </div>
   );
 }

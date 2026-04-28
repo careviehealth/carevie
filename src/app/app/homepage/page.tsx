@@ -14,6 +14,7 @@ import { NotificationsPanel } from "@/components/NotificationsPanel";
 import PushSubscriptionManager from "@/components/PushSubscriptionManager";
 import { useAppProfile } from "@/components/AppProfileProvider";
 import { confirmDialog, toast } from "@/components/AppNotifier";
+import QRModal from '@/components/QRModal';
 import {
   modalOverlayMotion,
   modalOverlayTransition,
@@ -235,17 +236,17 @@ const buildMedicationActivityChanges = (
     "endDate",
   ] as const;
   return fields.reduce<ActivityMetadataChange[]>((changes, field) => {
-      const before = normalizeActivityMetadataValue(previousMedication[field] ?? null);
-      const after = normalizeActivityMetadataValue(nextMedication[field] ?? null);
-      if (before === after) return changes;
-      changes.push({
-        field,
-        label: getMedicationActivityFieldLabel(field),
-        before,
-        after,
-      });
-      return changes;
-    }, []);
+    const before = normalizeActivityMetadataValue(previousMedication[field] ?? null);
+    const after = normalizeActivityMetadataValue(nextMedication[field] ?? null);
+    if (before === after) return changes;
+    changes.push({
+      field,
+      label: getMedicationActivityFieldLabel(field),
+      before,
+      after,
+    });
+    return changes;
+  }, []);
 };
 
 const normalizeMedicationList = (value: unknown): Medication[] => {
@@ -413,7 +414,7 @@ function HomePageContent() {
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [shareLink, setShareLink] = useState("");
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
-  const [qrDataUrl, setQrDataUrl] = useState("");
+
 
   useEffect(() => {
     setHasUnreadSummary(false);
@@ -1519,11 +1520,10 @@ function HomePageContent() {
                 onClick={() => setIsSummaryModalOpen(true)}
                 disabled={!profileId}
                 data-tour="home-get-summary"
-                className={`px-10 py-5 text-lg rounded-2xl font-bold shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl ${
-                  profileId
+                className={`px-10 py-5 text-lg rounded-2xl font-bold shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl ${profileId
                     ? "bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer"
                     : "bg-gray-400 cursor-not-allowed text-gray-200"
-                }`}
+                  }`}
               >
                 <span className="inline-flex items-center gap-2">
                   <span>Get Summary</span>
@@ -1539,11 +1539,10 @@ function HomePageContent() {
                 onClick={handleSOS}
                 disabled={isSendingSOS}
                 data-tour="home-sos"
-                className={`px-10 py-5 text-lg rounded-2xl font-bold shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl disabled:hover:scale-100 ${
-                  isSendingSOS
+                className={`px-10 py-5 text-lg rounded-2xl font-bold shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl disabled:hover:scale-100 ${isSendingSOS
                     ? "bg-red-400 cursor-not-allowed"
                     : "bg-red-500 hover:bg-red-600"
-                } text-white ${isSendingSOS ? "" : "animate-sos-pulse"}`}
+                  } text-white ${isSendingSOS ? "" : "animate-sos-pulse"}`}
               >
                 <span className="flex items-center gap-3">
                   <AlertCircle size={22} />
@@ -1554,11 +1553,10 @@ function HomePageContent() {
               <button
                 onClick={openQrModal}
                 disabled={!profileId}
-                className={`px-10 py-5 text-lg rounded-2xl font-bold shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl ${
-                  profileId
+                className={`px-10 py-5 text-lg rounded-2xl font-bold shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl ${profileId
                     ? "bg-blue-500 hover:bg-blue-600 text-white cursor-pointer"
                     : "bg-gray-400 cursor-not-allowed text-gray-200"
-                }`}
+                  }`}
               >
                 <span className="inline-flex items-center gap-2">
                   <span>📱 Share QR</span>
@@ -1666,70 +1664,17 @@ function HomePageContent() {
           onSummaryReady={() => setHasUnreadSummary(true)}
           onSummaryViewed={() => setHasUnreadSummary(false)}
         />
-
+        
         {/* QR MODAL */}
-        {isQrModalOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-            onClick={() => setIsQrModalOpen(false)}
-          >
-            <div
-              className="bg-white rounded-3xl shadow-2xl p-8 flex flex-col items-center gap-6 w-[340px]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="flex w-full items-center justify-between">
-                <h2 className="text-xl font-bold text-slate-800">Share Profile</h2>
-                <button
-                  onClick={() => setIsQrModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-600"
-                >
-                  ✕
-                </button>
-              </div>
+        <QRModal
+          isOpen={isQrModalOpen}
+          onClose={() => setIsQrModalOpen(false)}
+          title="Share Profile"
+          shareLink={shareLink}
+          isGenerating={isGeneratingLink}
+        />
 
-              {/* QR Code */}
-              {isGeneratingLink ? (
-                <div className="w-[200px] h-[200px] flex items-center justify-center border border-slate-200 rounded-xl">
-                  <p className="text-slate-400 text-sm">Generating...</p>
-                </div>
-              ) : (
-                <img
-                  src={qrDataUrl || `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${shareLink}`}
-                  alt="Profile QR Code"
-                  className="rounded-xl border border-slate-200 p-2"
-                  width={200}
-                  height={200}
-                  onError={async (e) => {
-                    const img = e.currentTarget;
-                    img.onerror = null;
-                    const QRCodeLib = await import("qrcode");
-                    const url = await QRCodeLib.toDataURL(shareLink);
-                    setQrDataUrl(url);
-                    img.src = url;
-                  }}
-                />
-              )}
 
-              <p className="text-sm text-slate-500 text-center">
-                {isGeneratingLink
-                  ? "Generating secure link..."
-                  : "Scan this QR code to access the profile"}
-              </p>
-
-              {/* Copy Link Button */}
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(shareLink);
-                  alert("Link copied!");
-                }}
-                className="w-full px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-2xl transition-all"
-              >
-                📋 Copy Link
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* CARDS */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" data-tour="home-quick-cards">
