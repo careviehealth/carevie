@@ -1,10 +1,25 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser } from '@/lib/auth';
 import { authorizeCareCircleMemberAccess } from '@/lib/careCirclePermissions';
 import { getBackendInternalHeaders } from '@/lib/backendInternalAuth';
 
-export async function POST(request: Request) {
+function resolveBackendUrl(req: NextRequest): string {
+  const hostname = req.nextUrl.hostname.toLowerCase();
+  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+
+  if (isLocal) {
+    return 'http://localhost:8000';
+  }
+
+  return (
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    'http://localhost:8000'
+  );
+}
+
+export async function POST(request: NextRequest) {
   try {
     const user = await getAuthenticatedUser(request);
     if (!user) {
@@ -37,7 +52,7 @@ export async function POST(request: Request) {
 
     const { ownerProfileId } = authResult.access;
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+    const backendUrl = resolveBackendUrl(request);
 
     const backendRes = await fetch(`${backendUrl}/api/share/generate`, {
       method: 'POST',
@@ -49,6 +64,8 @@ export async function POST(request: Request) {
     });
 
     if (!backendRes.ok) {
+      const errText = await backendRes.text().catch(() => '');
+      console.error('Backend QR generate failed:', backendRes.status, errText);
       return NextResponse.json({ message: 'Failed to generate QR token.' }, { status: 502 });
     }
 
