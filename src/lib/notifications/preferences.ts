@@ -10,6 +10,7 @@ export const DEFAULT_PREFERENCES: Omit<NotificationPreferencesRow, 'user_id' | '
   timezone: 'UTC',
   channel_web_push: true,
   channel_in_app: true,
+  channel_mobile_push: true,
   category_prefs: {},
   quiet_hours_start: null,
   quiet_hours_end: null,
@@ -54,6 +55,7 @@ export type PreferencesUpdateInput = {
   timezone?: string;
   channel_web_push?: boolean;
   channel_in_app?: boolean;
+  channel_mobile_push?: boolean;
   category_prefs?: Partial<Record<NotificationCategory, boolean>>;
   quiet_hours_start?: string | null;
   quiet_hours_end?: string | null;
@@ -72,6 +74,10 @@ export const upsertPreferences = async (
       typeof input.channel_web_push === 'boolean' ? input.channel_web_push : existing.channel_web_push,
     channel_in_app:
       typeof input.channel_in_app === 'boolean' ? input.channel_in_app : existing.channel_in_app,
+    channel_mobile_push:
+      typeof input.channel_mobile_push === 'boolean'
+        ? input.channel_mobile_push
+        : existing.channel_mobile_push,
     category_prefs: {
       ...existing.category_prefs,
       ...sanitizeCategoryPrefs(input.category_prefs ?? {}),
@@ -102,9 +108,10 @@ export const isCategoryAllowed = (
 
 export const isChannelAllowed = (
   prefs: NotificationPreferencesRow,
-  channel: 'web_push' | 'in_app'
+  channel: 'web_push' | 'in_app' | 'mobile_push'
 ): boolean => {
   if (channel === 'web_push') return prefs.channel_web_push;
+  if (channel === 'mobile_push') return prefs.channel_mobile_push;
   return prefs.channel_in_app;
 };
 

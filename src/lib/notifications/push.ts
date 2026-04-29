@@ -65,7 +65,7 @@ export const getPublicVapidKey = () =>
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? process.env.VAPID_PUBLIC_KEY ?? null;
 
 export type PushSendOutcome =
-  | { kind: 'sent'; statusCode: number }
+  | { kind: 'sent'; statusCode: number; providerResponse?: Record<string, unknown> }
   | { kind: 'invalidated'; statusCode: number; reason: string }
   | { kind: 'failed'; statusCode: number | null; reason: string };
 

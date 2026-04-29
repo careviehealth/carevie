@@ -16,6 +16,7 @@ import { useProfile } from '@/hooks/useProfile';
 import { AuthProvider } from '@/providers/AuthProvider';
 import { OnboardingTourProvider } from '@/providers/OnboardingTourProvider';
 import { ProfileProvider } from '@/providers/ProfileProvider';
+import { PushNotificationsProvider } from '@/providers/PushNotificationsProvider';
 import { AppThemeProvider } from '@/providers/ThemeProvider';
 import { supabase } from '@/lib/supabase';
 
@@ -100,13 +101,15 @@ function RootProviders() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <AppThemeProvider>
-          <ProfileProvider>
-            <SafeAreaProvider>
-              <RootLayoutNav />
-            </SafeAreaProvider>
-          </ProfileProvider>
-        </AppThemeProvider>
+        <PushNotificationsProvider>
+          <AppThemeProvider>
+            <ProfileProvider>
+              <SafeAreaProvider>
+                <RootLayoutNav />
+              </SafeAreaProvider>
+            </ProfileProvider>
+          </AppThemeProvider>
+        </PushNotificationsProvider>
       </AuthProvider>
       <Toast config={toastConfig} />
     </GestureHandlerRootView>

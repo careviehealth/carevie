@@ -10,13 +10,21 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   claimJobs,
   completeJob,
+  enqueueJob,
   failJob,
   markEndpointInvalidated,
   recordDelivery,
 } from './repository';
 import { dispatchNotification } from './dispatch';
 import { sendWebPush } from './push';
-import { isNotificationCategory, type NotificationJobRow, type NotificationRow } from './types';
+import { sendExpoPush, fetchExpoReceipts, isExpoPermanentErrorCode } from './expoPush';
+import type { PushSendOutcome } from './push';
+import {
+  isNotificationCategory,
+  type NotificationEndpointRow,
+  type NotificationJobRow,
+  type NotificationRow,
+} from './types';
 import {
   fetchCareCirclePermissions,
   type CareCirclePermissionKey,
@@ -168,14 +176,22 @@ const runMaterializeReminderJob = async (
   });
 };
 
-const runDeliverPushJob = async (
+// Shared logic for any per-endpoint delivery job (web push, expo push, ...).
+// Loads the notification + endpoint, runs all the gating checks (deleted,
+// disabled, dismissed, snoozed, care-circle perms), then delegates to the
+// transport-specific sender.
+const runDeliveryJob = async (
   adminClient: SupabaseClient,
-  job: NotificationJobRow
+  job: NotificationJobRow,
+  send: (
+    endpoint: NotificationEndpointRow,
+    notification: NotificationRow
+  ) => Promise<PushSendOutcome>
 ): Promise<void> => {
   const notificationId = String((job.payload as Record<string, unknown>).notificationId ?? '');
   const endpointId = String((job.payload as Record<string, unknown>).endpointId ?? '');
   if (!notificationId || !endpointId) {
-    throw new Error('deliver_push: missing notificationId or endpointId');
+    throw new Error(`${job.job_type}: missing notificationId or endpointId`);
   }
 
   const [{ data: notification, error: notifErr }, { data: endpoint, error: epErr }] = await Promise.all([
@@ -247,7 +263,7 @@ const runDeliverPushJob = async (
     return;
   }
 
-  const outcome = await sendWebPush(endpoint, notification as NotificationRow);
+  const outcome = await send(endpoint as NotificationEndpointRow, notification as NotificationRow);
   await recordDelivery(adminClient, {
     notificationId,
     endpointId,
@@ -263,6 +279,7 @@ const runDeliverPushJob = async (
     deliveredAt: outcome.kind === 'sent' ? new Date() : null,
     statusCode: outcome.kind === 'sent' ? outcome.statusCode : outcome.statusCode ?? null,
     error: outcome.kind === 'sent' ? null : outcome.reason,
+    providerResponse: outcome.kind === 'sent' ? outcome.providerResponse ?? null : null,
   });
 
   if (outcome.kind === 'invalidated') {
@@ -271,6 +288,82 @@ const runDeliverPushJob = async (
   }
   if (outcome.kind === 'failed') {
     throw new Error(outcome.reason);
+  }
+
+  // For Expo: schedule a receipts check ~15 min later so we can catch
+  // late-stage failures (e.g. DeviceNotRegistered surfaced only via receipt).
+  if (
+    outcome.kind === 'sent' &&
+    endpoint.channel === 'expo' &&
+    typeof outcome.providerResponse?.expo_ticket_id === 'string'
+  ) {
+    const ticketId = outcome.providerResponse.expo_ticket_id;
+    await enqueueJob(adminClient, {
+      jobType: 'check_expo_receipts',
+      payload: { ticketId, endpointId, notificationId },
+      runAt: new Date(Date.now() + 15 * 60 * 1000),
+      dedupeKey: `expo_receipt:${ticketId}`,
+      sourceType: 'notification',
+      sourceId: notificationId,
+      maxAttempts: 4,
+    });
+  }
+};
+
+const runDeliverPushJob = (adminClient: SupabaseClient, job: NotificationJobRow) =>
+  runDeliveryJob(adminClient, job, sendWebPush);
+
+const runDeliverExpoPushJob = (adminClient: SupabaseClient, job: NotificationJobRow) =>
+  runDeliveryJob(adminClient, job, sendExpoPush);
+
+// Polls EPS for the receipt of a previously-sent ticket. Surfaces late-stage
+// failures that the initial /push/send call couldn't see (APNs/FCM eventually
+// reports DeviceNotRegistered, MessageRateExceeded, etc.). On a permanent
+// error, mark the endpoint invalidated so the queue stops targeting it.
+const runCheckExpoReceiptsJob = async (
+  adminClient: SupabaseClient,
+  job: NotificationJobRow
+): Promise<void> => {
+  const p = job.payload as Record<string, unknown>;
+  const ticketId = typeof p.ticketId === 'string' ? p.ticketId : '';
+  const endpointId = typeof p.endpointId === 'string' ? p.endpointId : '';
+  const notificationId = typeof p.notificationId === 'string' ? p.notificationId : '';
+  if (!ticketId || !endpointId) {
+    throw new Error('check_expo_receipts: missing ticketId or endpointId');
+  }
+
+  const receipts = await fetchExpoReceipts([ticketId]);
+  const receipt = receipts[ticketId];
+
+  // No receipt yet — EPS may not have one for ~15 min after send. Re-queue a
+  // little later (the failJob path does the right backoff if we throw).
+  if (!receipt) {
+    throw new Error(`receipt not yet available for ticket ${ticketId}`);
+  }
+
+  if (receipt.status === 'ok') {
+    // Confirmed delivered. Nothing to do.
+    return;
+  }
+
+  const errCode = receipt.details?.error;
+  const reason = `${errCode ?? 'EPS receipt error'}: ${receipt.message ?? ''}`.trim();
+
+  // Always log the receipt-side failure as a follow-up delivery row so the
+  // audit trail captures it (the original 'sent' row stays as-is).
+  await recordDelivery(adminClient, {
+    notificationId,
+    endpointId,
+    channel: 'expo',
+    status: isExpoPermanentErrorCode(errCode) ? 'invalidated' : 'failed',
+    attempt: job.attempts,
+    attemptedAt: new Date(),
+    error: reason,
+    providerResponse: { expo_ticket_id: ticketId, receipt },
+  });
+
+  if (isExpoPermanentErrorCode(errCode)) {
+    await markEndpointInvalidated(adminClient, endpointId, reason);
   }
 };
 
@@ -302,6 +395,12 @@ export const drainNotificationJobs = async (
           break;
         case 'deliver_push':
           await runDeliverPushJob(adminClient, job);
+          break;
+        case 'deliver_expo_push':
+          await runDeliverExpoPushJob(adminClient, job);
+          break;
+        case 'check_expo_receipts':
+          await runCheckExpoReceiptsJob(adminClient, job);
           break;
         case 'reconcile':
           // Reserved for nightly horizon extension. No-op for now; the cron
