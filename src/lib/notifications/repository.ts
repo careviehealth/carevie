@@ -7,6 +7,7 @@ import {
   isNotificationCategory,
   type CreateNotificationInput,
   type EnqueueJobInput,
+  type ExpoPushSubscriptionPayload,
   type NotificationCategory,
   type NotificationEndpointRow,
   type NotificationJobRow,
@@ -221,6 +222,57 @@ export const upsertWebPushEndpoint = async (
   return data as NotificationEndpointRow;
 };
 
+// Expo Push tokens are unified across iOS + Android. We hash the token itself
+// for the endpoint_hash so re-registering the same device is idempotent and
+// rotating the token (Expo can do this) creates a fresh row.
+export const upsertExpoPushEndpoint = async (
+  adminClient: SupabaseClient,
+  userId: string,
+  subscription: ExpoPushSubscriptionPayload,
+  metadata: { platform?: string | null; userAgent?: string | null }
+): Promise<NotificationEndpointRow> => {
+  if (!subscription?.expoPushToken || !subscription.deviceId) {
+    throw new Error('Invalid expo push subscription');
+  }
+  const endpointHash = hashEndpoint(subscription.expoPushToken);
+  const nowIso = new Date().toISOString();
+  const payload = {
+    user_id: userId,
+    channel: 'expo' as const,
+    endpoint_hash: endpointHash,
+    subscription,
+    user_agent: metadata.userAgent ?? null,
+    platform: metadata.platform ?? null,
+    last_seen_at: nowIso,
+    disabled_at: null,
+    invalidated_at: null,
+  };
+  const { data, error } = await adminClient
+    .from('notification_endpoints')
+    .upsert(payload, { onConflict: 'user_id,channel,endpoint_hash' })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as NotificationEndpointRow;
+};
+
+export const removeExpoPushEndpointByToken = async (
+  adminClient: SupabaseClient,
+  userId: string,
+  expoPushToken: string
+): Promise<number> => {
+  const endpointHash = hashEndpoint(expoPushToken);
+  const { data, error } = await adminClient
+    .from('notification_endpoints')
+    .update({ disabled_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('channel', 'expo')
+    .eq('endpoint_hash', endpointHash)
+    .select('id');
+  if (error) throw error;
+  return data?.length ?? 0;
+};
+
 export const markEndpointInvalidated = async (
   adminClient: SupabaseClient,
   endpointId: string,
@@ -256,7 +308,7 @@ export const removeEndpointBySubscriptionEndpoint = async (
 export const listActiveEndpointsForUser = async (
   adminClient: SupabaseClient,
   userId: string,
-  channel: 'web_push' | 'fcm' | 'apns' = 'web_push'
+  channel: 'web_push' | 'fcm' | 'apns' | 'expo' = 'web_push'
 ): Promise<NotificationEndpointRow[]> => {
   const { data, error } = await adminClient
     .from('notification_endpoints')

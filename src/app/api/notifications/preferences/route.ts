@@ -50,6 +50,7 @@ export async function PUT(request: Request) {
     if (typeof body.timezone === 'string') update.timezone = body.timezone;
     if (typeof body.channel_web_push === 'boolean') update.channel_web_push = body.channel_web_push;
     if (typeof body.channel_in_app === 'boolean') update.channel_in_app = body.channel_in_app;
+    if (typeof body.channel_mobile_push === 'boolean') update.channel_mobile_push = body.channel_mobile_push;
     if (body.category_prefs && typeof body.category_prefs === 'object') {
       update.category_prefs = sanitizeCategoryPrefs(body.category_prefs);
     }

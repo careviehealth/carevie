@@ -19,7 +19,7 @@ export const isNotificationCategory = (value: unknown): value is NotificationCat
   typeof value === 'string' &&
   (NOTIFICATION_CATEGORIES as readonly string[]).includes(value);
 
-export const NOTIFICATION_CHANNELS = ['web_push', 'fcm', 'apns', 'in_app'] as const;
+export const NOTIFICATION_CHANNELS = ['web_push', 'fcm', 'apns', 'expo', 'in_app'] as const;
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 
 export type NotificationStateAction = 'read' | 'unread' | 'dismissed' | 'undismissed' | 'acknowledged' | 'snoozed';
@@ -52,6 +52,7 @@ export type NotificationPreferencesRow = {
   timezone: string;
   channel_web_push: boolean;
   channel_in_app: boolean;
+  channel_mobile_push: boolean;
   category_prefs: Partial<Record<NotificationCategory, boolean>>;
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
@@ -62,9 +63,9 @@ export type NotificationPreferencesRow = {
 export type NotificationEndpointRow = {
   id: string;
   user_id: string;
-  channel: 'web_push' | 'fcm' | 'apns';
+  channel: 'web_push' | 'fcm' | 'apns' | 'expo';
   endpoint_hash: string;
-  subscription: WebPushSubscriptionPayload | Record<string, unknown>;
+  subscription: WebPushSubscriptionPayload | ExpoPushSubscriptionPayload | Record<string, unknown>;
   user_agent: string | null;
   platform: string | null;
   last_seen_at: string;
@@ -78,6 +79,15 @@ export type WebPushSubscriptionPayload = {
   endpoint: string;
   expirationTime?: number | null;
   keys: { p256dh: string; auth: string };
+};
+
+// Expo Push Service token payload. The token alone is sufficient to deliver,
+// but we also persist the deviceId so the user can identify rows in a
+// "registered devices" UI and revoke them per-device.
+export type ExpoPushSubscriptionPayload = {
+  expoPushToken: string;
+  deviceId: string;
+  appVersion?: string | null;
 };
 
 export type CreateNotificationInput = {
@@ -98,7 +108,12 @@ export type CreateNotificationInput = {
 
 export type NotificationJobRow = {
   id: string;
-  job_type: 'materialize_reminder' | 'deliver_push' | 'reconcile';
+  job_type:
+    | 'materialize_reminder'
+    | 'deliver_push'
+    | 'deliver_expo_push'
+    | 'check_expo_receipts'
+    | 'reconcile';
   payload: Record<string, unknown>;
   run_at: string;
   state: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';

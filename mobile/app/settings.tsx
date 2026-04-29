@@ -22,6 +22,7 @@ import { supabase } from '@/lib/supabase';
 import { clearRememberedDevice } from '@/lib/rememberDevice';
 import { toast } from '@/lib/toast';
 import { TourAnchor, useOnboardingTour } from '@/providers/OnboardingTourProvider';
+import { NotificationsSettingsSection } from '@/components/NotificationsSettingsSection';
 
 const ACCOUNT_DELETE_CONFIRMATION = 'DELETE';
 
@@ -243,6 +244,8 @@ export default function SettingsScreen() {
             contentContainerStyle={styles.panelScrollContent}
           >
             <ThemeSelector />
+
+            <NotificationsSettingsSection />
 
             <TourAnchor tourId="settings-replay-tour">
               <Pressable
