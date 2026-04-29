@@ -1,4 +1,4 @@
-import Navbar from "@/components/Navbar";
+import ConditionalNavbar from "@/components/ConditionalNavbar";
 import AppTourController from "@/components/AppTourController";
 import ThemeBootstrap from "@/components/ThemeBootstrap";
 import { Suspense } from "react";
@@ -14,7 +14,7 @@ export default function AppLayout({
       <Suspense fallback={null}>
         <AppTourController />
       </Suspense>
-      <Navbar />
+      <ConditionalNavbar />
       <main className="vytara-theme-content flex-1 min-w-0">
         {children}
       </main>
