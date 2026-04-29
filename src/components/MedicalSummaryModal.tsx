@@ -10,6 +10,7 @@ import {
   modalSurfaceTransition,
 } from '@/components/modalMotion';
 import { toast } from '@/components/AppNotifier';
+import { streamAsyncJob } from '@/lib/asyncJobSse';
 
 interface SummaryResponse {
   success: boolean;
@@ -17,6 +18,8 @@ interface SummaryResponse {
   report_count?: number;
   error?: string;
   cached?: boolean;
+  job_id?: string;
+  status?: string;
 }
 
 interface MedicalSummaryModalProps {
@@ -100,6 +103,8 @@ export function MedicalSummaryModal({
   const healthCheckUrl = `${getPublicBackendBaseUrl()}/api/health`;
   const hasMarkedSummaryViewedRef = useRef(false);
   const isOpenRef = useRef(isOpen);
+  const activeSummaryStreamRef = useRef<EventSource | null>(null);
+  const activeSummaryRequestRef = useRef(0);
 
   isOpenRef.current = isOpen;
 
@@ -131,8 +136,21 @@ export function MedicalSummaryModal({
       setError('');
       setSummary('');
       hasMarkedSummaryViewedRef.current = false;
+      if (activeSummaryStreamRef.current) {
+        activeSummaryStreamRef.current.close();
+        activeSummaryStreamRef.current = null;
+      }
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (activeSummaryStreamRef.current) {
+        activeSummaryStreamRef.current.close();
+        activeSummaryStreamRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isOpen || !summary || isProcessing || isGenerating) {
@@ -202,6 +220,12 @@ export function MedicalSummaryModal({
 
     setIsGenerating(true);
     setError('');
+    activeSummaryRequestRef.current += 1;
+    const requestId = activeSummaryRequestRef.current;
+    if (activeSummaryStreamRef.current) {
+      activeSummaryStreamRef.current.close();
+      activeSummaryStreamRef.current = null;
+    }
     
     try {
       if (process.env.NODE_ENV !== 'production') {
@@ -225,6 +249,60 @@ export function MedicalSummaryModal({
       
       const data: SummaryResponse = await response.json();
       console.log('📦 [Frontend] Summary response data:', data);
+
+      const jobId = typeof data.job_id === 'string' ? data.job_id : '';
+      if (jobId) {
+        const jobResult = await new Promise<{ ok: boolean; errorMessage?: string }>((resolve) => {
+          const source = streamAsyncJob(jobId, {
+            streamPath: '/api/medical/stream',
+            onProgress: () => {
+              if (requestId !== activeSummaryRequestRef.current) return;
+              setIsGenerating(true);
+            },
+            onCompleted: (payload) => {
+              if (requestId !== activeSummaryRequestRef.current) {
+                resolve({ ok: false, errorMessage: 'stale request' });
+                return;
+              }
+              const result = (payload.result && typeof payload.result === 'object')
+                ? payload.result
+                : payload;
+              const nextSummary =
+                typeof result.summary === 'string'
+                  ? result.summary
+                  : typeof result.message === 'string'
+                    ? result.message
+                    : typeof result.reply === 'string'
+                      ? result.reply
+                      : '';
+              const count = typeof result.report_count === 'number' ? result.report_count : 0;
+
+              setSummary(nextSummary);
+              setReportCount(count);
+              setHasProcessed(true);
+              hasMarkedSummaryViewedRef.current = false;
+              if (!isOpenRef.current) {
+                onSummaryReady?.();
+              }
+              resolve({ ok: true });
+            },
+            onFailed: () => {
+              if (requestId !== activeSummaryRequestRef.current) {
+                resolve({ ok: false, errorMessage: 'stale request' });
+                return;
+              }
+              const errorMessage = 'Unable to process request.';
+              setError(errorMessage);
+              resolve({ ok: false, errorMessage });
+            },
+          });
+          activeSummaryStreamRef.current = source;
+        });
+        if (activeSummaryStreamRef.current) {
+          activeSummaryStreamRef.current = null;
+        }
+        return jobResult;
+      }
       
       if (!data.success) {
         throw new Error(toUserFriendlyError(data.error || 'Failed to generate summary'));

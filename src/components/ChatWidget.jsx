@@ -31,6 +31,8 @@ export default function ChatWidget() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const activeStreamRef = useRef(null);
+  const activeRequestIdRef = useRef(0);
 
   const endRef = useRef(null);
   const isEmbeddedLegalModal =
@@ -68,6 +70,14 @@ export default function ChatWidget() {
     }
   }, [hiddenByParentModal, isEmbeddedLegalModal, isEmbeddedInIframe]);
 
+  useEffect(() => {
+    return () => {
+      if (activeStreamRef.current) {
+        activeStreamRef.current.close();
+      }
+    };
+  }, []);
+
   if (hiddenByParentModal || isEmbeddedLegalModal || isEmbeddedInIframe) {
     return null;
   }
@@ -75,10 +85,18 @@ export default function ChatWidget() {
   async function sendMessage() {
     if (!input.trim() || loading) return;
 
-    const userMsg = { role: "user", content: input };
+    const messageText = input.trim();
+    const userMsg = { role: "user", content: messageText };
     setMessages(prev => [...prev, userMsg]);
     setInput("");
     setLoading(true);
+    activeRequestIdRef.current += 1;
+    const requestId = activeRequestIdRef.current;
+
+    if (activeStreamRef.current) {
+      activeStreamRef.current.close();
+      activeStreamRef.current = null;
+    }
 
     // profile_id comes from AppProfileProvider (the selected care profile),
     // not from any user-editable field. Empty string for unauthenticated users
@@ -90,12 +108,69 @@ export default function ChatWidget() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: input,
+          message: messageText,
           profile_id: profileId,
         }),
       });
 
       const data = await res.json();
+      const jobId = typeof data?.job_id === "string" ? data.job_id : "";
+
+      if (jobId) {
+        const source = new EventSource(`/api/chat/stream/${encodeURIComponent(jobId)}`);
+        activeStreamRef.current = source;
+
+        const safeHandle = (handler) => (event) => {
+          if (requestId !== activeRequestIdRef.current) return;
+          let payload = {};
+          try {
+            payload = JSON.parse(event.data || "{}");
+          } catch {
+            payload = {};
+          }
+          handler(payload);
+        };
+
+        source.addEventListener("accepted", safeHandle(() => {
+          setLoading(true);
+        }));
+
+        source.addEventListener("progress", safeHandle(() => {
+          setLoading(true);
+        }));
+
+        source.addEventListener("completed", safeHandle((payload) => {
+          const result = payload?.result && typeof payload.result === "object" ? payload.result : payload;
+          const reply = result?.message || result?.reply;
+          setLoading(false);
+          if (typeof reply === "string" && reply.trim()) {
+            setMessages(prev => [...prev, { role: "bot", content: reply }]);
+          } else {
+            setMessages(prev => [
+              ...prev,
+              { role: "bot", content: "Unable to process request." },
+            ]);
+          }
+          source.close();
+          if (activeStreamRef.current === source) activeStreamRef.current = null;
+        }));
+
+        source.addEventListener("failed", safeHandle(() => {
+          setLoading(false);
+          setMessages(prev => [...prev, { role: "bot", content: "Unable to process request." }]);
+          source.close();
+          if (activeStreamRef.current === source) activeStreamRef.current = null;
+        }));
+
+        source.onerror = () => {
+          if (requestId !== activeRequestIdRef.current) return;
+          setLoading(false);
+          setMessages(prev => [...prev, { role: "bot", content: "Unable to process request." }]);
+          source.close();
+          if (activeStreamRef.current === source) activeStreamRef.current = null;
+        };
+        return;
+      }
 
       // ── Reply resolution ────────────────────────────────────────────────
       // `success: false` from the backend is NOT a system error — it is a
@@ -108,12 +183,14 @@ export default function ChatWidget() {
       const reply = data?.reply;
 
       if (reply && typeof reply === "string" && reply.trim()) {
+        if (requestId !== activeRequestIdRef.current) return;
         setMessages(prev => [...prev, { role: "bot", content: reply }]);
         return;
       }
 
       // No reply field — unexpected failure.
       console.error("[ChatWidget] Response contained no reply:", data);
+      if (requestId !== activeRequestIdRef.current) return;
       setMessages(prev => [
         ...prev,
         {
@@ -123,6 +200,7 @@ export default function ChatWidget() {
       ]);
     } catch (error) {
       console.error("[ChatWidget] Request failed:", error);
+      if (requestId !== activeRequestIdRef.current) return;
       setMessages(prev => [
         ...prev,
         {
@@ -132,7 +210,9 @@ export default function ChatWidget() {
         },
       ]);
     } finally {
-      setLoading(false);
+      if (requestId === activeRequestIdRef.current && !activeStreamRef.current) {
+        setLoading(false);
+      }
     }
   }
 

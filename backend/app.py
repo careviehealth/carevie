@@ -21,14 +21,16 @@ profile_id. Protected intents are gated inside intent_detector.py.
 from dotenv import load_dotenv
 import os
 import re
+import threading
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 import requests
 from intent_detector import detect_intent
 from internal_auth import authorize_internal_request
+from async_jobs.job_store import job_store
 
 app = Flask(__name__)
 
@@ -127,6 +129,38 @@ def require_internal_api_auth():
 # Routes
 # ---------------------------------------------------------------------------
 
+
+def _run_chat_job(job_id: str, message: str, profile_id: str | None) -> None:
+    """
+    Run detect_intent in a background thread and write terminal job state.
+    """
+    job_store.mark_running(job_id)
+    guard_stop = threading.Event()
+
+    def _runtime_guard():
+        while not guard_stop.wait(1.0):
+            if job_store.guard_runtime(job_id):
+                app.logger.warning("[/api/chat] job_id=%s exceeded max runtime.", job_id)
+                return
+
+    threading.Thread(
+        target=_runtime_guard,
+        daemon=True,
+        name=f"chat-guard-{job_id[:8]}",
+    ).start()
+
+    try:
+        result = detect_intent(message=message, profile_id=profile_id)
+        if not isinstance(result, dict):
+            result = {"success": False, "message": "Assistant returned an invalid response format."}
+        job_store.mark_completed(job_id, result)
+    except Exception as exc:
+        app.logger.error("[/api/chat] job_id=%s failed: %s", job_id, exc, exc_info=True)
+        job_store.mark_failed(job_id, "Unable to process request.")
+    finally:
+        guard_stop.set()
+        job_store.cleanup_expired()
+
 @app.route('/api/tunnel-url', methods=['GET'])
 def get_tunnel_url():
     """Returns the ngrok tunnel URL from the ngrok API."""
@@ -189,25 +223,67 @@ def chat():
             # Fall through with profile_id = None — intent_detector will
             # respond with a login prompt for any protected intent.
 
-        result = detect_intent(message=message.strip(), profile_id=profile_id)
+        trimmed_message = message.strip()
+        job = job_store.create_chat_job(message=trimmed_message, profile_id=profile_id)
+        job_id = str(job["job_id"])
+        app.logger.info(
+            "[/api/chat] accepted job_id=%s status=processing profile_id_present=%s",
+            job_id,
+            bool(profile_id),
+        )
 
-        if not isinstance(result, dict):
-            return jsonify({
-                'success': False,
-                'reply': 'Assistant returned an invalid response format.'
-            }), 500
+        threading.Thread(
+            target=_run_chat_job,
+            args=(job_id, trimmed_message, profile_id),
+            daemon=True,
+            name=f"chat-job-{job_id[:8]}",
+        ).start()
 
-        success = bool(result.get('success', False))
-        reply = result.get('message')
-
-        if not isinstance(reply, str) or not reply.strip():
-            reply = 'Unable to process request.'
-
-        return jsonify({'success': success, 'reply': reply}), 200
+        return jsonify({'success': True, 'job_id': job_id, 'status': 'processing'}), 202
 
     except Exception as e:
         app.logger.error("[/api/chat] Unhandled exception: %s", e, exc_info=True)
         return jsonify({'success': False, 'reply': 'Unable to process request.'}), 500
+
+
+@app.route('/api/chat/stream/<job_id>', methods=['GET'])
+def chat_stream(job_id: str):
+    """
+    Stream async chat job updates via SSE.
+    """
+    auth_result = authorize_internal_request()
+    if auth_result is not None:
+        return auth_result
+
+    if not isinstance(job_id, str) or not job_id.strip():
+        return jsonify({'success': False, 'message': 'Invalid job_id.'}), 400
+    app.logger.info("[/api/chat/stream] opening stream job_id=%s", job_id.strip())
+
+    try:
+        from async_jobs.sse import stream_chat_job_events
+    except Exception as exc:
+        app.logger.exception("[/api/chat/stream] SSE plumbing unavailable: %s", exc)
+        return jsonify({'success': False, 'message': 'Unable to process request.'}), 500
+
+    def _safe_stream():
+        try:
+            yield from stream_chat_job_events(job_id.strip())
+        except GeneratorExit:
+            app.logger.info("[/api/chat/stream] client disconnected job_id=%s", job_id)
+            return
+        except Exception as exc:
+            app.logger.exception("[/api/chat/stream] unhandled stream error job_id=%s: %s", job_id, exc)
+            yield 'event: failed\ndata: {"job_id":"%s","error":"Unable to process request."}\n\n' % job_id
+
+    return Response(
+        stream_with_context(_safe_stream()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

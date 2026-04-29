@@ -38,6 +38,7 @@ const chatLimiter = createRateLimiter({ windowMs: 60 * 1000, maxRequests: 20 });
 
 const PRODUCTION_CHATBOT_FALLBACK = 'https://chatbot-9fsv.onrender.com';
 const USE_LOCAL_FLASK = process.env.USE_LOCAL_FLASK === 'true';
+const CHAT_ASYNC_ENQUEUE_TIMEOUT_MS = Number(process.env.CHAT_ASYNC_ENQUEUE_TIMEOUT_MS || 10000);
 
 function getChatBackendUrl(request: NextRequest) {
   const configuredChatbotUrl = process.env.NEXT_PUBLIC_CHATBOT_URL?.trim();
@@ -73,6 +74,13 @@ function sanitizeBackendPayload(status: number, data: unknown): Record<string, u
     success: false,
     reply: 'Assistant is unavailable. Please try again.',
   };
+}
+
+function getJobIdFromPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as Record<string, unknown>;
+  const value = record.job_id;
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 export async function POST(request: NextRequest) {
@@ -139,11 +147,16 @@ export async function POST(request: NextRequest) {
       ...body,
       profile_id: forwardedProfileId,
     };
+    const inboundJobId = getJobIdFromPayload(verifiedPayload);
 
     console.log('[api/chat] Calling Flask at:', flaskApiUrl);
     console.log(
-      '[api/chat] Authenticated user:',
-      isAuthenticated ? (user?.id ?? 'unknown') : 'guest (unauthenticated)'
+      '[api/chat] request_meta',
+      JSON.stringify({
+        job_id: inboundJobId,
+        auth_user_id: isAuthenticated ? (user?.id ?? 'unknown') : null,
+        auth_state: isAuthenticated ? 'authenticated' : 'guest',
+      })
     );
 
     const res = await fetch(`${flaskApiUrl}/api/chat`, {
@@ -153,7 +166,7 @@ export async function POST(request: NextRequest) {
         ...getBackendInternalHeaders(),
       },
       body: JSON.stringify(verifiedPayload),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(CHAT_ASYNC_ENQUEUE_TIMEOUT_MS),
     });
 
     const responseText = await res.text();
@@ -183,7 +196,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[api/chat] Flask response:', JSON.stringify(data));
+    const outboundJobId = getJobIdFromPayload(data) ?? inboundJobId;
+    console.log(
+      '[api/chat] response_meta',
+      JSON.stringify({
+        status: res.status,
+        job_id: outboundJobId,
+      })
+    );
 
     return NextResponse.json(sanitizeBackendPayload(res.status, data), { status: res.status });
   } catch (e) {

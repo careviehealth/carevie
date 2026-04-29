@@ -16,6 +16,7 @@ const FLASK_API_URL =
 const DEFAULT_BACKEND_URLS = process.env.NODE_ENV === 'production' ? [] : ['http://127.0.0.1:8000', 'http://localhost:8000'];
 const BACKEND_ENV_KEYS = ['BACKEND_URL', 'NEXT_PUBLIC_BACKEND_URL'] as const;
 const MEDICAL_REQUEST_TIMEOUT_MS = Number(process.env.MEDICAL_REQUEST_TIMEOUT_MS || 150000);
+const MEDICAL_ASYNC_ENQUEUE_TIMEOUT_MS = Number(process.env.MEDICAL_ASYNC_ENQUEUE_TIMEOUT_MS || 10000);
 const BACKEND_WAKEUP_TIMEOUT_MS = Number(process.env.MEDICAL_WAKEUP_TIMEOUT_MS || 70000);
 const USE_LOCAL_FLASK = process.env.USE_LOCAL_FLASK === 'true';
 
@@ -54,6 +55,13 @@ function createProxyError(message: string, status = 500) {
   const error = new Error(message) as ProxyError;
   error.status = status;
   return error;
+}
+
+function getJobIdFromPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as Record<string, unknown>;
+  const value = record.job_id;
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 function sanitizeBackendResponse(status: number, data: unknown): Record<string, unknown> {
@@ -152,7 +160,8 @@ async function callFlask(
   method: string,
   disallowedHosts: Set<string>,
   preferLocalBackend: boolean,
-  body?: unknown
+  body?: unknown,
+  timeoutMs: number = MEDICAL_REQUEST_TIMEOUT_MS
 ) {
   if (!hasBackendInternalAuth()) {
     throw createProxyError('Backend internal authentication is not configured.', 500);
@@ -164,7 +173,7 @@ async function callFlask(
       'Content-Type': 'application/json',
       ...getBackendInternalHeaders(),
     },
-    signal: AbortSignal.timeout(MEDICAL_REQUEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   };
 
   if (body && method !== 'GET') {
@@ -203,7 +212,7 @@ async function callFlask(
         try {
           const retryOptions: RequestInit = {
             ...options,
-            signal: AbortSignal.timeout(MEDICAL_REQUEST_TIMEOUT_MS),
+            signal: AbortSignal.timeout(timeoutMs),
           };
           const { response, data } = await fetchBackendJson(url, retryOptions);
           console.log(`✅ [Next.js API] Flask response OK after warm-up retry from ${baseUrl}`);
@@ -253,6 +262,7 @@ export async function POST(request: NextRequest) {
 
     const normalizedProfileId =
       typeof profile_id === 'string' ? profile_id.trim() : '';
+    const inboundJobId = getJobIdFromPayload(body);
 
     if (!normalizedProfileId) {
       return NextResponse.json(
@@ -270,7 +280,15 @@ export async function POST(request: NextRequest) {
       console.warn('⚠️ [Next.js API] Ignoring user_id because profile_id is required for profile-scoped medical calls');
     }
 
-    console.log(`📋 [Next.js API] Action: ${action}, Profile: ${normalizedProfileId}`);
+    console.log(
+      '📋 [Next.js API] request_meta',
+      JSON.stringify({
+        route: '/api/medical',
+        action,
+        profile_id: normalizedProfileId,
+        job_id: inboundJobId,
+      })
+    );
 
     if (action === 'process') {
       const result = await callFlask('/api/process-files', 'POST', disallowedHosts, preferLocalBackend, {
@@ -295,7 +313,7 @@ export async function POST(request: NextRequest) {
         use_cache: use_cache !== false,
         force_regenerate: force_regenerate === true,
         max_new_structured_extractions,
-      });
+      }, MEDICAL_ASYNC_ENQUEUE_TIMEOUT_MS);
 
       // Fire `medical_summary_ready` only when generation actually produced
       // content. Dedupe inside the emitter collapses repeat calls with the
@@ -332,6 +350,17 @@ export async function POST(request: NextRequest) {
           }
         }
       }
+
+      const outboundJobId = getJobIdFromPayload(result.data) ?? inboundJobId;
+      console.log(
+        '📋 [Next.js API] response_meta',
+        JSON.stringify({
+          route: '/api/medical',
+          action,
+          status: result.status,
+          job_id: outboundJobId,
+        })
+      );
 
       return NextResponse.json(
         {

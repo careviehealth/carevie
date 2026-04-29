@@ -8,6 +8,7 @@ from flask_cors import CORS
 import traceback
 import tempfile
 import shutil
+import threading
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
@@ -17,6 +18,7 @@ from rag_pipeline.profile_checker import (
     verify_patient_name,
     INVALID_NAME_TOKENS,
 )
+from async_jobs.job_store import job_store
 _token_cache={}
 
 app = Flask(__name__)
@@ -532,8 +534,83 @@ def process_files():
         return internal_error_response("Failed to process medical files")
 
 
+def _response_to_payload(result) -> tuple[int, dict]:
+    response = app.make_response(result)
+    status = int(getattr(response, "status_code", 500) or 500)
+    payload = response.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = {"success": False, "error": "Unable to process request."}
+    return status, payload
+
+
+def _run_summary_job(job_id: str, payload: dict) -> None:
+    job_store.mark_running(job_id)
+    guard_stop = threading.Event()
+
+    def _runtime_guard():
+        while not guard_stop.wait(1.0):
+            if job_store.guard_runtime(job_id):
+                app.logger.warning("[/api/generate-summary] job_id=%s exceeded max runtime.", job_id)
+                return
+
+    threading.Thread(
+        target=_runtime_guard,
+        daemon=True,
+        name=f"summary-guard-{job_id[:8]}",
+    ).start()
+
+    try:
+        with app.app_context():
+            with app.test_request_context(
+                "/api/generate-summary-sync",
+                method="POST",
+                json=payload,
+            ):
+                result = generate_summary_sync()
+                status, data = _response_to_payload(result)
+        if 200 <= status < 300 and isinstance(data, dict):
+            job_store.mark_completed(job_id, data)
+        else:
+            err = data.get("error") if isinstance(data, dict) else None
+            job_store.mark_failed(job_id, err if isinstance(err, str) and err.strip() else "Unable to process request.")
+    except Exception as exc:
+        app.logger.error("[/api/generate-summary] job_id=%s failed: %s", job_id, exc, exc_info=True)
+        job_store.mark_failed(job_id, "Unable to process request.")
+    finally:
+        guard_stop.set()
+        job_store.cleanup_expired()
+
+
 @app.route("/api/generate-summary", methods=["POST"])
-def generate_summary():
+def generate_summary_async():
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "error": "Invalid or missing JSON body."}), 400
+
+    profile_id = resolve_profile_id(data)
+    if not profile_id:
+        return jsonify({"success": False, "error": "profile_id is required"}), 400
+
+    job = job_store.create_job(
+        job_type="summary",
+        profile_id=profile_id,
+        message="generate-summary",
+        metadata={"folder_type": data.get("folder_type", "reports")},
+    )
+    job_id = str(job["job_id"])
+
+    threading.Thread(
+        target=_run_summary_job,
+        args=(job_id, data),
+        daemon=True,
+        name=f"summary-job-{job_id[:8]}",
+    ).start()
+
+    return jsonify({"success": True, "job_id": job_id, "status": "processing"}), 202
+
+
+@app.route("/api/generate-summary-sync", methods=["POST"])
+def generate_summary_sync():
     """Generate summary for matched reports and display warnings for mismatches."""
     print("\n" + "="*80, flush=True)
     log_step("GENERATE SUMMARY (SMART FILTERING)", "start")
@@ -909,6 +986,42 @@ def build_mismatch_warning(mismatched_reports: list, user_display_name: str) -> 
     )
 
     return warning
+
+
+@app.route("/api/summary/stream/<job_id>", methods=["GET"])
+def summary_stream(job_id: str):
+    auth_result = authorize_internal_request()
+    if auth_result is not None:
+        return auth_result
+
+    if not isinstance(job_id, str) or not job_id.strip():
+        return jsonify({"success": False, "message": "Invalid job_id."}), 400
+
+    try:
+        from async_jobs.sse import stream_chat_job_events
+    except Exception as exc:
+        app.logger.exception("[/api/summary/stream] SSE plumbing unavailable: %s", exc)
+        return jsonify({"success": False, "message": "Unable to process request."}), 500
+
+    def _safe_stream():
+        try:
+            yield from stream_chat_job_events(job_id.strip())
+        except GeneratorExit:
+            app.logger.info("[/api/summary/stream] client disconnected job_id=%s", job_id)
+            return
+        except Exception as exc:
+            app.logger.exception("[/api/summary/stream] unhandled stream error job_id=%s: %s", job_id, exc)
+            yield 'event: failed\ndata: {"job_id":"%s","error":"Unable to process request."}\n\n' % job_id
+
+    return Response(
+        stream_with_context(_safe_stream()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.route("/api/health", methods=["GET"])
