@@ -1,7 +1,5 @@
 'use client';
 
-import { useState } from 'react';
-
 interface QRModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -23,8 +21,6 @@ export default function QRModal({
   error,
   readyMessage = 'Scan this QR code to access the profile',
 }: QRModalProps) {
-  const [qrDataUrl, setQrDataUrl] = useState('');
-
   if (!isOpen) return null;
 
   return (
@@ -61,21 +57,15 @@ export default function QRModal({
           <p className="text-rose-600 text-sm text-center">{error}</p>
         ) : (
           <img
-            src={
-              qrDataUrl ||
-              `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareLink)}`
-            }
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareLink)}`}
             alt="QR Code"
             className="rounded-xl border border-slate-200 p-2"
             width={200}
             height={200}
-            onError={async (e) => {
+            onError={(e) => {
               const img = e.currentTarget;
               img.onerror = null;
-              const QRCodeLib = await import('qrcode');
-              const url = await QRCodeLib.toDataURL(shareLink);
-              setQrDataUrl(url);
-              img.src = url;
+              img.src = `https://quickchart.io/qr?size=200&text=${encodeURIComponent(shareLink)}`;
             }}
           />
         )}
