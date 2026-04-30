@@ -9,7 +9,7 @@ import traceback
 import tempfile
 import shutil
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 import secrets
@@ -19,9 +19,31 @@ from rag_pipeline.profile_checker import (
     INVALID_NAME_TOKENS,
 )
 from async_jobs.job_store import job_store
-_token_cache={}
+from redis_cache import (
+    EXPIRED_TOKEN_SENTINEL,
+    TOKEN_TTL_SECONDS,
+    get_active_token_for_profile,
+    get_profile_id_by_token,
+    set_share_token,
+)
+from redis_rate_limit import check_rate_limit
 
 app = Flask(__name__)
+
+RATE_LIMIT_DEFAULTS = {
+    "process-files": (
+        int(os.getenv("RATE_LIMIT_PROCESS_FILES", "10")),
+        int(os.getenv("RATE_LIMIT_PROCESS_FILES_WINDOW", "60")),
+    ),
+    "generate-summary": (
+        int(os.getenv("RATE_LIMIT_GENERATE_SUMMARY", "10")),
+        int(os.getenv("RATE_LIMIT_GENERATE_SUMMARY_WINDOW", "60")),
+    ),
+    "share-generate": (
+        int(os.getenv("RATE_LIMIT_SHARE_GENERATE", "30")),
+        int(os.getenv("RATE_LIMIT_SHARE_GENERATE_WINDOW", "60")),
+    ),
+}
 
 EXEMPT_INTERNAL_AUTH_PATHS = {"/api/health"}
 
@@ -65,6 +87,23 @@ def internal_error_response(message: str, status_code: int = 500):
         "success": False,
         "error": message,
     }), status_code
+
+
+def _apply_rate_limit(limit_key: str, identifier: str):
+    limit, window = RATE_LIMIT_DEFAULTS[limit_key]
+    allowed, retry_after, _ = check_rate_limit(
+        key=limit_key,
+        identifier=identifier,
+        limit=limit,
+        window_seconds=window,
+    )
+    if allowed:
+        return None
+
+    return jsonify({
+        "success": False,
+        "error": "Rate limit exceeded. Try again later.",
+    }), 429, {"Retry-After": str(retry_after)}
 
 
 # Delay OCR/RAG imports until a route actually needs them so Gunicorn can bind fast.
@@ -247,6 +286,9 @@ def process_files():
         profile_id = resolve_profile_id(data)
         if not profile_id:
             return jsonify({"success": False, "error": "profile_id is required"}), 400
+        limit_response = _apply_rate_limit("process-files", profile_id)
+        if limit_response is not None:
+            return limit_response
 
         folder_type = data.get("folder_type", "reports")
         log_step("Config", "info", f"Profile: {profile_id}, Folder: {folder_type}")
@@ -590,6 +632,9 @@ def generate_summary_async():
     profile_id = resolve_profile_id(data)
     if not profile_id:
         return jsonify({"success": False, "error": "profile_id is required"}), 400
+    limit_response = _apply_rate_limit("generate-summary", profile_id)
+    if limit_response is not None:
+        return limit_response
 
     job = job_store.create_job(
         job_type="summary",
@@ -1209,28 +1254,24 @@ def generate_share_link():
 
     if not profile_id:
         return jsonify({"error": "profile_id is required"}), 400
+    limit_response = _apply_rate_limit("share-generate", str(profile_id))
+    if limit_response is not None:
+        return limit_response
 
-    for token, info in list(_token_cache.items()):
-        if info["profile_id"] == profile_id:
-            if datetime.now(timezone.utc) < info["expires_at"]:
-                return jsonify({
-                    "token": token,
-                    "expires_at": info["expires_at"].isoformat()
-                })
-            else:
-                del _token_cache[token]
+    existing = get_active_token_for_profile(str(profile_id))
+    if existing:
+        token, expires_at = existing
+        return jsonify({
+            "token": token,
+            "expires_at": expires_at
+        })
 
     token = secrets.token_urlsafe(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
-
-    _token_cache[token] = {
-        "profile_id": profile_id,
-        "expires_at": expires_at
-    }
+    expires_at = set_share_token(token, str(profile_id), ttl_seconds=TOKEN_TTL_SECONDS)
 
     return jsonify({
         "token": token,
-        "expires_at": expires_at.isoformat()
+        "expires_at": expires_at
     })
 
 
@@ -1260,16 +1301,11 @@ def get_shared_summary(token):
     the entire body before sending.  This is a server-config requirement; no
     code change can work around a sync worker.
     """
-    info = _token_cache.get(token)
-
-    if not info:
+    profile_id = get_profile_id_by_token(token)
+    if not profile_id:
         return jsonify({"error": "Link not found"}), 404
-
-    if datetime.now(timezone.utc) > info["expires_at"]:
-        del _token_cache[token]
+    if profile_id == EXPIRED_TOKEN_SENTINEL:
         return jsonify({"error": "This link has expired"}), 410
-
-    profile_id = info["profile_id"]
     log_step("QR SCAN", "start", f"token=...{token[-8:]} → profile={profile_id}")
 
     from qr_rag_pipeline import stream_qr_profile
