@@ -1,4 +1,5 @@
 'use client';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface QRModalProps {
   isOpen: boolean;
@@ -56,18 +57,9 @@ export default function QRModal({
         ) : error ? (
           <p className="text-rose-600 text-sm text-center">{error}</p>
         ) : (
-          <img
-            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareLink)}`}
-            alt="QR Code"
-            className="rounded-xl border border-slate-200 p-2"
-            width={200}
-            height={200}
-            onError={(e) => {
-              const img = e.currentTarget;
-              img.onerror = null;
-              img.src = `https://quickchart.io/qr?size=200&text=${encodeURIComponent(shareLink)}`;
-            }}
-          />
+          <div className="rounded-xl border border-slate-200 p-2">
+            <QRCodeSVG value={shareLink} size={200} />
+          </div>
         )}
 
         {/* Status message */}

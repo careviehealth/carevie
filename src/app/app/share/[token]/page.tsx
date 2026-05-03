@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useCallback } from 'react';
 
 type SurgeryEntry =
   | string
@@ -165,6 +165,440 @@ export default function EmergencyMedicalCard({
   const [loading, setLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [insuranceLoading, setInsuranceLoading] = useState(false);
+  const [pdfGenerating, setPdfGenerating] = useState(false);
+
+  // ─── FULL PDF Export (Restored Layout & Complete Data) ─────────────────────
+  const generatePDF = useCallback(async () => {
+    if (!data || pdfGenerating) return;
+    setPdfGenerating(true);
+    try {
+      const { jsPDF }              = await import('jspdf');
+      const { default: autoTable } = await import('jspdf-autotable');
+
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      // ── Palette ──
+      const G  = [26, 158, 92]   as [number, number, number];
+      const DK = [15,  46,  30]  as [number, number, number];
+      const GR = [110, 110, 110] as [number, number, number];
+      const LG = [247, 253, 249] as [number, number, number];
+      const WH = [255, 255, 255] as [number, number, number];
+
+      const PW      = 210;
+      const M       = 16;
+      const CW      = PW - M * 2;
+      let   y       = 0;
+
+      // ── Helpers ──
+      const san = (s: string | number | null | undefined): string => {
+        if (s == null || s === "") return '\u2014';
+        return String(s)
+          .replace(/\u20B9/g, 'INR ')
+          .replace(/\u2192/g, '->')
+          .replace(/\u2190/g, '<-')
+          .replace(/\u2191/g, '^')
+          .replace(/\u2193/g, 'v')
+          .replace(/\u00B7/g, '·')
+          .replace(/[^\x00-\x7F\u00C0-\u024F·]/g, ' ')
+          .replace(/  +/g, ' ')
+          .trim();
+      };
+
+      const checkBreak = (need: number) => {
+        if (y + need > 278) {
+          doc.addPage();
+          y = 18;
+        }
+      };
+
+      const sectionHead = (title: string) => {
+        checkBreak(14);
+        doc.setFillColor(...G);
+        doc.roundedRect(M, y, CW, 9, 2, 2, 'F');
+        doc.setTextColor(...WH);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.text(title.toUpperCase(), M + 5, y + 6);
+        y += 13;
+        doc.setTextColor(...DK);
+      };
+
+      const catLabel = (text: string) => {
+        checkBreak(9);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...GR);
+        doc.text(text.toUpperCase(), M, y);
+        y += 5;
+        doc.setTextColor(...DK);
+      };
+
+      const bulletLine = (text: string) => {
+        checkBreak(7);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...DK);
+        const wrapped = doc.splitTextToSize(`\u2022  ${san(text)}`, CW - 4);
+        doc.text(wrapped, M + 3, y);
+        y += wrapped.length * 5.5;
+      };
+
+      const bulletLink = (name: string, url: string) => {
+        checkBreak(8);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...DK);
+        const safeName = san(name);
+        doc.text(`\u2022  ${safeName}`, M + 3, y);
+        if (url) {
+          const nameW = doc.getTextWidth(`\u2022  ${safeName}`) + 4;
+          const openX = M + 3 + nameW;
+          doc.setTextColor(...G);
+          doc.setFont('helvetica', 'bold');
+          doc.textWithLink('[Open]', openX, y, { url });
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(...DK);
+        }
+        y += 6.5;
+      };
+
+      // ── PAGE 1 HEADER ──
+      doc.setFillColor(...G);
+      doc.rect(0, 0, PW, 30, 'F');
+      doc.setTextColor(...WH);
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('EMERGENCY MEDICAL CARD', M, 14);
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Powered by Carevie  |  Authorised access only', M, 20);
+      doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, M, 25);
+      y = 38;
+
+      // ── PROFILE BLOCK (With Improved Blood Group Layout) ──
+      doc.setFillColor(...LG);
+      doc.roundedRect(M, y, CW, 32, 3, 3, 'F');
+
+      doc.setTextColor(...DK);
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text(san(data.profile.name), M + 6, y + 10);
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...GR);
+      const profileLine = [
+        data.profile.age  ? `${data.profile.age} yrs` : '',
+        san(data.profile.gender),
+        san(data.profile.height),
+        san(data.profile.weight),
+      ].filter(Boolean).join('   |   ');
+      doc.text(profileLine, M + 6, y + 18);
+
+      if (data.profile.phone) {
+        doc.text(`Contact: ${san(data.profile.phone)}`, M + 6, y + 25);
+      }
+
+      // Blood group badge
+      if (data.profile.blood) {
+        const badgeW = 32;
+        const badgeX = PW - M - badgeW - 5;
+        doc.setFillColor(253, 232, 232);
+        doc.roundedRect(badgeX, y + 6, badgeW, 20, 2, 2, 'F');
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(192, 57, 43);
+        doc.text("BLOOD GROUP", badgeX + badgeW/2, y + 12, { align: 'center' });
+        doc.setFontSize(14);
+        doc.text(san(data.profile.blood), badgeX + badgeW/2, y + 20, { align: 'center' });
+      }
+      y += 38;
+
+      // ── EMERGENCY CONTACT ──
+      const primary = data.emergency_contact?.[0];
+      if (primary) {
+        checkBreak(25);
+        doc.setFillColor(255, 248, 235);
+        doc.setDrawColor(255, 230, 180);
+        doc.roundedRect(M, y, CW, 20, 2, 2, 'FD');
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(150, 80, 0);
+        doc.text('PRIMARY EMERGENCY CONTACT', M + 5, y + 6);
+        
+        doc.setTextColor(...DK);
+        doc.setFontSize(11);
+        doc.text(`${san(primary.name)} (${san(primary.relation)})`, M + 5, y + 13);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Phone: ${san(primary.phone)}`, PW - M - 60, y + 13);
+        y += 26;
+      }
+
+      // ── CRITICAL INFO (Side-by-Side) ──
+      checkBreak(35);
+      const halfW = (CW - 6) / 2;
+
+      // Allergies
+      doc.setFillColor(255, 242, 230);
+      doc.roundedRect(M, y, halfW, 25, 2, 2, 'F');
+      doc.setTextColor(180, 90, 0);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text('ALLERGIES', M + 5, y + 6);
+      doc.setTextColor(...DK);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      const allergyText = (data.current_medical_status.allergies ?? []).map(san).join(', ') || 'None Reported';
+      doc.text(doc.splitTextToSize(allergyText, halfW - 10), M + 5, y + 13);
+
+      // Conditions
+      doc.setFillColor(253, 235, 235);
+      doc.roundedRect(M + halfW + 6, y, halfW, 25, 2, 2, 'F');
+      doc.setTextColor(180, 40, 40);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text('ACTIVE CONDITIONS', M + halfW + 11, y + 6);
+      doc.setTextColor(...DK);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      const condText = (data.current_medical_status.current_diagnosed_condition ?? []).map(san).join(', ') || 'No Active Conditions';
+      doc.text(doc.splitTextToSize(condText, halfW - 10), M + halfW + 11, y + 13);
+
+      y += 32;
+
+      // ── MEDICAL SUMMARY ──
+      if (data.summary) {
+        sectionHead('Medical Summary');
+        doc.setFontSize(9.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(44, 74, 58);
+        const cleanSummary = san(data.summary);
+        const summaryLines = doc.splitTextToSize(cleanSummary, CW);
+        for (const line of summaryLines) {
+          checkBreak(5.5);
+          doc.text(line, M, y);
+          y += 5.2;
+        }
+        y += 5;
+        doc.setTextColor(...DK);
+      }
+
+      // ── MEDICATIONS & TREATMENTS ──
+      const meds       = data.current_medical_status.medications        ?? [];
+      const treatments = data.current_medical_status.ongoing_treatments ?? [];
+      if (meds.length || treatments.length) {
+        sectionHead('Medications & Treatments');
+        if (treatments.length) {
+          catLabel('Ongoing Treatments');
+          treatments.forEach(t => bulletLine(t));
+          y += 3;
+        }
+        if (meds.length) {
+          catLabel('Medications');
+          checkBreak(30);
+          autoTable(doc, {
+            startY: y,
+            margin: { left: M, right: M },
+            head: [['Medication', 'Dosage', 'Frequency', 'Purpose']],
+            body: meds.map(m => [san(m.name), san(m.dosage), san(m.frequency), san(m.purpose)]),
+            styles:             { fontSize: 9, cellPadding: 3, textColor: DK, minCellHeight: 10 },
+            headStyles:         { fillColor: G, textColor: WH, fontStyle: 'bold', fontSize: 9 },
+            alternateRowStyles: { fillColor: LG },
+            columnStyles: {
+              0: { cellWidth: 42, fontStyle: 'bold' },
+              1: { cellWidth: 22 },
+              2: { cellWidth: 55 },
+            },
+            theme: 'grid',
+          });
+          y = (doc as any).lastAutoTable.finalY + 8;
+        }
+      }
+
+      // ── RESTORED: PAST HISTORY ──
+      const prev  = data.past_medical_history.previous_diagnosed_conditions ?? [];
+      const child = data.past_medical_history.childhood_illness             ?? [];
+      const fam   = data.past_medical_history.family_history                ?? [];
+      const histRows = [
+        ...prev.map(h  => ['Previous Condition', san(formatMedicalEntry(h))]),
+        ...child.map(h => ['Childhood Illness',  san(formatMedicalEntry(h))]),
+        ...fam.map(h   => ['Family History',     san(formatMedicalEntry(h))]),
+      ];
+      if (histRows.length) {
+        sectionHead('Past Medical History');
+        checkBreak(30);
+        autoTable(doc, {
+          startY: y,
+          margin: { left: M, right: M },
+          head: [['Category', 'Detail']],
+          body: histRows,
+          styles:             { fontSize: 9, cellPadding: 3, textColor: DK },
+          headStyles:         { fillColor: G, textColor: WH, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: LG },
+          columnStyles:       { 0: { cellWidth: 45, fontStyle: 'bold' } },
+          theme: 'grid',
+        });
+        y = (doc as any).lastAutoTable.finalY + 8;
+      }
+
+      // ── RESTORED: SURGERIES ──
+      const surg = data.past_medical_history.past_surgeries ?? [];
+      if (surg.length) {
+        sectionHead('Surgeries');
+        checkBreak(30);
+        autoTable(doc, {
+          startY: y,
+          margin: { left: M, right: M },
+          head: [['Surgery Details']],
+          body: surg.map(s => [san(formatMedicalEntry(s))]),
+          styles:             { fontSize: 9, cellPadding: 3, textColor: DK },
+          headStyles:         { fillColor: G, textColor: WH, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: LG },
+          theme: 'grid',
+        });
+        y = (doc as any).lastAutoTable.finalY + 8;
+      }
+
+      // ── RESTORED: MEDICAL TEAM ──
+      const doctors = data.doctors ?? [];
+      if (doctors.length) {
+        sectionHead('Medical Team');
+        checkBreak(30);
+        autoTable(doc, {
+          startY: y,
+          margin: { left: M, right: M },
+          head: [['Doctor', 'Specialty', 'Phone']],
+          body: doctors.map(d => [san(d.name), san(d.specialty), san(d.phone)]),
+          styles:             { fontSize: 9, cellPadding: 3, textColor: DK },
+          headStyles:         { fillColor: G, textColor: WH, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: LG },
+          columnStyles:       { 0: { cellWidth: 55, fontStyle: 'bold' }, 1: { cellWidth: 55 } },
+          theme: 'grid',
+        });
+        y = (doc as any).lastAutoTable.finalY + 8;
+      }
+
+      // ── RESTORED: APPOINTMENTS ──
+      const apts = data.appointments ?? [];
+      if (apts.length) {
+        sectionHead('Upcoming Appointments');
+        checkBreak(30);
+        autoTable(doc, {
+          startY: y,
+          margin: { left: M, right: M },
+          head: [['Doctor', 'Date', 'Time', 'Type']],
+          body: apts.map(a => [san(a.doctor), san(a.date), san(a.time), san(a.type)]),
+          styles:             { fontSize: 9, cellPadding: 3, textColor: DK },
+          headStyles:         { fillColor: G, textColor: WH, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: LG },
+          columnStyles:       { 0: { cellWidth: 55, fontStyle: 'bold' }, 1: { cellWidth: 35 }, 2: { cellWidth: 28 } },
+          theme: 'grid',
+        });
+        y = (doc as any).lastAutoTable.finalY + 8;
+      }
+
+      // ── RESTORED: REPORTS & PRESCRIPTIONS ──
+      const medDocs = data.medical_documents ?? [];
+      const rxDocs  = data.prescriptions     ?? [];
+      if (medDocs.length || rxDocs.length) {
+        sectionHead('Reports & Prescriptions');
+        if (medDocs.length) {
+          catLabel('Medical Documents');
+          medDocs.forEach(d => bulletLink(d.name, d.url));
+          y += 3;
+        }
+        if (rxDocs.length) {
+          catLabel('Prescriptions');
+          rxDocs.forEach(rx => {
+            const name = typeof rx === 'string' ? rx : (rx as any).name || String(rx);
+            const url  = typeof rx === 'string' ? '' : (rx as any).url || '';
+            bulletLink(name, url);
+          });
+          y += 3;
+        }
+        y += 2;
+      }
+
+      // ── RESTORED: INSURANCE ──
+      if (data.insurance) {
+        const ins = data.insurance;
+        const po  = ins.policy_overview;
+        const cd  = ins.coverage_details;
+        const ha  = ins.hospital_access;
+
+        sectionHead('Insurance');
+        checkBreak(30);
+
+        const curr = (n: number) => n != null ? `INR ${n.toLocaleString('en-IN')}` : '\u2014';
+
+        autoTable(doc, {
+          startY: y,
+          margin: { left: M, right: M },
+          head: [['Field', 'Value']],
+          body: [
+            ['Insurer',        san(po.insurer_name)],
+            ['Policy No.',     san(po.policy_number)],
+            ['Plan',           san(po.plan_name)],
+            ['Holder',         san(po.policy_holder_name)],
+            ['Status',         san(po.status)],
+            ['Start Date',     san(po.start_date)],
+            ['End Date',       san(po.end_date)],
+            ['Sum Insured',    curr(cd.total_sum_insured)],
+            ['Remaining',      curr(cd.remaining_coverage)],
+            ['Room Rent',      san(cd.room_rent_limit)],
+            ['ICU Coverage',   san(cd.icu_coverage)],
+            ['Pre/Post Hosp.', san(cd.pre_post_hospitalization)],
+            ['Cashless',       ha.cashless_available ? 'Available' : 'Not Available'],
+            ['TPA',            san(ha.tpa_name)],
+            ['TPA Helpline',   san(ha.tpa_helpline)],
+          ],
+          styles:             { fontSize: 9, cellPadding: 3, textColor: DK },
+          headStyles:         { fillColor: G, textColor: WH, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: LG },
+          columnStyles:       { 0: { cellWidth: 42, fontStyle: 'bold' } },
+          theme: 'grid',
+        });
+        y = (doc as any).lastAutoTable.finalY + 8;
+
+        const insDocs = data.insurance_documents ?? [];
+        if (insDocs.length) {
+          catLabel('Insurance Documents');
+          insDocs.forEach(d => bulletLink(d.name, d.url));
+          y += 3;
+        }
+      }
+
+      // ── PAGE FOOTERS ──
+      const total = doc.getNumberOfPages();
+      for (let pg = 1; pg <= total; pg++) {
+        doc.setPage(pg);
+        doc.setFillColor(245, 248, 246);
+        doc.rect(0, 285, PW, 12, 'F');
+        doc.setDrawColor(220, 235, 225);
+        doc.line(0, 285, PW, 285);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...GR);
+        doc.text(
+          'Medical data is confidential  |  Authorised access only  |  Carevie',
+          M, 291,
+        );
+        doc.text(`Page ${pg} of ${total}`, PW - M - 16, 291);
+      }
+
+      // ── SAVE ──
+      const safeName = san(data.profile.name).replace(/\s+/g, '-').toLowerCase();
+      doc.save(`carevie-medical-card-${safeName}.pdf`);
+
+    } catch (err) {
+      console.error('[PDF]', err);
+      alert('PDF generation failed. Please try again.');
+    } finally {
+      setPdfGenerating(false);
+    }
+  }, [data, pdfGenerating]);
+  // ── end generatePDF ──────────────────────────────────────────────────────────
 
   const handleTabChange = (key: TabKey) => {
     setActiveTab(key);
@@ -609,16 +1043,50 @@ export default function EmergencyMedicalCard({
         .emc-footer-text { font-size: 12px; color: #8BA897; margin: 0; font-weight: 500; }
 
         @media (max-width: 768px) {
-          .emc-root         { padding: 16px 12px; }
-          .emc-header       { flex-direction: row; justify-content: space-between; align-items: center; gap: 12px; border-radius: 20px; padding: 20px; }
+          .emc-root          { padding: 16px 12px; }
+          .emc-header        { flex-direction: row; justify-content: space-between; align-items: center; gap: 12px; border-radius: 20px; padding: 20px; }
           .emc-header-title { font-size: 18px; }
-          .logo-img         { height: 32px; }
-          .emc-cols         { grid-template-columns: 1fr; }
-          .tab-grid         { grid-template-columns: repeat(2, 1fr); padding: 12px; }
-          .ins-grid         { grid-template-columns: 1fr 1fr; }
-          .info-grid        { grid-template-columns: 1fr 1fr; }
-          .tab-content      { padding: 16px; }
+          .logo-img          { height: 32px; }
+          .emc-cols          { grid-template-columns: 1fr; }
+          .tab-grid          { grid-template-columns: repeat(2, 1fr); padding: 12px; }
+          .ins-grid          { grid-template-columns: 1fr 1fr; }
+          .info-grid         { grid-template-columns: 1fr 1fr; }
+          .tab-content       { padding: 16px; }
         }
+
+        .pdf-bar {
+          display: flex; align-items: center; justify-content: space-between;
+          background: #fff; border-radius: 16px; padding: 12px 20px;
+          box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+        }
+        .pdf-bar-msg {
+          display: flex; align-items: center; gap: 8px;
+          font-size: 13px; color: #4A7A60; font-weight: 500;
+        }
+        .pdf-dot-spin {
+          width: 10px; height: 10px; border-radius: 50%;
+          border: 2px solid #C8E6D4; border-top-color: #1A9E5C;
+          animation: spin 0.8s linear infinite; display: inline-block; flex-shrink: 0;
+        }
+        .pdf-check { color: #1A9E5C; flex-shrink: 0; }
+        .pdf-btn {
+          display: inline-flex; align-items: center; gap: 7px;
+          padding: 10px 22px; border-radius: 12px; border: none;
+          font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+          white-space: nowrap;
+        }
+        .pdf-btn-active {
+          background: #1A9E5C; color: #fff;
+          box-shadow: 0 4px 14px rgba(26,158,92,0.3);
+        }
+        .pdf-btn-active:hover { background: #14804A; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(26,158,92,0.35); }
+        .pdf-btn-wait { background: #EBF5EF; color: #6AAF8A; cursor: not-allowed; }
+        .pdf-spin-white {
+          width: 13px; height: 13px; border-radius: 50%;
+          border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff;
+          animation: spin 0.7s linear infinite;
+        }
+
         @media (max-width: 400px) {
           .tab-btn { font-size: 12px; padding: 10px 8px; }
         }
@@ -637,6 +1105,61 @@ export default function EmergencyMedicalCard({
               <p className="emc-header-sub">Quick access for first responders</p>
             </div>
           </div>
+
+
+          {/* ── PDF Export Bar ── */}
+          {(() => {
+            const stillLoading = summaryLoading || insuranceLoading;
+            const btnDisabled  = loading || stillLoading || pdfGenerating;
+
+            const msg = pdfGenerating
+              ? 'Building PDF…'
+              : stillLoading
+                ? summaryLoading && insuranceLoading
+                  ? 'Loading summary and insurance data…'
+                  : summaryLoading
+                    ? 'Loading medical summary…'
+                    : 'Loading insurance data…'
+                : 'All data loaded — ready to export';
+
+            return (
+              <div className="pdf-bar">
+                <span className="pdf-bar-msg">
+                  {btnDisabled
+                    ? <span className="pdf-dot-spin" />
+                    : (
+                      <svg className="pdf-check" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )
+                  }
+                  {msg}
+                </span>
+
+                <button
+                  className={`pdf-btn ${btnDisabled ? 'pdf-btn-wait' : 'pdf-btn-active'}`}
+                  onClick={generatePDF}
+                  disabled={btnDisabled}
+                  title={btnDisabled ? 'Wait for all data to load' : 'Download full medical card as PDF'}
+                >
+                  {pdfGenerating ? (
+                    <><span className="pdf-spin-white" /> Generating…</>
+                  ) : (
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                      Export as PDF
+                    </>
+                  )}
+                </button>
+              </div>
+            );
+          })()}
 
           {/* TWO COLUMNS */}
           <div className="emc-cols">
@@ -788,7 +1311,7 @@ export default function EmergencyMedicalCard({
 
                 <div className="more-divider" />
 
-                {/* Tab content (Key attribute ensures the fade animation replays on switch) */}
+                {/* Tab content */}
                 <div className="tab-content tab-animated" key={activeTab} role="tabpanel">
                   {activeTab === 'summary'      && <SummaryTab      data={data} isLoading={summaryLoading} expanded={expanded} />}
                   {activeTab === 'medications'  && <MedicationsTab  data={data} expanded={expanded} limit={TAB_LIMITS.medications} />}
@@ -802,7 +1325,7 @@ export default function EmergencyMedicalCard({
 
                 <div className="more-divider" />
 
-                {/* Footer — "View full details" / "Show less" button */}
+                {/* Footer */}
                 <div className="more-card-footer">
                   <span className="footer-note">
                     {footerNote}
@@ -835,9 +1358,7 @@ export default function EmergencyMedicalCard({
   );
 }
 
-/* ─────────────────────────────────────────
-   INNER TAB LOADER
-───────────────────────────────────────── */
+/* ── INNER TAB COMPONENTS ── */
 function InnerLoader({ text }: { text: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: 14 }}>
@@ -847,9 +1368,6 @@ function InnerLoader({ text }: { text: string }) {
   );
 }
 
-/* ─────────────────────────────────────────
-   HELPERS
-───────────────────────────────────────── */
 function formatMedicalEntry(entry: MedicalEntry | SurgeryEntry): string {
   if (typeof entry === 'string') return entry;
   if (!entry || typeof entry !== 'object') return String(entry);
@@ -866,10 +1384,6 @@ function formatMedicalEntry(entry: MedicalEntry | SurgeryEntry): string {
   return values.length ? values.join(' · ') : JSON.stringify(obj);
 }
 
-/* ─────────────────────────────────────────
-   TAB PANELS
-───────────────────────────────────────── */
-
 function SummaryTab({ data, isLoading, expanded }: { data: ApiData; isLoading: boolean; expanded: boolean }) {
   if (isLoading) return <InnerLoader text="Generating medical summary…" />;
   
@@ -885,7 +1399,6 @@ function SummaryTab({ data, isLoading, expanded }: { data: ApiData; isLoading: b
 function MedicationsTab({ data, expanded, limit }: { data: ApiData; expanded: boolean; limit: number | null }) {
   const meds = data.current_medical_status.medications ?? [];
   const treatments = data.current_medical_status.ongoing_treatments ?? [];
-
   const visibleMeds = (limit !== null && !expanded) ? meds.slice(0, limit) : meds;
   
   if (!meds.length && !treatments.length)
@@ -917,11 +1430,6 @@ function MedicationsTab({ data, expanded, limit }: { data: ApiData; expanded: bo
               <div style={{ flex: 1 }}>
                 <p className="med-name">{m.name}{m.dosage ? ` — ${m.dosage}` : ''}</p>
                 <p className="med-sub">{m.frequency}{m.purpose ? ` · ${m.purpose}` : ''}</p>
-                {(m.startDate || m.endDate) && (
-                  <p className="med-sub" style={{ marginTop: 4 }}>
-                    {m.startDate && `From ${m.startDate}`}{m.endDate && ` to ${m.endDate}`}
-                  </p>
-                )}
               </div>
               <span className="med-badge">Active</span>
             </div>
@@ -941,18 +1449,14 @@ function HistoryTab({ data, expanded, limit }: { data: ApiData; expanded: boolea
 
   if (!all.length) return <Empty text="No past history recorded" />;
 
-  const prev  = data.past_medical_history.previous_diagnosed_conditions ?? [];
-  const child = data.past_medical_history.childhood_illness ?? [];
-  const fam   = data.past_medical_history.family_history ?? [];
-
   const cap = (limit !== null && !expanded) ? limit : all.length;
   let rem = cap;
 
-  const slicedPrev  = prev.slice(0, rem);
+  const slicedPrev  = (data.past_medical_history.previous_diagnosed_conditions ?? []).slice(0, rem);
   rem = Math.max(0, rem - slicedPrev.length);
-  const slicedChild = child.slice(0, rem);
+  const slicedChild = (data.past_medical_history.childhood_illness ?? []).slice(0, rem);
   rem = Math.max(0, rem - slicedChild.length);
-  const slicedFam   = fam.slice(0, rem);
+  const slicedFam   = (data.past_medical_history.family_history ?? []).slice(0, rem);
 
   return (
     <div>
@@ -1031,9 +1535,6 @@ function ReportsTab({ data, expanded, limit }: { data: ApiData; expanded: boolea
               <div className="doc-name-row">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6AAF8A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="4" width="18" height="18" rx="2" />
-                  <line x1="16" y1="2" x2="16" y2="6" />
-                  <line x1="8"  y1="2" x2="8"  y2="6" />
-                  <line x1="3"  y1="10" x2="21" y2="10" />
                 </svg>
                 <p className="doc-info-name">{rx}</p>
               </div>
@@ -1056,12 +1557,12 @@ function InsuranceTab({ data, isLoading, expanded }: { data: ApiData; isLoading:
     <div>
       <p className="tab-sec-head">Policy Overview</p>
       <div className="ins-grid">
-        <InfoBox label="Insurer"    value={po.insurer_name} />
+        <InfoBox label="Insurer"     value={po.insurer_name} />
         <InfoBox label="Policy No." value={po.policy_number} />
-        <InfoBox label="Plan"       value={po.plan_name} />
-        <InfoBox label="Holder"     value={po.policy_holder_name} />
+        <InfoBox label="Plan"        value={po.plan_name} />
+        <InfoBox label="Holder"      value={po.policy_holder_name} />
         <InfoBox label="Start Date" value={po.start_date} />
-        <InfoBox label="End Date"   value={po.end_date} />
+        <InfoBox label="End Date"    value={po.end_date} />
       </div>
       
       <div className="ins-status-row">
@@ -1077,36 +1578,17 @@ function InsuranceTab({ data, isLoading, expanded }: { data: ApiData; isLoading:
           <div className="ins-grid">
             <InfoBox label="Sum Insured"   value={formatCurrency(cd.total_sum_insured)} />
             <InfoBox label="Remaining"     value={formatCurrency(cd.remaining_coverage)} />
-            <InfoBox label="Used"          value={formatCurrency(cd.coverage_used)} />
+            <InfoBox label="Used"           value={formatCurrency(cd.coverage_used)} />
             <InfoBox label="Room Rent"     value={cd.room_rent_limit} />
             <InfoBox label="ICU Coverage"  value={cd.icu_coverage} />
             <InfoBox label="Pre/Post Hosp" value={cd.pre_post_hospitalization} />
           </div>
-
           <p className="tab-sec-head" style={{ marginTop: 24 }}>Hospital Access</p>
           <div className="ins-grid" style={{ marginBottom: 4 }}>
             <InfoBox label="Cashless" value={ha.cashless_available ? 'Available' : 'Not Available'} />
             <InfoBox label="TPA Name" value={ha.tpa_name} />
             <InfoBox label="Helpline" value={ha.tpa_helpline} />
           </div>
-
-          {(data.insurance_documents?.length ?? 0) > 0 && (
-            <>
-              <p className="tab-sec-head" style={{ marginTop: 24 }}>Insurance Documents</p>
-              {data.insurance_documents.map((doc, i) => (
-                <div key={i} className="doc-row">
-                  <div className="doc-name-row">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6AAF8A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                    </svg>
-                    <p className="doc-info-name">{doc.name}</p>
-                  </div>
-                  <a href={doc.url} target="_blank" rel="noopener noreferrer" className="doc-dl">Download</a>
-                </div>
-              ))}
-            </>
-          )}
         </div>
       )}
     </div>
@@ -1128,13 +1610,6 @@ function DoctorsTab({ data, expanded, limit }: { data: ApiData; expanded: boolea
             <p className="doctor-name">{doc.name}</p>
             {doc.specialty && <p className="doctor-spec">{doc.specialty}</p>}
           </div>
-          {doc.phone && (
-            <a href={`tel:${doc.phone}`} className="small-call-btn" aria-label={`Call Doctor ${doc.name}`}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8 19.79 19.79 0 01.1 2.23 2 2 0 012.09.05h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.18 6.18l1.28-1.28a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
-              </svg>
-            </a>
-          )}
         </div>
       ))}
     </div>
@@ -1151,13 +1626,11 @@ function AppointmentsTab({ data, expanded, limit }: { data: ApiData; expanded: b
     <div>
       {visible.map((apt, i) => {
         const parts = apt.date?.split(' ') ?? [];
-        const day   = parts[0] ?? '';
-        const month = parts.slice(1).join(' ');
         return (
           <div key={i} className="apt-row">
             <div className="apt-date-box">
-              <span className="apt-day">{day}</span>
-              <span className="apt-month">{month}</span>
+              <span className="apt-day">{parts[0] ?? ''}</span>
+              <span className="apt-month">{parts.slice(1).join(' ')}</span>
             </div>
             <div style={{ flex: 1 }}>
               <p className="apt-doctor">{apt.doctor}</p>
@@ -1171,9 +1644,7 @@ function AppointmentsTab({ data, expanded, limit }: { data: ApiData; expanded: b
   );
 }
 
-/* ─────────────────────────────────────────
-   SMALL HELPERS
-───────────────────────────────────────── */
+/* ── SMALL HELPERS ── */
 function ListRow({ text }: { text: string }) {
   return (
     <div className="list-row">
