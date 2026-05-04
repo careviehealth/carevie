@@ -1,4 +1,10 @@
-/* Floating Button */
+/* ─────────────────────────────────────────────────────────────────────────────
+   ChatWidget — themed via CSS custom properties
+   All colours reference --theme-* variables defined in globals.css so the
+   widget automatically reflects whichever theme the user has selected.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Floating Action Button ── */
 .fab {
   position: fixed;
   bottom: 24px;
@@ -6,44 +12,428 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: #042f2e; /* dark teal / console-like */
-  border: 2px solid #ffffff;
+  background: var(--theme-navbar, #042f2e);
+  border: 2px solid rgba(255, 255, 255, 0.85);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
-/* Subtle hover*/
 .fab:hover {
-  background: #0f766e;
-  box-shadow: 0 0 0 4px rgba(94, 234, 212, 0.15);
+  background: var(--theme-primary, #0f766e);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--theme-accent, #5eead4) 30%, transparent);
+  transform: translateY(-2px);
 }
 
-/* Chat Window */
+/* ── Floating Chat Window ── */
 .window {
   position: fixed;
   bottom: 88px;
   right: 24px;
-  width: 380px;
+  width: 400px;
   max-width: calc(100vw - 48px);
-  height: 520px;
+  height: 580px;
   max-height: calc(100vh - 140px);
-  background: #0b1f1a;
-  color: #e5e7eb;
-  border-radius: 12px;
+  background: color-mix(in srgb, var(--theme-navbar, #042f2e) 96%, black 4%);
+  color: #f1f5f9;
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
-  border: 1px solid #134e4a;
+  border: 1px solid color-mix(in srgb, var(--theme-primary, #14b8a6) 40%, transparent);
   z-index: 9999;
   transition:
     opacity 180ms ease-out,
     transform 180ms ease-out;
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
-/* Mobile responsive adjustments */
+/* ── Fullscreen backdrop (dark overlay behind the panel) ── */
+.fsBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: fsBackdropIn 200ms ease-out;
+}
+
+@keyframes fsBackdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Fullscreen panel (the actual chat window) ── */
+.fsPanel {
+  width: 100%;
+  max-width: 860px;
+  height: 100%;
+  max-height: 760px;
+  background: color-mix(in srgb, var(--theme-navbar, #042f2e) 96%, black 4%);
+  color: #f1f5f9;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid color-mix(in srgb, var(--theme-primary, #14b8a6) 45%, transparent);
+  box-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  animation: fsPanelIn 220ms cubic-bezier(0.34, 1.3, 0.64, 1);
+  overflow: hidden;
+}
+
+@keyframes fsPanelIn {
+  from { opacity: 0; transform: scale(0.94) translateY(16px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── Header (shared between floating + fullscreen) ── */
+.header {
+  background: var(--theme-navbar, #042f2e);
+  padding: 14px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-primary, #14b8a6) 35%, transparent);
+  flex-shrink: 0;
+  border-radius: 16px 16px 0 0;
+}
+
+/* Fullscreen panel gets square top corners since it has a border-radius on the panel */
+.fsPanel .header {
+  border-radius: 20px 20px 0 0;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Avatar circle shown only in fullscreen header */
+.headerAvatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--theme-primary, #14b8a6), var(--theme-secondary, #0f766e));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.header span {
+  display: block;
+  font-size: 12px;
+  color: var(--theme-accent, #5eead4);
+  margin-top: 1px;
+}
+
+/* ── Header icon buttons (expand / collapse / close) ── */
+.expandBtn,
+.collapseBtn,
+.closeBtn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.expandBtn:hover,
+.collapseBtn:hover {
+  color: var(--theme-accent, #5eead4);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.closeBtn {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.closeBtn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ── Messages container ── */
+.messages {
+  flex: 1;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--theme-primary, #14b8a6) 40%, transparent) transparent;
+}
+
+/* Slightly more breathing room in fullscreen */
+.fsPanel .messages {
+  padding: 20px 24px;
+  gap: 14px;
+}
+
+/* ── Message bubbles ── */
+.user {
+  align-self: flex-end;
+  background: var(--theme-primary, #0f766e);
+  color: #ffffff;
+  padding: 10px 13px;
+  border-radius: 14px 14px 3px 14px;
+  max-width: 78%;
+  font-size: 14px;
+  line-height: 1.55;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.bot {
+  align-self: flex-start;
+  background: color-mix(in srgb, var(--theme-navbar, #042f2e) 70%, var(--theme-primary, #14b8a6) 30%);
+  color: #e2f8f5;
+  padding: 10px 13px;
+  border-radius: 14px 14px 14px 3px;
+  max-width: 78%;
+  font-size: 14px;
+  line-height: 1.55;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  border: 1px solid color-mix(in srgb, var(--theme-primary, #14b8a6) 20%, transparent);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+/* Wider bubbles in fullscreen — more comfortable to read */
+.fsPanel .user,
+.fsPanel .bot {
+  max-width: 65%;
+  font-size: 15px;
+  padding: 12px 16px;
+}
+
+/* ── Typing indicator ── */
+.typingDots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.typingDots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--theme-accent, #5eead4);
+  animation: typingBounce 1.2s infinite ease-in-out;
+}
+
+.typingDots span:nth-child(2) { animation-delay: 0.2s; }
+.typingDots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.5; }
+  40%           { transform: translateY(-5px); opacity: 1; }
+}
+
+/* ── Quick-action chips ── */
+.quickActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0 4px;
+}
+
+.quickActionsLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--theme-accent, #5eead4);
+  margin: 0 0 2px;
+  opacity: 0.75;
+}
+
+.quickActionBtn {
+  align-self: flex-start;
+  background: color-mix(in srgb, var(--theme-primary, #14b8a6) 15%, transparent);
+  color: var(--theme-accent, #5eead4);
+  border: 1px solid color-mix(in srgb, var(--theme-primary, #14b8a6) 45%, transparent);
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+  text-align: left;
+}
+
+.quickActionBtn:hover {
+  background: color-mix(in srgb, var(--theme-primary, #14b8a6) 35%, transparent);
+  border-color: var(--theme-primary, #14b8a6);
+  transform: translateX(3px);
+}
+
+/* Row layout in fullscreen */
+.fsPanel .quickActions {
+  flex-direction: row;
+  flex-wrap: wrap;
+  padding: 4px 0 8px;
+}
+
+.fsPanel .quickActionsLabel {
+  width: 100%;
+}
+
+/* ── Input area ── */
+.input {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--theme-primary, #14b8a6) 30%, transparent);
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--theme-navbar, #042f2e) 80%, black 20%);
+  border-radius: 0 0 16px 16px;
+}
+
+.fsPanel .input {
+  padding: 16px 20px;
+  gap: 12px;
+  border-radius: 0 0 20px 20px;
+}
+
+.input textarea {
+  flex: 1;
+  background: color-mix(in srgb, var(--theme-navbar, #042f2e) 60%, var(--theme-primary, #14b8a6) 10%);
+  border: 1px solid color-mix(in srgb, var(--theme-primary, #14b8a6) 35%, transparent);
+  color: #f1f5f9;
+  border-radius: 10px;
+  padding: 9px 12px;
+  resize: none;
+  font-size: 14px;
+  min-height: 40px;
+  max-height: 80px;
+  font-family: inherit;
+  line-height: 1.45;
+  transition: border-color 0.15s ease;
+}
+
+.fsPanel .input textarea {
+  font-size: 15px;
+  padding: 11px 14px;
+  min-height: 46px;
+  border-radius: 12px;
+}
+
+.input textarea:focus {
+  outline: none;
+  border-color: var(--theme-primary, #14b8a6);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-primary, #14b8a6) 20%, transparent);
+}
+
+.input textarea::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.input button {
+  background: var(--theme-button-primary, #14b8a6);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 0 16px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.18s ease, transform 0.12s ease;
+  min-width: 58px;
+}
+
+.fsPanel .input button {
+  min-width: 70px;
+  font-size: 15px;
+  border-radius: 12px;
+}
+
+.input button:hover {
+  background: var(--theme-secondary, #109485);
+  transform: translateY(-1px);
+}
+
+.input button:active {
+  transform: translateY(0);
+}
+
+/* ── Chat icon (floating button icon) ── */
+.chatIcon {
+  width: 22px;
+  height: 16px;
+  border: 2.5px solid #ffffff;
+  border-radius: 4px;
+  position: relative;
+}
+
+.chatIcon::after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  left: 6px;
+  width: 8px;
+  height: 8px;
+  background: var(--theme-navbar, #042f2e);
+  border-left: 2.5px solid #ffffff;
+  border-bottom: 2.5px solid #ffffff;
+  transform: rotate(45deg);
+}
+
+/* ── Floating window visibility states ── */
+.closed {
+  opacity: 0;
+  transform: translateY(20px) scale(0.97);
+  pointer-events: none;
+}
+
+.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* ── Responsive ── */
 @media (max-width: 640px) {
   .fab {
     bottom: 20px;
@@ -58,165 +448,43 @@
     left: 12px;
     width: auto;
     max-width: none;
-    height: 480px;
+    height: 500px;
     max-height: calc(100vh - 120px);
+  }
+
+  .fsBackdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .fsPanel {
+    max-width: 100%;
+    max-height: 92dvh;
+    border-radius: 20px 20px 0 0;
+    animation: fsPanelInMobile 220ms cubic-bezier(0.34, 1.1, 0.64, 1);
+  }
+
+  @keyframes fsPanelInMobile {
+    from { opacity: 0; transform: translateY(40px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 }
 
-/* Very small screens */
 @media (max-width: 380px) {
   .window {
-    height: 420px;
+    height: 440px;
     max-height: calc(100vh - 100px);
   }
 }
 
-/* Header */
-.header {
-  background: #042f2e;
-  padding: 14px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #134e4a;
-  flex-shrink: 0;
-}
-
-.header strong {
-  display: block;
-  font-size: 15px;
-}
-
-.header span {
-  display: block;
-  font-size: 12px;
-  color: #5eead4;
-}
-
-.header button {
-  background: none;
-  border: none;
-  color: #94a3b8;
-  cursor: pointer;
-  font-size: 18px;
-  padding: 4px 8px;
-  margin: -4px -8px;
-  line-height: 1;
-}
-
-/* Messages */
-.messages {
-  flex: 1;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  min-height: 0;
-}
-
-/* Message bubbles */
-.user {
-  align-self: flex-end;
-  background: #0f766e;
-  color: white;
-  padding: 10px 12px;
-  border-radius: 10px 10px 2px 10px;
-  max-width: 75%;
-  font-size: 14px;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-}
-
-.bot {
-  align-self: flex-start;
-  background: #022c22;
-  color: #d1fae5;
-  padding: 10px 12px;
-  border-radius: 10px 10px 10px 2px;
-  max-width: 75%;
-  font-size: 14px;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-}
-
-/* Input */
-.input {
-  display: flex;
-  gap: 8px;
-  padding: 12px;
-  border-top: 1px solid #134e4a;
-  flex-shrink: 0;
-}
-
-.input textarea {
-  flex: 1;
-  background: #042f2e;
-  border: 1px solid #134e4a;
-  color: #e5e7eb;
-  border-radius: 8px;
-  padding: 8px;
-  resize: none;
-  font-size: 14px;
-  min-height: 40px;
-  max-height: 80px;
-}
-
-.input textarea::placeholder {
-  color: #94a3b8;
-}
-
-.input button {
-  background: #14b8a6;
-  color: #042f2e;
-  border: none;
-  border-radius: 8px;
-  padding: 0 14px;
-  font-weight: 600;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-/* Minimal AWS-style chat icon */
-.chatIcon {
-  width: 22px;
-  height: 16px;
-  border: 2px solid #ffffff;
-  border-radius: 4px;
-  position: relative;
-}
-
-/* Chat tail */
-.chatIcon::after {
-  content: "";
-  position: absolute;
-  bottom: -6px;
-  left: 6px;
-  width: 8px;
-  height: 8px;
-  background: #042f2e;
-  border-left: 2px solid #ffffff;
-  border-bottom: 2px solid #ffffff;
-  transform: rotate(45deg);
-}
-
-/* Initial hidden state */
-.closed {
-  opacity: 0;
-  transform: translateY(20px) scale(0.97);
-  pointer-events: none;
-}
-
-/* Visible state */
-.open {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .window {
+  .window,
+  .fab,
+  .fsBackdrop,
+  .fsPanel,
+  .quickActionBtn,
+  .typingDots span {
     transition: none;
+    animation: none;
   }
 }
