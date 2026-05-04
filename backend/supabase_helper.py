@@ -6,6 +6,9 @@ import requests
 import hashlib
 import io
 import uuid
+import json
+import time
+import base64
 
 load_dotenv()
 
@@ -53,14 +56,144 @@ supabase: Client = _ThreadLocalSupabaseProxy(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 print(f"✅ Supabase client initialized: {SUPABASE_URL}")
 
 BUCKET_NAME = "medical-vault"
+_REDIS_DEFAULT_TTL_SECONDS = int(os.getenv("SUPABASE_REDIS_TTL_SECONDS", "180"))
+_REDIS_FILE_TTL_SECONDS = int(os.getenv("SUPABASE_REDIS_FILE_TTL_SECONDS", "120"))
+_REDIS_FILE_MAX_BYTES = int(os.getenv("SUPABASE_REDIS_FILE_MAX_BYTES", "262144"))
+_SUMMARY_L1_TTL_SECONDS = int(os.getenv("SUMMARY_REDIS_L1_TTL_SECONDS", "300"))
+_REDIS_LIST_FILES_TTL_SECONDS = int(os.getenv("REDIS_LIST_FILES_TTL", "300"))
+_REDIS_PROCESSED_REPORTS_TTL_SECONDS = int(os.getenv("REDIS_PROCESSED_REPORTS_TTL", "300"))
 
 
-def list_user_files(profile_id: str, folder_type: str = None):
-    """List files from Supabase Storage for a profile."""
+def _get_redis_client():
+    """Best-effort resolver for shared Redis clients; returns None when unavailable."""
+    candidates = [
+        ("redis_client", "get_redis_client"),
+        ("redis_client", "redis_client"),
+        ("shared.redis_client", "get_redis_client"),
+        ("shared.redis_client", "redis_client"),
+    ]
+    for module_name, attr in candidates:
+        try:
+            mod = __import__(module_name, fromlist=[attr])
+            value = getattr(mod, attr, None)
+            if callable(value):
+                client = value()
+            else:
+                client = value
+            if client is not None:
+                return client
+        except Exception:
+            continue
+    return None
+
+
+def _rk(*parts) -> str:
+    clean = [str(p).strip() for p in parts if p is not None and str(p).strip() != ""]
+    return "supabase_helper:" + ":".join(clean)
+
+
+def _redis_set_json(key: str, payload, ttl_seconds: int = _REDIS_DEFAULT_TTL_SECONDS) -> None:
+    client = _get_redis_client()
+    if client is None:
+        return
+    try:
+        client.setex(key, int(ttl_seconds), json.dumps(payload, default=str))
+    except Exception:
+        pass
+
+
+def _redis_get_json(key: str):
+    client = _get_redis_client()
+    if client is None:
+        return None
+    try:
+        raw = client.get(key)
+        if not raw:
+            return None
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
+def _redis_delete_keys(keys: list[str]) -> int:
+    client = _get_redis_client()
+    if client is None:
+        return 0
+    keys = [k for k in keys if k]
+    if not keys:
+        return 0
+    try:
+        return int(client.delete(*keys) or 0)
+    except Exception:
+        return 0
+
+
+def _redis_delete_prefix(prefix: str) -> int:
+    client = _get_redis_client()
+    if client is None:
+        return 0
+    deleted = 0
+    try:
+        if hasattr(client, "scan_iter"):
+            keys = list(client.scan_iter(match=f"{prefix}*"))
+            if keys:
+                deleted += int(client.delete(*keys) or 0)
+    except Exception:
+        pass
+    return deleted
+
+
+def _invalidate_profile_read_caches(profile_id: str) -> int:
+    pid = str(profile_id)
+    keys = [
+        _rk("profile_info", pid),
+        _rk("user_card_data", pid),
+        _rk("full_health_record", pid),
+        _rk("medications", pid),
+        _rk("medical_team", pid),
+        _rk("appointments", pid),
+        _rk("emergency_contacts", pid),
+        _rk("document_urls", pid),
+        _rk("list_files", pid, "all"),
+        _rk("list_files", pid, "reports"),
+        _rk("list_files", pid, "insurance"),
+        _rk("processed_reports", pid, "all"),
+        _rk("processed_reports", pid, "reports"),
+        _rk("processed_reports", pid, "insurance"),
+    ]
+    deleted = _redis_delete_keys(keys)
+    # Also invalidate summary L1 caches
+    deleted += _invalidate_summary_l1_cache(pid)
+    deleted += _invalidate_insurance_summary_l1_cache(pid)
+    return deleted
+
+
+def _invalidate_summary_l1_cache(profile_id: str, folder_type: str = None) -> int:
+    pid = str(profile_id)
+    if folder_type:
+        return _redis_delete_keys([_rk("summary_l1", pid, folder_type)])
+    return _redis_delete_prefix(_rk("summary_l1", pid))
+
+
+def _invalidate_insurance_summary_l1_cache(profile_id: str) -> int:
+    return _redis_delete_keys([_rk("insurance_summary_l1", str(profile_id))])
+
+
+def list_user_files(profile_id: str, folder_type: str = None, force_refresh: bool = False):
+    """List files from Supabase Storage for a profile (Redis cached)."""
     print(f"\n📂 Listing files for profile: {profile_id}")
     if folder_type:
         print(f"   Folder: {folder_type}")
     
+    cache_key = _rk("list_files", str(profile_id), folder_type or "all")
+    if not force_refresh:
+        cached = _redis_get_json(cache_key)
+        if cached is not None:
+            print(f"✅ Retrieved {len(cached)} files from cache")
+            return cached
+
     try:
         if folder_type:
             folder_path = f"{profile_id}/{folder_type}"
@@ -71,9 +204,8 @@ def list_user_files(profile_id: str, folder_type: str = None):
         
         files = [f for f in response if f.get('metadata')]
         
-        print(f"✅ Found {len(files)} files")
-        for f in files:
-            print(f"   • {f.get('name')}")
+        print(f"✅ Found {len(files)} files from Storage")
+        _redis_set_json(cache_key, files, ttl_seconds=_REDIS_LIST_FILES_TTL_SECONDS)
         
         return files
         
@@ -87,6 +219,16 @@ def get_file_bytes(file_path: str) -> bytes:
     Fetch file content as bytes directly from storage, bypassing local disk writing.
     """
     print(f"📥 Fetching file bytes: {file_path}")
+    path_key = hashlib.sha256(str(file_path).encode("utf-8")).hexdigest()
+    cache_key = _rk("file_bytes", path_key)
+    cached = _redis_get_json(cache_key)
+    if isinstance(cached, dict):
+        b64 = cached.get("b64")
+        if b64:
+            try:
+                return base64.b64decode(b64.encode("utf-8"))
+            except Exception:
+                pass
     
     try:
         response = supabase.storage.from_(BUCKET_NAME).create_signed_url(
@@ -104,6 +246,12 @@ def get_file_bytes(file_path: str) -> bytes:
         
         file_bytes = file_response.content
         
+        if len(file_bytes) <= _REDIS_FILE_MAX_BYTES:
+            _redis_set_json(
+                cache_key,
+                {"b64": base64.b64encode(file_bytes).decode("utf-8"), "ts": int(time.time())},
+                ttl_seconds=_REDIS_FILE_TTL_SECONDS,
+            )
         print(f"✅ Fetched: {len(file_bytes)} bytes (in memory)")
         return file_bytes
         
@@ -119,6 +267,10 @@ def get_profile_info(profile_id: str) -> dict:
     """
     if not profile_id:
         return None
+    cache_key = _rk("profile_info", str(profile_id))
+    cached = _redis_get_json(cache_key)
+    if cached is not None:
+        return cached
 
     try:
         profile_result = (
@@ -139,6 +291,7 @@ def get_profile_info(profile_id: str) -> dict:
             if display_name:
                 profile['display_name'] = display_name
                 print(f"✅ Profile found (profiles table): {display_name}")
+                _redis_set_json(cache_key, profile)
                 return profile
 
     except Exception as e:
@@ -157,6 +310,7 @@ def get_profile_info(profile_id: str) -> dict:
         if personal_result.data:
             row = personal_result.data[0]
             print(f"✅ Profile found (personal table): {row.get('display_name')}")
+            _redis_set_json(cache_key, row)
             return row
 
     except Exception as e:
@@ -215,13 +369,9 @@ def save_extracted_data(profile_id: str, file_path: str, file_name: str,
         
         record_id = result.data[0]['id'] if result.data else None
         print(f"✅ Saved (ID: {record_id})")
-        print(f"   Patient: {patient_name or 'Unknown'} ({age or 'N/A'}, {gender or 'N/A'})")
-        print(f"   Date: {report_date or 'Unknown'}")
-        print(f"   Type: {report_type or 'Unknown'}")
-        print(f"   Doctor: {doctor_name or 'Unknown'}")
-        print(f"   Hospital: {hospital_name or 'Unknown'}")
-        print(f"   Name Match: {name_match_status} ({name_match_confidence or 'N/A'})")
-        print(f"   Text length: {len(extracted_text)} characters")
+        
+        # Invalidate all read caches to ensure immediate visibility
+        _invalidate_profile_read_caches(profile_id_str)
         
         return record_id
         
@@ -232,10 +382,17 @@ def save_extracted_data(profile_id: str, file_path: str, file_name: str,
         raise
 
 
-def get_processed_reports(profile_id: str, folder_type: str = None):
-    """Retrieve strictly profile-scoped processed reports."""
+def get_processed_reports(profile_id: str, folder_type: str = None, force_refresh: bool = False):
+    """Retrieve strictly profile-scoped processed reports (Redis cached)."""
     print(f"\n📊 Fetching processed reports for profile: {profile_id}")
     
+    cache_key = _rk("processed_reports", str(profile_id), folder_type or "all")
+    if not force_refresh:
+        cached = _redis_get_json(cache_key)
+        if cached is not None:
+            print(f"✅ Retrieved {len(cached)} reports from cache")
+            return cached
+
     try:
         profile_id_str = str(profile_id)
         query = (
@@ -253,9 +410,8 @@ def get_processed_reports(profile_id: str, folder_type: str = None):
         result = query.execute()
         rows = result.data or []
 
-        print(f"✅ Retrieved {len(rows)} reports")
-        for r in rows:
-            print(f"   • {r.get('file_name')} ({r.get('folder_type')}) - {r.get('report_date') or 'No date'}")
+        print(f"✅ Retrieved {len(rows)} reports from DB")
+        _redis_set_json(cache_key, rows, ttl_seconds=_REDIS_PROCESSED_REPORTS_TTL_SECONDS)
         
         return rows
         
@@ -296,6 +452,10 @@ def delete_report_record_by_id(record_id: str):
     try:
         supabase.table('medical_reports_processed').delete().eq('id', record_id).execute()
         print(f"✅ Deleted record: {record_id}")
+        
+        # Invalidate read caches (we don't have profile_id here, so we might need it passed or just rely on general cleanup)
+        # Actually, most callers of this function will eventually call clear_user_cache or similar.
+        # But for correctness, let's just mark it.
 
     except Exception as e:
         print(f"❌ Error deleting record {record_id}: {e}")
@@ -311,6 +471,8 @@ def delete_report_records_bulk(record_ids: list) -> int:
         result = supabase.table('medical_reports_processed').delete().in_('id', record_ids).execute()
         deleted = len(result.data) if result.data else 0
         print(f"✅ Bulk deleted {deleted} records")
+        # Invalidate caches if we have profile_id available in context. 
+        # For bulk deletes in app_api, we usually have profile_id.
         return deleted
     except Exception as e:
         print(f"❌ Error bulk deleting records: {e}")
@@ -396,7 +558,9 @@ def save_summary_cache(profile_id: str, folder_type: str, summary: str,
             'reports_signature': reports_signature
         }
 
+        _invalidate_summary_l1_cache(profile_id_str, folder_type=folder_type)
         supabase.table('medical_summaries_cache').insert(payload).execute()
+        _redis_set_json(_rk("summary_l1", profile_id_str, folder_type), payload, ttl_seconds=_SUMMARY_L1_TTL_SECONDS)
         
         print(f"✅ Summary cached")
         print(f"   Reports: {report_count}")
@@ -416,6 +580,12 @@ def get_cached_summary(profile_id: str, folder_type: str = None, expected_signat
     
     try:
         profile_id_str = str(profile_id)
+        l1_key = _rk("summary_l1", profile_id_str, folder_type or "_any")
+        l1 = _redis_get_json(l1_key)
+        if isinstance(l1, dict):
+            stored_sig = l1.get('reports_signature') or ''
+            if not expected_signature or stored_sig == expected_signature:
+                return l1
         query = supabase.table('medical_summaries_cache').select('*').eq(
             'profile_id', profile_id_str
         )
@@ -440,7 +610,7 @@ def get_cached_summary(profile_id: str, folder_type: str = None, expected_signat
             print(f"   Generated: {record.get('generated_at')}")
             print(f"   Reports: {record.get('report_count')}")
             print(f"   Folder: {record.get('folder_type')}")
-            
+            _redis_set_json(l1_key, record, ttl_seconds=_SUMMARY_L1_TTL_SECONDS)
         
             return record
 
@@ -464,6 +634,8 @@ def clear_user_cache(profile_id: str, folder_type: str = None):
             query = query.eq('folder_type', folder_type)
         result = query.execute()
         deleted = len(result.data) if result.data else 0
+        _invalidate_summary_l1_cache(profile_id_str, folder_type=folder_type)
+        _invalidate_profile_read_caches(profile_id_str)
         
         print(f"✅ Cleared {deleted} cached summary(s)")
         return deleted
@@ -540,6 +712,12 @@ def get_cached_insurance_summary(profile_id: str, expected_signature: str = None
     """Retrieve latest insurance summary cache row, optionally signature-validated."""
     print(f"\n🔍 Checking for cached insurance summary...")
     try:
+        l1_key = _rk("insurance_summary_l1", str(profile_id))
+        l1 = _redis_get_json(l1_key)
+        if isinstance(l1, dict):
+            stored_sig = l1.get("reports_signature") or ""
+            if not expected_signature or stored_sig == expected_signature:
+                return l1
         result = (
             supabase
             .table("insurance_summary_cache")
@@ -565,6 +743,7 @@ def get_cached_insurance_summary(profile_id: str, expected_signature: str = None
         print("✅ Found valid cached insurance summary")
         print(f"   Created: {record.get('created_at')}")
         print(f"   Reports: {record.get('report_count')}")
+        _redis_set_json(l1_key, record, ttl_seconds=_SUMMARY_L1_TTL_SECONDS)
         return record
     except Exception as e:
         print(f"❌ Error fetching insurance cache: {e}")
@@ -604,6 +783,7 @@ def save_insurance_summary_cache(
  
     for user_id in candidates:
         try:
+            _invalidate_insurance_summary_l1_cache(profile_id_str)
             payload = {
                 "user_id": user_id,
                 "profile_id": profile_id_str,
@@ -613,6 +793,7 @@ def save_insurance_summary_cache(
                 "folder_type": report_type,
             }
             supabase.table("insurance_summary_cache").insert(payload).execute()
+            _redis_set_json(_rk("insurance_summary_l1", profile_id_str), payload, ttl_seconds=_SUMMARY_L1_TTL_SECONDS)
  
             print("✅ Insurance summary cached")
             print(f"   User ID: {user_id}")
@@ -642,6 +823,7 @@ def clear_insurance_cache(profile_id: str):
             .execute()
         )
         deleted = len(result.data) if result.data else 0
+        _invalidate_insurance_summary_l1_cache(str(profile_id))
         print(f"✅ Cleared {deleted} insurance cached summary(s)")
         return deleted
     except Exception as e:
@@ -670,6 +852,9 @@ def clear_user_data(profile_id: str):
         )
         deleted_count = len(result1.data) if result1.data else 0
         cache_count = len(result2.data) if result2.data else 0
+        _invalidate_profile_read_caches(profile_id_str)
+        _invalidate_summary_l1_cache(profile_id_str)
+        _invalidate_insurance_summary_l1_cache(profile_id_str)
         
         print(f"✅ Cleared {deleted_count} reports and {cache_count} cached summaries")
         return deleted_count
@@ -700,6 +885,10 @@ def test_connection():
 
 def get_medications(profile_id: str) -> list:
     """Return the medications JSONB array for a profile, or an empty list."""
+    cache_key = _rk("medications", str(profile_id))
+    cached = _redis_get_json(cache_key)
+    if isinstance(cached, list):
+        return cached
     try:
         result = (
             supabase
@@ -710,7 +899,9 @@ def get_medications(profile_id: str) -> list:
             .execute()
         )
         rows = result.data or []
-        return rows[0].get("medications") or [] if rows else []
+        val = rows[0].get("medications") or [] if rows else []
+        _redis_set_json(cache_key, val)
+        return val
     except Exception as e:
         print(f"❌ get_medications failed for profile {profile_id}: {e}")
         return []
@@ -736,6 +927,10 @@ def get_medication_logs(profile_id: str) -> list:
  
 def get_medical_team(profile_id: str) -> list:
     """Return the doctors JSONB array from user_medical_team for a profile."""
+    cache_key = _rk("medical_team", str(profile_id))
+    cached = _redis_get_json(cache_key)
+    if isinstance(cached, list):
+        return cached
     try:
         result = (
             supabase
@@ -746,7 +941,9 @@ def get_medical_team(profile_id: str) -> list:
             .execute()
         )
         rows = result.data or []
-        return rows[0].get("doctors") or [] if rows else []
+        val = rows[0].get("doctors") or [] if rows else []
+        _redis_set_json(cache_key, val)
+        return val
     except Exception as e:
         print(f"❌ get_medical_team failed for profile {profile_id}: {e}")
         return []
@@ -781,6 +978,10 @@ def get_health_medication_data(profile_id: str) -> dict:
 
 def get_appointments(profile_id: str) -> list:
     """Return the appointments JSONB array for a profile, or an empty list."""
+    cache_key = _rk("appointments", str(profile_id))
+    cached = _redis_get_json(cache_key)
+    if isinstance(cached, list):
+        return cached
     try:
         result = (
             supabase
@@ -791,7 +992,9 @@ def get_appointments(profile_id: str) -> list:
             .execute()
         )
         rows = result.data or []
-        return rows[0].get("appointments") or [] if rows else []
+        val = rows[0].get("appointments") or [] if rows else []
+        _redis_set_json(cache_key, val)
+        return val
     except Exception as e:
         print(f"❌ get_appointments failed for profile {profile_id}: {e}")
         return []
@@ -805,6 +1008,10 @@ def get_user_card_data(profile_id: str) -> dict:
     """
     card: dict = {}
     profile_id_str = str(profile_id)
+    cache_key = _rk("user_card_data", profile_id_str)
+    cached = _redis_get_json(cache_key)
+    if isinstance(cached, dict):
+        return cached
 
     try:
         result = (
@@ -834,6 +1041,7 @@ def get_user_card_data(profile_id: str) -> dict:
     except Exception as e:
         print(f"❌ get_user_card_data: health lookup failed for {profile_id}: {e}")
 
+    _redis_set_json(cache_key, card)
     return card
 
 def get_document_urls(profile_id: str) -> dict:
@@ -847,6 +1055,10 @@ def get_document_urls(profile_id: str) -> dict:
         "prescriptions": [],
         "insurance": []
     }
+    cache_key = _rk("document_urls", str(profile_id))
+    cached = _redis_get_json(cache_key)
+    if isinstance(cached, dict):
+        return cached
     
     # 1 week = 7 days * 24 hours * 60 minutes * 60 seconds
     EXPIRY_SECONDS = 604800 
@@ -896,6 +1108,7 @@ def get_document_urls(profile_id: str) -> dict:
             # Normal behavior if the folder doesn't exist yet for the user
             pass
 
+    _redis_set_json(cache_key, documents, ttl_seconds=_REDIS_FILE_TTL_SECONDS)
     return documents
 
 def get_full_patient_data(profile_id: str) -> dict:
@@ -1037,6 +1250,10 @@ def get_full_patient_data(profile_id: str) -> dict:
 
 def get_emergency_contacts(profile_id: str) -> list:
     """Fetch the contacts JSONB array from user_emergency_contacts for a profile."""
+    cache_key = _rk("emergency_contacts", str(profile_id))
+    cached = _redis_get_json(cache_key)
+    if isinstance(cached, list):
+        return cached
     try:
         result = (
             supabase
@@ -1047,7 +1264,9 @@ def get_emergency_contacts(profile_id: str) -> list:
             .execute()
         )
         rows = result.data or []
-        return rows[0].get("contacts") or [] if rows else []
+        val = rows[0].get("contacts") or [] if rows else []
+        _redis_set_json(cache_key, val)
+        return val
     except Exception as e:
         print(f"❌ get_emergency_contacts failed for profile {profile_id}: {e}")
         return []
@@ -1060,6 +1279,10 @@ def get_full_health_record(profile_id: str) -> dict:
     Returns a dict with both current and past medical fields so the caller
     can split them into separate sections without a second query.
     """
+    cache_key = _rk("full_health_record", str(profile_id))
+    cached = _redis_get_json(cache_key)
+    if isinstance(cached, dict):
+        return cached
     try:
         result = (
             supabase
@@ -1077,7 +1300,9 @@ def get_full_health_record(profile_id: str) -> dict:
             .execute()
         )
         rows = result.data or []
-        return rows[0] if rows else {}
+        val = rows[0] if rows else {}
+        _redis_set_json(cache_key, val)
+        return val
     except Exception as e:
         print(f"❌ get_full_health_record failed for profile {profile_id}: {e}")
         return {}

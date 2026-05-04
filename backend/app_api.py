@@ -9,7 +9,7 @@ import traceback
 import tempfile
 import shutil
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 import secrets
@@ -19,9 +19,39 @@ from rag_pipeline.profile_checker import (
     INVALID_NAME_TOKENS,
 )
 from async_jobs.job_store import job_store
-_token_cache={}
+from redis_cache import (
+    EXPIRED_TOKEN_SENTINEL,
+    TOKEN_TTL_SECONDS,
+    get_active_token_for_profile,
+    get_profile_id_by_token,
+    set_share_token,
+)
+from redis_rate_limit import check_rate_limit
 
 app = Flask(__name__)
+
+RATE_LIMIT_DEFAULTS = {
+    "process-files": (
+        int(os.getenv("RATE_LIMIT_PROCESS_FILES", "10")),
+        int(os.getenv("RATE_LIMIT_PROCESS_FILES_WINDOW", "60")),
+    ),
+    "generate-summary": (
+        int(os.getenv("RATE_LIMIT_GENERATE_SUMMARY", "10")),
+        int(os.getenv("RATE_LIMIT_GENERATE_SUMMARY_WINDOW", "60")),
+    ),
+    "share-generate": (
+        int(os.getenv("RATE_LIMIT_SHARE_GENERATE", "30")),
+        int(os.getenv("RATE_LIMIT_SHARE_GENERATE_WINDOW", "60")),
+    ),
+    "api-read": (
+        int(os.getenv("RATE_LIMIT_API_READ", "60")),
+        int(os.getenv("RATE_LIMIT_API_READ_WINDOW", "60")),
+    ),
+    "share-access": (
+        int(os.getenv("RATE_LIMIT_SHARE_ACCESS", "30")),
+        int(os.getenv("RATE_LIMIT_SHARE_ACCESS_WINDOW", "60")),
+    ),
+}
 
 EXEMPT_INTERNAL_AUTH_PATHS = {"/api/health"}
 
@@ -65,6 +95,23 @@ def internal_error_response(message: str, status_code: int = 500):
         "success": False,
         "error": message,
     }), status_code
+
+
+def _apply_rate_limit(limit_key: str, identifier: str):
+    limit, window = RATE_LIMIT_DEFAULTS[limit_key]
+    allowed, retry_after, _ = check_rate_limit(
+        key=limit_key,
+        identifier=identifier,
+        limit=limit,
+        window_seconds=window,
+    )
+    if allowed:
+        return None
+
+    return jsonify({
+        "success": False,
+        "error": "Rate limit exceeded. Try again later.",
+    }), 429, {"Retry-After": str(retry_after)}
 
 
 # Delay OCR/RAG imports until a route actually needs them so Gunicorn can bind fast.
@@ -247,6 +294,9 @@ def process_files():
         profile_id = resolve_profile_id(data)
         if not profile_id:
             return jsonify({"success": False, "error": "profile_id is required"}), 400
+        limit_response = _apply_rate_limit("process-files", profile_id)
+        if limit_response is not None:
+            return limit_response
 
         folder_type = data.get("folder_type", "reports")
         log_step("Config", "info", f"Profile: {profile_id}, Folder: {folder_type}")
@@ -273,9 +323,9 @@ def process_files():
         user_display_name = user_info.get('display_name')
         log_step("Profile info", "success", f"User: {user_display_name}")
 
-        # List files in storage
+        # List files in storage (force fresh fetch on processing)
         log_step("Fetching files", "start")
-        files = sb.list_user_files(profile_id, folder_type)
+        files = sb.list_user_files(profile_id, folder_type, force_refresh=True)
 
         if not files:
             log_step("Files", "warning", "No files in storage")
@@ -304,6 +354,7 @@ def process_files():
             orphaned_ids = [record['id'] for record in orphaned]
             try:
                 deleted_count = sb.delete_report_records_bulk(orphaned_ids)
+                sb._invalidate_profile_read_caches(profile_id)
                 log_step("Bulk deleted", "success",
                          f"{deleted_count} orphaned records removed")
             except Exception as e:
@@ -590,6 +641,9 @@ def generate_summary_async():
     profile_id = resolve_profile_id(data)
     if not profile_id:
         return jsonify({"success": False, "error": "profile_id is required"}), 400
+    limit_response = _apply_rate_limit("generate-summary", profile_id)
+    if limit_response is not None:
+        return limit_response
 
     job = job_store.create_job(
         job_type="summary",
@@ -615,6 +669,13 @@ def generate_summary_sync():
     print("\n" + "="*80, flush=True)
     log_step("GENERATE SUMMARY (SMART FILTERING)", "start")
     print("="*80, flush=True)
+
+    data = request.get_json()
+    profile_id = resolve_profile_id(data)
+    if profile_id:
+        limit_response = _apply_rate_limit("generate-summary", profile_id)
+        if limit_response is not None:
+            return limit_response
 
     temp_dir = tempfile.mkdtemp(prefix="rag_")
 
@@ -1063,13 +1124,15 @@ def health_check():
 
 @app.route("/api/reports/<profile_id>", methods=["GET"])
 def get_reports(profile_id):
-    """Get list of processed reports with name match status."""
-    log_step("GET REPORTS", "start", profile_id)
+    """Retrieve processed medical reports for a profile."""
+    limit_response = _apply_rate_limit("api-read", profile_id)
+    if limit_response is not None:
+        return limit_response
 
     try:
         sb = _get_supabase_helper()
-        folder_type = request.args.get('folder_type')
-        reports     = sb.get_processed_reports(profile_id, folder_type)
+        folder_type = request.args.get("folder_type", "reports")
+        reports = sb.get_processed_reports(profile_id, folder_type=folder_type)
 
         user_info         = sb.get_profile_info(profile_id)
         user_display_name = (
@@ -1125,12 +1188,14 @@ def get_reports(profile_id):
 
 @app.route("/api/clear-cache/<profile_id>", methods=["DELETE"])
 def clear_cache(profile_id):
-    """Clear cached summaries."""
-    log_step("CLEAR CACHE", "start", profile_id)
+    """Explicitly clear all caches for a profile."""
+    limit_response = _apply_rate_limit("api-read", profile_id)
+    if limit_response is not None:
+        return limit_response
 
     try:
         sb = _get_supabase_helper()
-        deleted = sb.clear_user_cache(profile_id)
+        deleted = sb._invalidate_profile_read_caches(profile_id)
         log_step("Cache cleared", "success", f"{deleted} entries")
 
         return jsonify({
@@ -1152,6 +1217,8 @@ def clear_user_data(profile_id):
     try:
         sb = _get_supabase_helper()
         deleted = sb.clear_user_data(profile_id)
+        # Trigger invalidation for downstream processes
+        sb.delete_report_records_bulk(profile_id)
         log_step("Data cleared", "success", f"{deleted} records")
 
         return jsonify({
@@ -1209,110 +1276,81 @@ def generate_share_link():
 
     if not profile_id:
         return jsonify({"error": "profile_id is required"}), 400
+    limit_response = _apply_rate_limit("share-generate", str(profile_id))
+    if limit_response is not None:
+        return limit_response
 
-    for token, info in list(_token_cache.items()):
-        if info["profile_id"] == profile_id:
-            if datetime.now(timezone.utc) < info["expires_at"]:
-                return jsonify({
-                    "token": token,
-                    "expires_at": info["expires_at"].isoformat()
-                })
-            else:
-                del _token_cache[token]
+    existing = get_active_token_for_profile(str(profile_id))
+    if existing:
+        token, expires_at = existing
+        return jsonify({
+            "token": token,
+            "expires_at": expires_at
+        })
 
     token = secrets.token_urlsafe(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
-
-    _token_cache[token] = {
-        "profile_id": profile_id,
-        "expires_at": expires_at
-    }
+    expires_at = set_share_token(token, str(profile_id), ttl_seconds=TOKEN_TTL_SECONDS)
 
     return jsonify({
         "token": token,
-        "expires_at": expires_at.isoformat()
+        "expires_at": expires_at
     })
 
 
 @app.route("/api/share/<token>", methods=["GET"])
-def get_shared_summary(token):
+def share_access(token):
     """QR scan endpoint — streams patient emergency profile via SSE.
 
     This endpoint is UNAUTHENTICATED by design: a doctor scanning a QR code
     in an emergency will not have app credentials.  The token itself serves
     as the access credential (short-lived, cryptographically random).
-
-    FIX (Problem 7): The generator (stream_qr_profile) now has its own
-    internal try/except that guarantees a `complete` SSE event is always the
-    last thing yielded — even if an unhandled exception occurs mid-stream.
-    The wrapper below adds a second safety net at the Flask layer: if the
-    generator itself raises before yielding anything, we emit a minimal SSE
-    error + complete pair so the client is never left hanging.
-
-    FIX (Problem 10 — Gunicorn/uWSGI buffering):
-    The Response is built with stream_with_context and the anti-buffering
-    headers already set.  To prevent WSGI-level buffering you MUST run
-    Gunicorn with an async worker class:
-        gunicorn app_api:app --worker-class gevent --workers 2
-    or:
-        gunicorn app_api:app --worker-class eventlet --workers 2
-    The default `sync` worker class cannot stream responses — it will buffer
-    the entire body before sending.  This is a server-config requirement; no
-    code change can work around a sync worker.
     """
-    info = _token_cache.get(token)
+    limit_response = _apply_rate_limit("share-access", token)
+    if limit_response is not None:
+        return limit_response
 
-    if not info:
-        return jsonify({"error": "Link not found"}), 404
+    try:
+        profile_id = get_profile_id_by_token(token)
+        if not profile_id:
+            return jsonify({"error": "Link not found"}), 404
+        if profile_id == EXPIRED_TOKEN_SENTINEL:
+            return jsonify({"error": "This link has expired"}), 410
+        log_step("QR SCAN", "start", f"token=...{token[-8:]} → profile={profile_id}")
 
-    if datetime.now(timezone.utc) > info["expires_at"]:
-        del _token_cache[token]
-        return jsonify({"error": "This link has expired"}), 410
+        from qr_rag_pipeline import stream_qr_profile
+        import json as _json
 
-    profile_id = info["profile_id"]
-    log_step("QR SCAN", "start", f"token=...{token[-8:]} → profile={profile_id}")
+        def _safe_stream():
+            """
+            FIX (Problem 7): Outer safety-net generator.
+            """
+            try:
+                yield from stream_qr_profile(profile_id)
+            except Exception as exc:
+                log_step("QR STREAM FATAL", "error", str(exc))
+                traceback.print_exc()
+                error_payload = _json.dumps(
+                    {"message": "An unexpected server error occurred."},
+                    ensure_ascii=False,
+                )
+                complete_payload = _json.dumps({"status": "error"}, ensure_ascii=False)
+                yield f"event: error\ndata: {error_payload}\n\n"
+                yield f"event: complete\ndata: {complete_payload}\n\n"
 
-    from qr_rag_pipeline import stream_qr_profile
-    import json as _json
-
-    def _safe_stream():
-        """
-        FIX (Problem 7): Outer safety-net generator.
-
-        stream_qr_profile already catches all exceptions internally and always
-        yields `complete`.  This wrapper catches any exception that somehow
-        escapes the inner generator (e.g. an import error before the first
-        yield) and emits a valid SSE error + complete so the client clears
-        its loading state.
-        """
-        try:
-            yield from stream_qr_profile(profile_id)
-        except Exception as exc:
-            log_step("QR STREAM FATAL", "error", str(exc))
-            traceback.print_exc()
-            error_payload = _json.dumps(
-                {"message": "An unexpected server error occurred."},
-                ensure_ascii=False,
-            )
-            complete_payload = _json.dumps({"status": "error"}, ensure_ascii=False)
-            yield f"event: error\ndata: {error_payload}\n\n"
-            yield f"event: complete\ndata: {complete_payload}\n\n"
-
-    return Response(
-        stream_with_context(_safe_stream()),
-        mimetype="text/event-stream",
-        headers={
-            # Prevent every caching / proxy layer from buffering the stream.
-            "Cache-Control":     "no-cache, no-store, no-transform",
-            "Connection":        "keep-alive",
-            # Nginx upstream buffering off
-            "X-Accel-Buffering": "no",
-            # Some CDNs / proxies respect this header
-            "X-Content-Type-Options": "nosniff",
-        },
-        # direct_passthrough keeps Flask from trying to buffer the iterable
-        direct_passthrough=False,
-    )
+        return Response(
+            stream_with_context(_safe_stream()),
+            mimetype="text/event-stream",
+            headers={
+                "Cache-Control":     "no-cache, no-store, no-transform",
+                "Connection":        "keep-alive",
+                "X-Accel-Buffering": "no",
+                "X-Content-Type-Options": "nosniff",
+            },
+            direct_passthrough=False,
+        )
+    except Exception as e:
+        log_step("QR SCAN FATAL", "error", str(e))
+        return internal_error_response("Failed to process QR scan request")
 
 
 

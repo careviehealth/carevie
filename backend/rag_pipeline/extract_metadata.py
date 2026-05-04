@@ -6,6 +6,8 @@ with a regex-based fallback for redundancy.
 import os
 import re
 import asyncio
+import json
+import hashlib
 from typing import Optional, List, Tuple
 
 from dateutil import parser as _dateutil_parser
@@ -19,6 +21,68 @@ from openai import AsyncOpenAI
 OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
 MODEL_NAME: str = "gpt-4.1-nano"
 _MAX_CONCURRENT: int = int(os.getenv("METADATA_MAX_CONCURRENT", "8"))
+_EXTRACT_CACHE_VERSION: str = os.getenv("METADATA_EXTRACT_CACHE_VERSION", "v1")
+_EXTRACT_CACHE_TTL_SECONDS: int = int(os.getenv("METADATA_EXTRACT_CACHE_TTL_SECONDS", "86400"))
+_LOCAL_EXTRACT_CACHE: dict[str, dict] = {}
+
+
+def _get_redis_client():
+    candidates = [
+        ("redis_client", "get_redis_client"),
+        ("redis_client", "redis_client"),
+        ("shared.redis_client", "get_redis_client"),
+        ("shared.redis_client", "redis_client"),
+    ]
+    for module_name, attr in candidates:
+        try:
+            mod = __import__(module_name, fromlist=[attr])
+            value = getattr(mod, attr, None)
+            client = value() if callable(value) else value
+            if client is not None:
+                return client
+        except Exception:
+            continue
+    return None
+
+
+def _cache_key_for_text(text: str) -> str:
+    digest = hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+    return f"extract_metadata:{_EXTRACT_CACHE_VERSION}:{MODEL_NAME}:{digest}"
+
+
+def _cache_get(key: str):
+    in_mem = _LOCAL_EXTRACT_CACHE.get(key)
+    if isinstance(in_mem, dict):
+        return in_mem
+    client = _get_redis_client()
+    if client is None:
+        return None
+    try:
+        raw = client.get(key)
+        if not raw:
+            return None
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        result = json.loads(raw)
+        if isinstance(result, dict):
+            _LOCAL_EXTRACT_CACHE[key] = result
+            return result
+    except Exception:
+        return None
+    return None
+
+
+def _cache_set(key: str, value: dict):
+    if not isinstance(value, dict):
+        return
+    _LOCAL_EXTRACT_CACHE[key] = value
+    client = _get_redis_client()
+    if client is None:
+        return
+    try:
+        client.setex(key, _EXTRACT_CACHE_TTL_SECONDS, json.dumps(value, default=str))
+    except Exception:
+        pass
 
 
 def _make_client() -> AsyncOpenAI:
@@ -274,23 +338,35 @@ def extract_metadata_with_llm(
 ) -> dict:
     """Extract metadata synchronously from a single document text payload."""
     print(f"\n🔍 Extracting metadata with LLM ({MODEL_NAME})...")
+    cache_key = _cache_key_for_text(text)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
 
     if not OPENAI_API_KEY:
         print("⚠️  OPENAI_API_KEY not set — falling back to regex extraction")
-        return extract_metadata_fallback(text)
+        result = extract_metadata_fallback(text)
+        _cache_set(cache_key, result)
+        return result
 
     try:
-        return asyncio.run(
+        result = asyncio.run(
             _run_single(text, file_name or "unknown")
         )
+        _cache_set(cache_key, result)
+        return result
 
     except RuntimeError as exc:
         print(f"   ⚠️  Active event loop detected ({exc}) — using regex fallback")
-        return extract_metadata_fallback(text)
+        result = extract_metadata_fallback(text)
+        _cache_set(cache_key, result)
+        return result
 
     except Exception as exc:
         print(f"   ⚠️  Unexpected error: {exc} — using fallback")
-        return extract_metadata_fallback(text)
+        result = extract_metadata_fallback(text)
+        _cache_set(cache_key, result)
+        return result
 
 
 def extract_metadata_batch(
@@ -303,12 +379,37 @@ def extract_metadata_batch(
     print(f"\n🚀 Batch metadata extraction: {len(items)} documents "
           f"(max {_MAX_CONCURRENT} concurrent API calls)")
 
+    key_for_index: list[str] = [_cache_key_for_text(t) for t, _ in items]
+    results: list[Optional[dict]] = [None] * len(items)
+    missing_first_idx_by_key: dict[str, int] = {}
+
+    for idx, key in enumerate(key_for_index):
+        hit = _cache_get(key)
+        if hit is not None:
+            results[idx] = hit
+            continue
+        if key not in missing_first_idx_by_key:
+            missing_first_idx_by_key[key] = idx
+
+    missing_unique_items: list[Tuple[str, str]] = [
+        items[idx] for idx in missing_first_idx_by_key.values()
+    ]
+    missing_keys: list[str] = list(missing_first_idx_by_key.keys())
+
     if not OPENAI_API_KEY:
         print("⚠️  OPENAI_API_KEY not set — sequential regex fallback for all")
-        return [extract_metadata_fallback(t) for t, _ in items]
+        computed = [extract_metadata_fallback(t) for t, _ in missing_unique_items]
+        for key, val in zip(missing_keys, computed):
+            _cache_set(key, val)
+        filled_by_key = {k: v for k, v in zip(missing_keys, computed)}
+        return [results[i] or filled_by_key[key_for_index[i]] for i in range(len(items))]
 
     try:
-        return asyncio.run(_run_batch(items))
+        computed = asyncio.run(_run_batch(missing_unique_items))
+        for key, val in zip(missing_keys, computed):
+            _cache_set(key, val)
+        filled_by_key = {k: v for k, v in zip(missing_keys, computed)}
+        return [results[i] or filled_by_key[key_for_index[i]] for i in range(len(items))]
 
     except RuntimeError as exc:
         print(f"   ⚠️  Active event loop ({exc}) — sequential fallback")
