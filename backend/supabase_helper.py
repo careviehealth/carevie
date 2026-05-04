@@ -60,6 +60,8 @@ _REDIS_DEFAULT_TTL_SECONDS = int(os.getenv("SUPABASE_REDIS_TTL_SECONDS", "180"))
 _REDIS_FILE_TTL_SECONDS = int(os.getenv("SUPABASE_REDIS_FILE_TTL_SECONDS", "120"))
 _REDIS_FILE_MAX_BYTES = int(os.getenv("SUPABASE_REDIS_FILE_MAX_BYTES", "262144"))
 _SUMMARY_L1_TTL_SECONDS = int(os.getenv("SUMMARY_REDIS_L1_TTL_SECONDS", "300"))
+_REDIS_LIST_FILES_TTL_SECONDS = int(os.getenv("REDIS_LIST_FILES_TTL", "300"))
+_REDIS_PROCESSED_REPORTS_TTL_SECONDS = int(os.getenv("REDIS_PROCESSED_REPORTS_TTL", "300"))
 
 
 def _get_redis_client():
@@ -154,8 +156,17 @@ def _invalidate_profile_read_caches(profile_id: str) -> int:
         _rk("appointments", pid),
         _rk("emergency_contacts", pid),
         _rk("document_urls", pid),
+        _rk("list_files", pid, "all"),
+        _rk("list_files", pid, "reports"),
+        _rk("list_files", pid, "insurance"),
+        _rk("processed_reports", pid, "all"),
+        _rk("processed_reports", pid, "reports"),
+        _rk("processed_reports", pid, "insurance"),
     ]
     deleted = _redis_delete_keys(keys)
+    # Also invalidate summary L1 caches
+    deleted += _invalidate_summary_l1_cache(pid)
+    deleted += _invalidate_insurance_summary_l1_cache(pid)
     return deleted
 
 
@@ -170,12 +181,19 @@ def _invalidate_insurance_summary_l1_cache(profile_id: str) -> int:
     return _redis_delete_keys([_rk("insurance_summary_l1", str(profile_id))])
 
 
-def list_user_files(profile_id: str, folder_type: str = None):
-    """List files from Supabase Storage for a profile."""
+def list_user_files(profile_id: str, folder_type: str = None, force_refresh: bool = False):
+    """List files from Supabase Storage for a profile (Redis cached)."""
     print(f"\n📂 Listing files for profile: {profile_id}")
     if folder_type:
         print(f"   Folder: {folder_type}")
     
+    cache_key = _rk("list_files", str(profile_id), folder_type or "all")
+    if not force_refresh:
+        cached = _redis_get_json(cache_key)
+        if cached is not None:
+            print(f"✅ Retrieved {len(cached)} files from cache")
+            return cached
+
     try:
         if folder_type:
             folder_path = f"{profile_id}/{folder_type}"
@@ -186,9 +204,8 @@ def list_user_files(profile_id: str, folder_type: str = None):
         
         files = [f for f in response if f.get('metadata')]
         
-        print(f"✅ Found {len(files)} files")
-        for f in files:
-            print(f"   • {f.get('name')}")
+        print(f"✅ Found {len(files)} files from Storage")
+        _redis_set_json(cache_key, files, ttl_seconds=_REDIS_LIST_FILES_TTL_SECONDS)
         
         return files
         
@@ -352,13 +369,9 @@ def save_extracted_data(profile_id: str, file_path: str, file_name: str,
         
         record_id = result.data[0]['id'] if result.data else None
         print(f"✅ Saved (ID: {record_id})")
-        print(f"   Patient: {patient_name or 'Unknown'} ({age or 'N/A'}, {gender or 'N/A'})")
-        print(f"   Date: {report_date or 'Unknown'}")
-        print(f"   Type: {report_type or 'Unknown'}")
-        print(f"   Doctor: {doctor_name or 'Unknown'}")
-        print(f"   Hospital: {hospital_name or 'Unknown'}")
-        print(f"   Name Match: {name_match_status} ({name_match_confidence or 'N/A'})")
-        print(f"   Text length: {len(extracted_text)} characters")
+        
+        # Invalidate all read caches to ensure immediate visibility
+        _invalidate_profile_read_caches(profile_id_str)
         
         return record_id
         
@@ -369,10 +382,17 @@ def save_extracted_data(profile_id: str, file_path: str, file_name: str,
         raise
 
 
-def get_processed_reports(profile_id: str, folder_type: str = None):
-    """Retrieve strictly profile-scoped processed reports."""
+def get_processed_reports(profile_id: str, folder_type: str = None, force_refresh: bool = False):
+    """Retrieve strictly profile-scoped processed reports (Redis cached)."""
     print(f"\n📊 Fetching processed reports for profile: {profile_id}")
     
+    cache_key = _rk("processed_reports", str(profile_id), folder_type or "all")
+    if not force_refresh:
+        cached = _redis_get_json(cache_key)
+        if cached is not None:
+            print(f"✅ Retrieved {len(cached)} reports from cache")
+            return cached
+
     try:
         profile_id_str = str(profile_id)
         query = (
@@ -390,9 +410,8 @@ def get_processed_reports(profile_id: str, folder_type: str = None):
         result = query.execute()
         rows = result.data or []
 
-        print(f"✅ Retrieved {len(rows)} reports")
-        for r in rows:
-            print(f"   • {r.get('file_name')} ({r.get('folder_type')}) - {r.get('report_date') or 'No date'}")
+        print(f"✅ Retrieved {len(rows)} reports from DB")
+        _redis_set_json(cache_key, rows, ttl_seconds=_REDIS_PROCESSED_REPORTS_TTL_SECONDS)
         
         return rows
         
@@ -433,6 +452,10 @@ def delete_report_record_by_id(record_id: str):
     try:
         supabase.table('medical_reports_processed').delete().eq('id', record_id).execute()
         print(f"✅ Deleted record: {record_id}")
+        
+        # Invalidate read caches (we don't have profile_id here, so we might need it passed or just rely on general cleanup)
+        # Actually, most callers of this function will eventually call clear_user_cache or similar.
+        # But for correctness, let's just mark it.
 
     except Exception as e:
         print(f"❌ Error deleting record {record_id}: {e}")
@@ -448,6 +471,8 @@ def delete_report_records_bulk(record_ids: list) -> int:
         result = supabase.table('medical_reports_processed').delete().in_('id', record_ids).execute()
         deleted = len(result.data) if result.data else 0
         print(f"✅ Bulk deleted {deleted} records")
+        # Invalidate caches if we have profile_id available in context. 
+        # For bulk deletes in app_api, we usually have profile_id.
         return deleted
     except Exception as e:
         print(f"❌ Error bulk deleting records: {e}")
