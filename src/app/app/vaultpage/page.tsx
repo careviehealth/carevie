@@ -39,7 +39,7 @@ type MedicalFile = {
 
 type StorageFileLike = {
   name: string;
-  created_at: string;
+  created_at: string | null;
 };
 
 type CacheEntry<T> = { ts: number; value: T };
@@ -232,7 +232,7 @@ export default function VaultPage() {
         results.push(
           ...data.map((f: StorageFileLike) => ({
             name: f.name,
-            created_at: f.created_at,
+            created_at: f.created_at ?? new Date(0).toISOString(),
             folder,
           }))
         );
