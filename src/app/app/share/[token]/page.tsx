@@ -4,9 +4,9 @@ import { useState, useEffect, use, useCallback } from 'react';
 
 type SurgeryEntry =
   | string
-  | { name?: string; year?: number | string; month?: string; notes?: string; [key: string]: unknown };
+  | { name?: string; year?: number | string; month?: string; notes?: string;[key: string]: unknown };
 
-type MedicalEntry = string | { name?: string; [key: string]: unknown };
+type MedicalEntry = string | { name?: string;[key: string]: unknown };
 
 interface Medication {
   name: string;
@@ -118,24 +118,24 @@ type TabKey =
   | 'appointments';
 
 const MORE_TABS: { key: TabKey; label: string }[] = [
-  { key: 'summary',      label: 'Summary' },
-  { key: 'medications',  label: 'Medications' },
-  { key: 'history',      label: 'Past History' },
-  { key: 'surgeries',    label: 'Surgeries' },
-  { key: 'reports',      label: 'Reports' },
-  { key: 'insurance',    label: 'Insurance' },
-  { key: 'doctors',      label: 'Doctors' },
+  { key: 'summary', label: 'Summary' },
+  { key: 'medications', label: 'Medications' },
+  { key: 'history', label: 'Past History' },
+  { key: 'surgeries', label: 'Surgeries' },
+  { key: 'reports', label: 'Reports' },
+  { key: 'insurance', label: 'Insurance' },
+  { key: 'doctors', label: 'Doctors' },
   { key: 'appointments', label: 'Appointments' },
 ];
 
 const TAB_LIMITS: Record<TabKey, number | null> = {
-  summary:      null,
-  medications:  2,
-  history:      3,
-  surgeries:    2,
-  reports:      2,
-  insurance:    null,
-  doctors:      2,
+  summary: null,
+  medications: 2,
+  history: 3,
+  surgeries: 2,
+  reports: 2,
+  insurance: null,
+  doctors: 2,
   appointments: 2,
 };
 
@@ -172,22 +172,22 @@ export default function EmergencyMedicalCard({
     if (!data || pdfGenerating) return;
     setPdfGenerating(true);
     try {
-      const { jsPDF }              = await import('jspdf');
+      const { jsPDF } = await import('jspdf');
       const { default: autoTable } = await import('jspdf-autotable');
 
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
       // ── Palette ──
-      const G  = [26, 158, 92]   as [number, number, number];
-      const DK = [15,  46,  30]  as [number, number, number];
+      const G = [26, 158, 92] as [number, number, number];
+      const DK = [15, 46, 30] as [number, number, number];
       const GR = [110, 110, 110] as [number, number, number];
       const LG = [247, 253, 249] as [number, number, number];
       const WH = [255, 255, 255] as [number, number, number];
 
-      const PW      = 210;
-      const M       = 16;
-      const CW      = PW - M * 2;
-      let   y       = 0;
+      const PW = 210;
+      const M = 16;
+      const CW = PW - M * 2;
+      let y = 0;
 
       // ── Helpers ──
       const san = (s: string | number | null | undefined): string => {
@@ -262,7 +262,7 @@ export default function EmergencyMedicalCard({
         y += 6.5;
       };
 
-      // ── PAGE 1 HEADER ──
+// ── PAGE 1 HEADER ──
       doc.setFillColor(...G);
       doc.rect(0, 0, PW, 30, 'F');
       doc.setTextColor(...WH);
@@ -274,6 +274,23 @@ export default function EmergencyMedicalCard({
       doc.setFont('helvetica', 'normal');
       doc.text('Powered by Carevie  |  Authorised access only', M, 20);
       doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, M, 25);
+
+      // ── LOGO ──
+      try {
+        const logoRes = await fetch('/carevie-logo.png');
+        const logoBlob = await logoRes.blob();
+        const logoBase64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(',')[1]);
+          reader.readAsDataURL(logoBlob);
+        });
+        const logoW = 36;
+        const logoH = 12;
+        doc.addImage(logoBase64, 'PNG', PW - M - logoW, 9, logoW, logoH);
+      } catch (e) {
+        console.warn('Logo not loaded', e);
+      }
+
       y = 38;
 
       // ── PROFILE BLOCK (With Improved Blood Group Layout) ──
@@ -289,7 +306,7 @@ export default function EmergencyMedicalCard({
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...GR);
       const profileLine = [
-        data.profile.age  ? `${data.profile.age} yrs` : '',
+        data.profile.age ? `${data.profile.age} yrs` : '',
         san(data.profile.gender),
         san(data.profile.height),
         san(data.profile.weight),
@@ -309,9 +326,9 @@ export default function EmergencyMedicalCard({
         doc.setFontSize(7);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(192, 57, 43);
-        doc.text("BLOOD GROUP", badgeX + badgeW/2, y + 12, { align: 'center' });
+        doc.text("BLOOD GROUP", badgeX + badgeW / 2, y + 12, { align: 'center' });
         doc.setFontSize(14);
-        doc.text(san(data.profile.blood), badgeX + badgeW/2, y + 20, { align: 'center' });
+        doc.text(san(data.profile.blood), badgeX + badgeW / 2, y + 20, { align: 'center' });
       }
       y += 38;
 
@@ -326,7 +343,7 @@ export default function EmergencyMedicalCard({
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(150, 80, 0);
         doc.text('PRIMARY EMERGENCY CONTACT', M + 5, y + 6);
-        
+
         doc.setTextColor(...DK);
         doc.setFontSize(11);
         doc.text(`${san(primary.name)} (${san(primary.relation)})`, M + 5, y + 13);
@@ -385,7 +402,7 @@ export default function EmergencyMedicalCard({
       }
 
       // ── MEDICATIONS & TREATMENTS ──
-      const meds       = data.current_medical_status.medications        ?? [];
+      const meds = data.current_medical_status.medications ?? [];
       const treatments = data.current_medical_status.ongoing_treatments ?? [];
       if (meds.length || treatments.length) {
         sectionHead('Medications & Treatments');
@@ -402,8 +419,8 @@ export default function EmergencyMedicalCard({
             margin: { left: M, right: M },
             head: [['Medication', 'Dosage', 'Frequency', 'Purpose']],
             body: meds.map(m => [san(m.name), san(m.dosage), san(m.frequency), san(m.purpose)]),
-            styles:             { fontSize: 9, cellPadding: 3, textColor: DK, minCellHeight: 10 },
-            headStyles:         { fillColor: G, textColor: WH, fontStyle: 'bold', fontSize: 9 },
+            styles: { fontSize: 9, cellPadding: 3, textColor: DK, minCellHeight: 10 },
+            headStyles: { fillColor: G, textColor: WH, fontStyle: 'bold', fontSize: 9 },
             alternateRowStyles: { fillColor: LG },
             columnStyles: {
               0: { cellWidth: 42, fontStyle: 'bold' },
@@ -417,13 +434,26 @@ export default function EmergencyMedicalCard({
       }
 
       // ── RESTORED: PAST HISTORY ──
-      const prev  = data.past_medical_history.previous_diagnosed_conditions ?? [];
-      const child = data.past_medical_history.childhood_illness             ?? [];
-      const fam   = data.past_medical_history.family_history                ?? [];
+      const prev = data.past_medical_history.previous_diagnosed_conditions ?? [];
+      const child = data.past_medical_history.childhood_illness ?? [];
+      const fam = data.past_medical_history.family_history ?? [];
       const histRows = [
-        ...prev.map(h  => ['Previous Condition', san(formatMedicalEntry(h))]),
-        ...child.map(h => ['Childhood Illness',  san(formatMedicalEntry(h))]),
-        ...fam.map(h   => ['Family History',     san(formatMedicalEntry(h))]),
+        ...prev.map(h => ['Previous Condition', san(formatMedicalEntry(h))]),
+        ...child.map(h => ['Childhood Illness', san(formatMedicalEntry(h))]),
+        ...(() => {
+          const allEntries = fam.flatMap(h => {
+            if (typeof h === 'string') return [h];
+            const obj = h as Record<string, unknown>;
+            const inner = obj.familyMedicalHistory ?? obj.history ?? obj.entries;
+            const list = Array.isArray(inner) ? inner : [obj];
+            return list.map((entry: Record<string, unknown>) => {
+              const relation = String(entry.relation ?? entry.member ?? entry.relative ?? '');
+              const condition = String(entry.disease ?? entry.condition ?? entry.name ?? '');
+              return relation && condition ? `${relation} — ${condition}` : relation || condition;
+            });
+          });
+          return allEntries.length ? [['Family History', san(allEntries.join('\n'))]] : [];
+        })(),
       ];
       if (histRows.length) {
         sectionHead('Past Medical History');
@@ -433,10 +463,10 @@ export default function EmergencyMedicalCard({
           margin: { left: M, right: M },
           head: [['Category', 'Detail']],
           body: histRows,
-          styles:             { fontSize: 9, cellPadding: 3, textColor: DK },
-          headStyles:         { fillColor: G, textColor: WH, fontStyle: 'bold' },
+          styles: { fontSize: 9, cellPadding: 3, textColor: DK },
+          headStyles: { fillColor: G, textColor: WH, fontStyle: 'bold' },
           alternateRowStyles: { fillColor: LG },
-          columnStyles:       { 0: { cellWidth: 45, fontStyle: 'bold' } },
+          columnStyles: { 0: { cellWidth: 45, fontStyle: 'bold' } },
           theme: 'grid',
         });
         y = (doc as any).lastAutoTable.finalY + 8;
@@ -452,8 +482,8 @@ export default function EmergencyMedicalCard({
           margin: { left: M, right: M },
           head: [['Surgery Details']],
           body: surg.map(s => [san(formatMedicalEntry(s))]),
-          styles:             { fontSize: 9, cellPadding: 3, textColor: DK },
-          headStyles:         { fillColor: G, textColor: WH, fontStyle: 'bold' },
+          styles: { fontSize: 9, cellPadding: 3, textColor: DK },
+          headStyles: { fillColor: G, textColor: WH, fontStyle: 'bold' },
           alternateRowStyles: { fillColor: LG },
           theme: 'grid',
         });
@@ -470,10 +500,10 @@ export default function EmergencyMedicalCard({
           margin: { left: M, right: M },
           head: [['Doctor', 'Specialty', 'Phone']],
           body: doctors.map(d => [san(d.name), san(d.specialty), san(d.phone)]),
-          styles:             { fontSize: 9, cellPadding: 3, textColor: DK },
-          headStyles:         { fillColor: G, textColor: WH, fontStyle: 'bold' },
+          styles: { fontSize: 9, cellPadding: 3, textColor: DK },
+          headStyles: { fillColor: G, textColor: WH, fontStyle: 'bold' },
           alternateRowStyles: { fillColor: LG },
-          columnStyles:       { 0: { cellWidth: 55, fontStyle: 'bold' }, 1: { cellWidth: 55 } },
+          columnStyles: { 0: { cellWidth: 55, fontStyle: 'bold' }, 1: { cellWidth: 55 } },
           theme: 'grid',
         });
         y = (doc as any).lastAutoTable.finalY + 8;
@@ -489,10 +519,10 @@ export default function EmergencyMedicalCard({
           margin: { left: M, right: M },
           head: [['Doctor', 'Date', 'Time', 'Type']],
           body: apts.map(a => [san(a.doctor), san(a.date), san(a.time), san(a.type)]),
-          styles:             { fontSize: 9, cellPadding: 3, textColor: DK },
-          headStyles:         { fillColor: G, textColor: WH, fontStyle: 'bold' },
+          styles: { fontSize: 9, cellPadding: 3, textColor: DK },
+          headStyles: { fillColor: G, textColor: WH, fontStyle: 'bold' },
           alternateRowStyles: { fillColor: LG },
-          columnStyles:       { 0: { cellWidth: 55, fontStyle: 'bold' }, 1: { cellWidth: 35 }, 2: { cellWidth: 28 } },
+          columnStyles: { 0: { cellWidth: 55, fontStyle: 'bold' }, 1: { cellWidth: 35 }, 2: { cellWidth: 28 } },
           theme: 'grid',
         });
         y = (doc as any).lastAutoTable.finalY + 8;
@@ -500,7 +530,7 @@ export default function EmergencyMedicalCard({
 
       // ── RESTORED: REPORTS & PRESCRIPTIONS ──
       const medDocs = data.medical_documents ?? [];
-      const rxDocs  = data.prescriptions     ?? [];
+      const rxDocs = data.prescriptions ?? [];
       if (medDocs.length || rxDocs.length) {
         sectionHead('Reports & Prescriptions');
         if (medDocs.length) {
@@ -512,7 +542,7 @@ export default function EmergencyMedicalCard({
           catLabel('Prescriptions');
           rxDocs.forEach(rx => {
             const name = typeof rx === 'string' ? rx : (rx as any).name || String(rx);
-            const url  = typeof rx === 'string' ? '' : (rx as any).url || '';
+            const url = typeof rx === 'string' ? '' : (rx as any).url || '';
             bulletLink(name, url);
           });
           y += 3;
@@ -523,9 +553,9 @@ export default function EmergencyMedicalCard({
       // ── RESTORED: INSURANCE ──
       if (data.insurance) {
         const ins = data.insurance;
-        const po  = ins.policy_overview;
-        const cd  = ins.coverage_details;
-        const ha  = ins.hospital_access;
+        const po = ins.policy_overview;
+        const cd = ins.coverage_details;
+        const ha = ins.hospital_access;
 
         sectionHead('Insurance');
         checkBreak(30);
@@ -537,26 +567,26 @@ export default function EmergencyMedicalCard({
           margin: { left: M, right: M },
           head: [['Field', 'Value']],
           body: [
-            ['Insurer',        san(po.insurer_name)],
-            ['Policy No.',     san(po.policy_number)],
-            ['Plan',           san(po.plan_name)],
-            ['Holder',         san(po.policy_holder_name)],
-            ['Status',         san(po.status)],
-            ['Start Date',     san(po.start_date)],
-            ['End Date',       san(po.end_date)],
-            ['Sum Insured',    curr(cd.total_sum_insured)],
-            ['Remaining',      curr(cd.remaining_coverage)],
-            ['Room Rent',      san(cd.room_rent_limit)],
-            ['ICU Coverage',   san(cd.icu_coverage)],
+            ['Insurer', san(po.insurer_name)],
+            ['Policy No.', san(po.policy_number)],
+            ['Plan', san(po.plan_name)],
+            ['Holder', san(po.policy_holder_name)],
+            ['Status', san(po.status)],
+            ['Start Date', san(po.start_date)],
+            ['End Date', san(po.end_date)],
+            ['Sum Insured', curr(cd.total_sum_insured)],
+            ['Remaining', curr(cd.remaining_coverage)],
+            ['Room Rent', san(cd.room_rent_limit)],
+            ['ICU Coverage', san(cd.icu_coverage)],
             ['Pre/Post Hosp.', san(cd.pre_post_hospitalization)],
-            ['Cashless',       ha.cashless_available ? 'Available' : 'Not Available'],
-            ['TPA',            san(ha.tpa_name)],
-            ['TPA Helpline',   san(ha.tpa_helpline)],
+            ['Cashless', ha.cashless_available ? 'Available' : 'Not Available'],
+            ['TPA', san(ha.tpa_name)],
+            ['TPA Helpline', san(ha.tpa_helpline)],
           ],
-          styles:             { fontSize: 9, cellPadding: 3, textColor: DK },
-          headStyles:         { fillColor: G, textColor: WH, fontStyle: 'bold' },
+          styles: { fontSize: 9, cellPadding: 3, textColor: DK },
+          headStyles: { fillColor: G, textColor: WH, fontStyle: 'bold' },
           alternateRowStyles: { fillColor: LG },
-          columnStyles:       { 0: { cellWidth: 42, fontStyle: 'bold' } },
+          columnStyles: { 0: { cellWidth: 42, fontStyle: 'bold' } },
           theme: 'grid',
         });
         y = (doc as any).lastAutoTable.finalY + 8;
@@ -667,7 +697,7 @@ export default function EmergencyMedicalCard({
                 );
                 setInsuranceLoading(
                   parsed.insurance_pending === true &&
-                    !parsed.insurance?.policy_overview
+                  !parsed.insurance?.policy_overview
                 );
                 setData(parsed as ApiData);
                 continue;
@@ -750,11 +780,11 @@ export default function EmergencyMedicalCard({
       (data.past_medical_history.previous_diagnosed_conditions?.length ?? 0) +
       (data.past_medical_history.childhood_illness?.length ?? 0) +
       (data.past_medical_history.family_history?.length ?? 0),
-    surgeries:    data.past_medical_history.past_surgeries?.length ?? 0,
+    surgeries: data.past_medical_history.past_surgeries?.length ?? 0,
     reports:
       (data.medical_documents?.length ?? 0) +
       (data.prescriptions?.length ?? 0),
-    doctors:      data.doctors?.length ?? 0,
+    doctors: data.doctors?.length ?? 0,
     appointments: data.appointments?.length ?? 0,
   };
 
@@ -775,13 +805,13 @@ export default function EmergencyMedicalCard({
     const activeCount = tabCounts[activeTab] ?? 0;
     canExpand = activeLimit !== null && activeLimit > 0 && activeCount > activeLimit;
     const shownCount = (canExpand && !expanded) ? activeLimit : activeCount;
-    
+
     footerNote = canExpand
       ? `Showing ${shownCount} of ${activeCount} record(s)`
       : activeCount > 0
         ? `${activeCount} record(s)`
         : 'Patient overview';
-        
+
     if (!expanded) {
       expandButtonText = `View full details (${activeCount - (activeLimit || 0)} more) →`;
     }
@@ -1110,7 +1140,7 @@ export default function EmergencyMedicalCard({
           {/* ── PDF Export Bar ── */}
           {(() => {
             const stillLoading = summaryLoading || insuranceLoading;
-            const btnDisabled  = loading || stillLoading || pdfGenerating;
+            const btnDisabled = loading || stillLoading || pdfGenerating;
 
             const msg = pdfGenerating
               ? 'Building PDF…'
@@ -1149,9 +1179,9 @@ export default function EmergencyMedicalCard({
                     <>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                        <polyline points="7 10 12 15 17 10"/>
-                        <line x1="12" y1="15" x2="12" y2="3"/>
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
                       </svg>
                       Export as PDF
                     </>
@@ -1250,8 +1280,8 @@ export default function EmergencyMedicalCard({
                     <div className="tag-row">
                       {(data.current_medical_status.allergies?.length ?? 0) > 0
                         ? data.current_medical_status.allergies.map((a, i) => (
-                            <span key={i} className="tag tag-orange">{a}</span>
-                          ))
+                          <span key={i} className="tag tag-orange">{a}</span>
+                        ))
                         : <span className="empty-tags">No known allergies</span>
                       }
                     </div>
@@ -1266,8 +1296,8 @@ export default function EmergencyMedicalCard({
                     <div className="tag-row">
                       {(data.current_medical_status.current_diagnosed_condition?.length ?? 0) > 0
                         ? data.current_medical_status.current_diagnosed_condition.map((s, i) => (
-                            <span key={i} className="tag tag-red">{s}</span>
-                          ))
+                          <span key={i} className="tag tag-red">{s}</span>
+                        ))
                         : <span className="empty-tags">No active conditions</span>
                       }
                     </div>
@@ -1313,13 +1343,13 @@ export default function EmergencyMedicalCard({
 
                 {/* Tab content */}
                 <div className="tab-content tab-animated" key={activeTab} role="tabpanel">
-                  {activeTab === 'summary'      && <SummaryTab      data={data} isLoading={summaryLoading} expanded={expanded} />}
-                  {activeTab === 'medications'  && <MedicationsTab  data={data} expanded={expanded} limit={TAB_LIMITS.medications} />}
-                  {activeTab === 'history'      && <HistoryTab      data={data} expanded={expanded} limit={TAB_LIMITS.history} />}
-                  {activeTab === 'surgeries'    && <SurgeriesTab    data={data} expanded={expanded} limit={TAB_LIMITS.surgeries} />}
-                  {activeTab === 'reports'      && <ReportsTab      data={data} expanded={expanded} limit={TAB_LIMITS.reports} />}
-                  {activeTab === 'insurance'    && <InsuranceTab    data={data} isLoading={insuranceLoading} expanded={expanded} />}
-                  {activeTab === 'doctors'      && <DoctorsTab      data={data} expanded={expanded} limit={TAB_LIMITS.doctors} />}
+                  {activeTab === 'summary' && <SummaryTab data={data} isLoading={summaryLoading} expanded={expanded} />}
+                  {activeTab === 'medications' && <MedicationsTab data={data} expanded={expanded} limit={TAB_LIMITS.medications} />}
+                  {activeTab === 'history' && <HistoryTab data={data} expanded={expanded} limit={TAB_LIMITS.history} />}
+                  {activeTab === 'surgeries' && <SurgeriesTab data={data} expanded={expanded} limit={TAB_LIMITS.surgeries} />}
+                  {activeTab === 'reports' && <ReportsTab data={data} expanded={expanded} limit={TAB_LIMITS.reports} />}
+                  {activeTab === 'insurance' && <InsuranceTab data={data} isLoading={insuranceLoading} expanded={expanded} />}
+                  {activeTab === 'doctors' && <DoctorsTab data={data} expanded={expanded} limit={TAB_LIMITS.doctors} />}
                   {activeTab === 'appointments' && <AppointmentsTab data={data} expanded={expanded} limit={TAB_LIMITS.appointments} />}
                 </div>
 
@@ -1374,19 +1404,28 @@ function formatMedicalEntry(entry: MedicalEntry | SurgeryEntry): string {
   const obj = entry as Record<string, unknown>;
   if ('name' in obj) {
     const parts: string[] = [];
-    if (obj.name)  parts.push(String(obj.name));
+    if (obj.name) parts.push(String(obj.name));
     if (obj.month) parts.push(String(obj.month));
-    if (obj.year)  parts.push(String(obj.year));
+    if (obj.year) parts.push(String(obj.year));
     if (obj.notes) parts.push(`(${obj.notes})`);
     if (parts.length) return parts.join(' ');
   }
-  const values = Object.values(obj).filter((v) => v !== null && v !== undefined && v !== '').map(String);
+  const deepString = (v: unknown): string => {
+    if (v === null || v === undefined || v === '') return '';
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')
+      return String(v);
+    if (Array.isArray(v)) return v.map(deepString).filter(Boolean).join(', ');
+    if (typeof v === 'object') return formatMedicalEntry(v as MedicalEntry);
+    return String(v);
+  };
+
+  const values = Object.values(obj).map(deepString).filter(Boolean);
   return values.length ? values.join(' · ') : JSON.stringify(obj);
 }
 
 function SummaryTab({ data, isLoading, expanded }: { data: ApiData; isLoading: boolean; expanded: boolean }) {
   if (isLoading) return <InnerLoader text="Generating medical summary…" />;
-  
+
   return data.summary ? (
     <div className={`summary-container ${!expanded ? 'collapsed' : ''}`}>
       <p className="summary-text">{data.summary}</p>
@@ -1400,7 +1439,7 @@ function MedicationsTab({ data, expanded, limit }: { data: ApiData; expanded: bo
   const meds = data.current_medical_status.medications ?? [];
   const treatments = data.current_medical_status.ongoing_treatments ?? [];
   const visibleMeds = (limit !== null && !expanded) ? meds.slice(0, limit) : meds;
-  
+
   if (!meds.length && !treatments.length)
     return <Empty text="No active medications recorded" />;
 
@@ -1452,11 +1491,11 @@ function HistoryTab({ data, expanded, limit }: { data: ApiData; expanded: boolea
   const cap = (limit !== null && !expanded) ? limit : all.length;
   let rem = cap;
 
-  const slicedPrev  = (data.past_medical_history.previous_diagnosed_conditions ?? []).slice(0, rem);
+  const slicedPrev = (data.past_medical_history.previous_diagnosed_conditions ?? []).slice(0, rem);
   rem = Math.max(0, rem - slicedPrev.length);
   const slicedChild = (data.past_medical_history.childhood_illness ?? []).slice(0, rem);
   rem = Math.max(0, rem - slicedChild.length);
-  const slicedFam   = (data.past_medical_history.family_history ?? []).slice(0, rem);
+  const slicedFam = (data.past_medical_history.family_history ?? []).slice(0, rem);
 
   return (
     <div>
@@ -1475,7 +1514,23 @@ function HistoryTab({ data, expanded, limit }: { data: ApiData; expanded: boolea
       {slicedFam.length > 0 && (
         <>
           <p className="tab-sec-head" style={{ marginTop: 16 }}>Family History</p>
-          {slicedFam.map((h, i) => <ListRow key={i} text={formatMedicalEntry(h)} />)}
+          {slicedFam.flatMap((h, i) => {
+            if (typeof h === 'string') return [<ListRow key={i} text={h} />];
+            const obj = h as Record<string, unknown>;
+
+            // Handle {familyMedicalHistory: [...]} wrapper
+            const inner = obj.familyMedicalHistory ?? obj.history ?? obj.entries;
+            const list = Array.isArray(inner) ? inner : [obj];
+
+            return list.map((entry: Record<string, unknown>, j: number) => {
+              const relation = String(entry.relation ?? entry.member ?? entry.relative ?? '');
+              const condition = String(entry.disease ?? entry.condition ?? entry.name ?? '');
+              const text = relation && condition
+                ? `${relation} — ${condition}`
+                : relation || condition || JSON.stringify(entry);
+              return <ListRow key={`${i}-${j}`} text={text} />;
+            });
+          })}
         </>
       )}
     </div>
@@ -1484,7 +1539,7 @@ function HistoryTab({ data, expanded, limit }: { data: ApiData; expanded: boolea
 
 function SurgeriesTab({ data, expanded, limit }: { data: ApiData; expanded: boolean; limit: number | null }) {
   const surgeries = data.past_medical_history.past_surgeries ?? [];
-  const visible   = (limit !== null && !expanded) ? surgeries.slice(0, limit) : surgeries;
+  const visible = (limit !== null && !expanded) ? surgeries.slice(0, limit) : surgeries;
 
   if (!surgeries.length) return <Empty text="No surgeries recorded" />;
 
@@ -1497,16 +1552,16 @@ function SurgeriesTab({ data, expanded, limit }: { data: ApiData; expanded: bool
 
 function ReportsTab({ data, expanded, limit }: { data: ApiData; expanded: boolean; limit: number | null }) {
   const docs = data.medical_documents ?? [];
-  const rxs  = data.prescriptions ?? [];
-  const all  = [...docs, ...rxs];
+  const rxs = data.prescriptions ?? [];
+  const all = [...docs, ...rxs];
 
   if (!all.length) return <Empty text="No reports or prescriptions found" />;
 
   const shouldLimit = limit !== null && !expanded;
   const cap = shouldLimit ? limit : all.length;
   const visibleDocs = docs.slice(0, cap);
-  const docsShown   = visibleDocs.length;
-  const visibleRxs  = rxs.slice(0, Math.max(0, cap - docsShown));
+  const docsShown = visibleDocs.length;
+  const visibleRxs = rxs.slice(0, Math.max(0, cap - docsShown));
 
   return (
     <div>
@@ -1557,14 +1612,14 @@ function InsuranceTab({ data, isLoading, expanded }: { data: ApiData; isLoading:
     <div>
       <p className="tab-sec-head">Policy Overview</p>
       <div className="ins-grid">
-        <InfoBox label="Insurer"     value={po.insurer_name} />
+        <InfoBox label="Insurer" value={po.insurer_name} />
         <InfoBox label="Policy No." value={po.policy_number} />
-        <InfoBox label="Plan"        value={po.plan_name} />
-        <InfoBox label="Holder"      value={po.policy_holder_name} />
+        <InfoBox label="Plan" value={po.plan_name} />
+        <InfoBox label="Holder" value={po.policy_holder_name} />
         <InfoBox label="Start Date" value={po.start_date} />
-        <InfoBox label="End Date"    value={po.end_date} />
+        <InfoBox label="End Date" value={po.end_date} />
       </div>
-      
+
       <div className="ins-status-row">
         <span className="info-key" style={{ fontSize: 13 }}>Policy Status</span>
         <span className={po.status?.toLowerCase() === 'active' ? 'badge-active' : 'badge-inactive'}>
@@ -1576,11 +1631,11 @@ function InsuranceTab({ data, isLoading, expanded }: { data: ApiData; isLoading:
         <div className="fade-in-section">
           <p className="tab-sec-head">Coverage Details</p>
           <div className="ins-grid">
-            <InfoBox label="Sum Insured"   value={formatCurrency(cd.total_sum_insured)} />
-            <InfoBox label="Remaining"     value={formatCurrency(cd.remaining_coverage)} />
-            <InfoBox label="Used"           value={formatCurrency(cd.coverage_used)} />
-            <InfoBox label="Room Rent"     value={cd.room_rent_limit} />
-            <InfoBox label="ICU Coverage"  value={cd.icu_coverage} />
+            <InfoBox label="Sum Insured" value={formatCurrency(cd.total_sum_insured)} />
+            <InfoBox label="Remaining" value={formatCurrency(cd.remaining_coverage)} />
+            <InfoBox label="Used" value={formatCurrency(cd.coverage_used)} />
+            <InfoBox label="Room Rent" value={cd.room_rent_limit} />
+            <InfoBox label="ICU Coverage" value={cd.icu_coverage} />
             <InfoBox label="Pre/Post Hosp" value={cd.pre_post_hospitalization} />
           </div>
           <p className="tab-sec-head" style={{ marginTop: 24 }}>Hospital Access</p>
@@ -1617,7 +1672,7 @@ function DoctorsTab({ data, expanded, limit }: { data: ApiData; expanded: boolea
 }
 
 function AppointmentsTab({ data, expanded, limit }: { data: ApiData; expanded: boolean; limit: number | null }) {
-  const apts    = data.appointments ?? [];
+  const apts = data.appointments ?? [];
   const visible = (limit !== null && !expanded) ? apts.slice(0, limit) : apts;
 
   if (!apts.length) return <Empty text="No upcoming appointments" />;
@@ -1681,6 +1736,6 @@ const loadStyle: Record<string, React.CSSProperties> = {
     border: '4px solid #D1E5DA', borderTopColor: '#1A9E5C',
     animation: 'spin 0.8s linear infinite',
   },
-  text:      { fontSize: 15, color: '#4A7A60', fontWeight: 500 },
+  text: { fontSize: 15, color: '#4A7A60', fontWeight: 500 },
   errorText: { fontSize: 16, color: '#C0392B', fontWeight: 700 },
 };
